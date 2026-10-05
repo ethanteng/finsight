@@ -13,7 +13,8 @@ import { FinancialContextSnapshot } from './types';
 import { mergeAssetAllocation } from '../services/asset-class';
 import { MAX_UNMODELED_REASON_FACTS } from './canonical-facts';
 import { getActiveModel, getActiveNumericGenerationSetting } from './model-config';
-import { cashFlowForecastFacts } from './cash-flow-forecast-context';
+import { cashFlowForecastFacts, withoutUnlinkedIncome } from './cash-flow-forecast-context';
+import { describeLinkedDataForModel, emptyPortfolio, incomeLinked, linkedOverview } from './linked-data';
 
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
@@ -116,6 +117,12 @@ function boundedPersonalContext(profile: string): string {
 export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): string {
   const parts: string[] = [];
 
+  // The answer is told what is not linked and may say so; without the same
+  // statement here the reviewer read "you have not linked a brokerage" as an
+  // invented claim about the user.
+  const linkedNote = describeLinkedDataForModel(snapshot.linkedData);
+  if (linkedNote) parts.push(`Linked data: ${linkedNote}`);
+
   // The primary model is shown this block whenever the plan asks for it, so an
   // answer may legitimately say the user is retired or 77. Leaving it out here
   // made the reviewer object to demographics it simply could not see, which
@@ -156,11 +163,23 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
     }
   }
 
+  // The same totals the fact pack publishes: a zero from a kind nobody linked
+  // is left out here too, or the reviewer would be told both that the user's
+  // cash is not zero and that it is.
   const overview = snapshot.financialSummary?.financialOverview;
   if (overview) {
-    parts.push(
-      `Financial overview: netWorth=${overview.netWorth}, totalCash=${overview.totalCash}, totalInvestments=${overview.totalInvestments}, totalDebt=${overview.totalDebt}, homeValue=${overview.homeValue ?? 'null'}`
-    );
+    const { shown, netWorthLeavesOut } = linkedOverview(snapshot.linkedData, overview);
+    const totals = [
+      snapshot.linkedData?.accounts === 0 ? 'no linked accounts; balance totals are not available (not zero)' : null,
+      shown.has('netWorth')
+        ? `netWorth=${overview.netWorth}${netWorthLeavesOut.length > 0 ? ` (linked accounts only; no ${netWorthLeavesOut.join(', no ')} linked)` : ''}`
+        : null,
+      shown.has('totalCash') ? `totalCash=${overview.totalCash}` : null,
+      shown.has('totalInvestments') ? `totalInvestments=${overview.totalInvestments}` : null,
+      shown.has('totalDebt') ? `totalDebt=${overview.totalDebt}` : null,
+      `homeValue=${overview.homeValue ?? 'null'}`,
+    ].filter((item): item is string => item !== null);
+    parts.push(`Financial overview: ${totals.join(', ')}`);
   }
 
   // The primary model is handed the account list only when the plan asks for
@@ -184,7 +203,7 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
 
   const invPortfolio = snapshot.financialSummary?.investmentPortfolio;
   const invSnapshot = snapshot.investments;
-  if (invPortfolio) {
+  if (invPortfolio && !emptyPortfolio(snapshot.linkedData, invPortfolio.totalValue)) {
     parts.push(
       `Investment portfolio: totalValue=${invPortfolio.totalValue}, holdingsCount=${invPortfolio.holdingsCount}`
     );
@@ -288,10 +307,15 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
 
   // The forecast pack's figures are the ones an answer may quote, so the
   // reviewer sees the same facts, labelled as projections where they are.
-  const forecast = snapshot.cashFlowForecast;
+  const forecast = snapshot.cashFlowForecast && snapshot.linkedData && !incomeLinked(snapshot.linkedData)
+    ? withoutUnlinkedIncome(snapshot.cashFlowForecast)
+    : snapshot.cashFlowForecast;
   if (forecast) {
     if (forecast.status === 'unavailable') {
       parts.push(`Cash flow forecast: unavailable (${forecast.reason ?? 'unknown reason'})`);
+    }
+    if (forecast.incomeNotLinked) {
+      parts.push('Cash flow forecast: no checking or savings account is linked, so income and net cash flow are unknown and not projected');
     }
     // Every fact, uncapped. The pack already bounds each part where it is
     // built (recurring items, planned events, cards, cash accounts, one-offs),

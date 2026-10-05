@@ -30,6 +30,8 @@ const HOME_AFFORDABILITY_OVERRIDE_FIELDS = [
   'currentHousingCostMonthly',
   'retirementContributionMonthly',
   'emergencyFundMonths',
+  'monthlyTakeHomeIncome',
+  'monthlyExpenses',
 ] as const;
 
 export type HomeAffordabilityOverrideField =
@@ -95,6 +97,10 @@ export interface PlannedHomeAffordabilityOverrides {
   currentHousingCostMonthly?: number;
   retirementContributionMonthly?: number;
   emergencyFundMonths?: number;
+  /** Take-home pay a month, as the user stated it; outranks linked cash flow. */
+  monthlyTakeHomeIncome?: number;
+  /** Total monthly spending today, as the user stated it, current housing included. */
+  monthlyExpenses?: number;
   sources: Partial<Record<HomeAffordabilityOverrideField, string>>;
 }
 
@@ -249,6 +255,8 @@ const OVERRIDE_RANGES: Record<HomeAffordabilityOverrideField, {
   currentHousingCostMonthly: { minimum: 0, maximum: 1_000_000 },
   retirementContributionMonthly: { minimum: 0, maximum: 1_000_000 },
   emergencyFundMonths: { minimum: 0, maximum: 60 },
+  monthlyTakeHomeIncome: { minimum: 0, maximum: 10_000_000 },
+  monthlyExpenses: { minimum: 0, maximum: 10_000_000 },
 };
 
 function finiteNumber(value: unknown): number | undefined {
@@ -491,7 +499,13 @@ function resolveVariant(
     );
   }
 
-  const overviewCash = finiteNumber(snapshot.financialSummary?.financialOverview?.totalCash);
+  // With no cash account linked, a zero total is an empty connection, not an
+  // empty bank account: read as cash, it made every purchase "limited by
+  // upfront cash" for someone who had linked only a card.
+  const reportedCash = finiteNumber(snapshot.financialSummary?.financialOverview?.totalCash);
+  const overviewCash = snapshot.linkedData?.cash === 0 && (reportedCash === undefined || reportedCash === 0)
+    ? undefined
+    : reportedCash;
   const availableCash = overrides.availableCashAmount !== undefined
     ? roundMoney(overrides.availableCashAmount)
     : overviewCash !== undefined
@@ -705,12 +719,21 @@ function resolveVariant(
   // given. The observed average over complete months stands in only for a side
   // the forecast has no figure for. The assumption keys keep their names so
   // executions saved before stay readable.
-  const incomeBaseline = monthlyBaseline(
-    'income',
-    snapshot.expectedMonthly?.income,
-    snapshot.expectedMonthly?.incomeSource,
-    snapshot.averageMonthlyIncome
-  );
+  // A figure the user states outranks both: it is what they say their month
+  // is, and for someone with nothing linked it is the only month there is.
+  const incomeBaseline = overrides.monthlyTakeHomeIncome !== undefined
+    ? {
+        value: roundMoney(overrides.monthlyTakeHomeIncome),
+        label: 'Monthly take-home income the user stated',
+        origin: 'user' as const,
+        source: overrides.sources.monthlyTakeHomeIncome ?? 'User-stated take-home income',
+      }
+    : monthlyBaseline(
+        'income',
+        snapshot.expectedMonthly?.income,
+        snapshot.expectedMonthly?.incomeSource,
+        snapshot.averageMonthlyIncome
+      );
   const averageMonthlyIncome = incomeBaseline?.value;
   if (incomeBaseline) {
     addAssumption(
@@ -722,12 +745,19 @@ function resolveVariant(
       incomeBaseline.source
     );
   }
-  const expenseBaseline = monthlyBaseline(
-    'expenses',
-    snapshot.expectedMonthly?.spending,
-    snapshot.expectedMonthly?.spendingSource,
-    snapshot.averageMonthlyExpense
-  );
+  const expenseBaseline = overrides.monthlyExpenses !== undefined
+    ? {
+        value: roundMoney(overrides.monthlyExpenses),
+        label: 'Monthly spending the user stated, current housing included',
+        origin: 'user' as const,
+        source: overrides.sources.monthlyExpenses ?? 'User-stated monthly spending',
+      }
+    : monthlyBaseline(
+        'expenses',
+        snapshot.expectedMonthly?.spending,
+        snapshot.expectedMonthly?.spendingSource,
+        snapshot.averageMonthlyExpense
+      );
   const baselineMonthlyExpenses = expenseBaseline?.value;
   // A stated housing cost above the tracked spending baseline means the two
   // series disagree — housing paid from an unconnected account, or a
@@ -1432,6 +1462,8 @@ export const homeAffordabilityScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'current_housing_cost_monthly', label: 'Current monthly housing cost', description: 'Current rent or ownership cost that the purchase replaces.', valueType: 'currency', minimum: 0, maximum: 1_000_000 },
     { id: 'retirement_contribution_monthly', label: 'Monthly take-home-funded retirement contribution to preserve', description: 'Monthly IRA or other retirement contribution funded from take-home cash and excluded from the operating-expense baseline.', valueType: 'currency', minimum: 0, maximum: 1_000_000 },
     { id: 'emergency_fund_months', label: 'Emergency-fund target', description: 'Months of post-purchase expenses to retain in cash.', valueType: 'months', minimum: 0, maximum: 60 },
+    { id: 'monthly_take_home_income', label: 'Monthly take-home income', description: 'Stated take-home pay a month; outranks linked cash flow.', valueType: 'currency', minimum: 0, maximum: 10_000_000 },
+    { id: 'monthly_expenses', label: 'Monthly spending', description: 'Stated total monthly spending today, current housing included; outranks linked cash flow.', valueType: 'currency', minimum: 0, maximum: 10_000_000 },
   ],
   defaults: [
     { id: 'down_payment_percent', value: DEFAULT_DOWN_PAYMENT_PERCENT, description: 'Used when no down payment is supplied.' },
@@ -1458,7 +1490,7 @@ export const homeAffordabilityScenarioCalculator: ScenarioCalculatorDefinition<
   ],
   planner: {
     jsonSchema: HOME_AFFORDABILITY_SCENARIO_PLAN_JSON_SCHEMA,
-    instructions: `When the user asks whether a specific home purchase works, or asks to compare two home-price, down-payment, rate, term, or ownership-cost cases, set requested=true. Extract only numbers the user actually stated and put the matching short wording in overrides.sources. Percentage fields use percentage points: 6.5% is 6.5, not 0.065. The primary variant holds the first case. The comparison variant contains only values that differ from the primary; it inherits all other primary values. The application may use connected total cash, average income and expenses, the current FRED 30-year mortgage benchmark, and disclosed planning defaults for absent values. Do not infer property tax, insurance, HOA, PMI, current housing cost, available cash, or the retirement contribution from prose that does not state them. Set retirementContributionMonthly only when the user states a retirement contribution funded from take-home cash, such as a checking-to-IRA transfer, that they want to preserve; transfers and investment trades are excluded from operating expenses, so this value is subtracted once. Do not set it for payroll-deducted 401(k), 403(b), or similar contributions because connected deposits are already net of those deductions. Convert a stated per-paycheck or annual take-home-funded amount only when the user also states the frequency. The overrides object and every field and source are always present; use null for every absent value and source. When no target-home scenario is requested, set requested=false and return null for every override and source in both variants. This calculator evaluates household cash flow, not lender qualification, and does not calculate a maximum qualifying loan.`,
+    instructions: `When the user asks whether a specific home purchase works, or asks to compare two home-price, down-payment, rate, term, or ownership-cost cases, set requested=true. Extract only numbers the user actually stated and put the matching short wording in overrides.sources. Percentage fields use percentage points: 6.5% is 6.5, not 0.065. The primary variant holds the first case. The comparison variant contains only values that differ from the primary; it inherits all other primary values. The application may use connected total cash, average income and expenses, the current FRED 30-year mortgage benchmark, and disclosed planning defaults for absent values. Do not infer property tax, insurance, HOA, PMI, current housing cost, available cash, or the retirement contribution from prose that does not state them. Set retirementContributionMonthly only when the user states a retirement contribution funded from take-home cash, such as a checking-to-IRA transfer, that they want to preserve; transfers and investment trades are excluded from operating expenses, so this value is subtracted once. Do not set it for payroll-deducted 401(k), 403(b), or similar contributions because connected deposits are already net of those deductions. Convert a stated per-paycheck or annual take-home-funded amount only when the user also states the frequency. Set monthlyTakeHomeIncome only when the user states their take-home (after-tax) pay, converted to a month when they also state the period; never derive it from a gross salary. Set monthlyExpenses only when the user states what they spend in a month in total. The overrides object and every field and source are always present; use null for every absent value and source. When no target-home scenario is requested, set requested=false and return null for every override and source in both variants. This calculator evaluates household cash flow, not lender qualification, and does not calculate a maximum qualifying loan.`,
     parsePlan: parseHomeAffordabilityScenarioPlan,
   },
   execution: {

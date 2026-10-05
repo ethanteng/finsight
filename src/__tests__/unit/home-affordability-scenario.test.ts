@@ -798,4 +798,73 @@ describe('home affordability scenario runner', () => {
     expect(execution.status).toBe('unavailable');
     expect(execution.reason).toContain('mortgage rate is required');
   });
+
+  describe('with nothing linked to read cash or cash flow from', () => {
+    const NOTHING_LINKED = {
+      accounts: 0, cash: 0, credit: 0, loans: 0, investments: 0, holdings: 0, transactionMonths: 0,
+    };
+    const unlinked = (overrides: Record<string, unknown> = {}) => snapshot({
+      linkedData: NOTHING_LINKED,
+      averageMonthlyIncome: null,
+      averageMonthlyExpense: null,
+      financialSummary: {
+        financialOverview: { netWorth: 0, totalCash: 0, totalInvestments: 0, totalDebt: 0, homeValue: null },
+      },
+      ...overrides,
+    });
+    const home = (extra: Record<string, unknown> = {}) => ({
+      requested: true as const,
+      primary: {
+        overrides: {
+          homePrice: 600_000,
+          propertyTaxAnnual: 7_200,
+          homeownersInsuranceAnnual: 2_400,
+          ...extra,
+          sources: {
+            homePrice: '$600,000 house',
+            propertyTaxAnnual: '$7,200 taxes',
+            homeownersInsuranceAnnual: '$2,400 insurance',
+            ...Object.fromEntries(Object.keys(extra).map((key) => [key, `stated ${key}`])),
+          },
+        },
+      },
+    });
+
+    it('does not read an empty connection as no cash for the down payment', async () => {
+      const execution = await runHomeAffordabilityScenario(unlinked(), home()) as any;
+
+      expect(execution.status).toBe('completed');
+      const [scenario] = execution.scenarios;
+      expect(scenario.assumptions.some((item: any) => item.key === 'available_cash')).toBe(false);
+      expect(scenario.metrics.cashRemaining).toBeUndefined();
+      // Not "limited by upfront cash": cash is unknown, so nothing is ranked.
+      expect(scenario.bindingConstraint).toBeUndefined();
+      expect(scenario.metrics.upfrontCashNeeded).toBeGreaterThan(0);
+    });
+
+    it('runs the whole assessment on the take-home pay, spending and cash the user states', async () => {
+      const execution = await runHomeAffordabilityScenario(unlinked(), home({
+        availableCashAmount: 200_000,
+        monthlyTakeHomeIncome: 14_000,
+        monthlyExpenses: 7_000,
+        currentHousingCostMonthly: 2_500,
+      })) as any;
+
+      const [scenario] = execution.scenarios;
+      expect(scenario.assumptions).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: 'average_monthly_income', value: 14_000, origin: 'user' }),
+        expect.objectContaining({ key: 'average_monthly_expenses', value: 7_000, origin: 'user' }),
+      ]));
+      expect(scenario.metrics.postPurchaseMonthlySurplus).toBeDefined();
+      expect(scenario.assessment).not.toBe('incomplete');
+      expect(validateCanonicalFactPack({ version: 1, facts: homeAffordabilityScenarioCanonicalFacts(execution) })).toEqual([]);
+    });
+
+    it('lets a stated figure outrank linked cash flow', async () => {
+      const execution = await runHomeAffordabilityScenario(snapshot(), home({ monthlyTakeHomeIncome: 11_000 })) as any;
+      expect(execution.scenarios[0].assumptions).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: 'average_monthly_income', value: 11_000, origin: 'user' }),
+      ]));
+    });
+  });
 });

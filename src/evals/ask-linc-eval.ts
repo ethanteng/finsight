@@ -201,6 +201,7 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
     selectedPacks: followUpPacks,
     questionNeeds: questionNeedsFromPacks(followUpPacks, true),
     needsSecondaryValidation: true,
+    personalDataQuestion: true,
     retirementInputs: { sources: {} },
     scenarioPlans: {},
     searchQueries: [],
@@ -318,6 +319,7 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
     selectedPacks: coastPacks,
     questionNeeds: questionNeedsFromPacks(coastPacks, true),
     needsSecondaryValidation: true,
+    personalDataQuestion: true,
     retirementInputs: { sources: {} },
     scenarioPlans: scenarioCalculatorRegistry.parsePlans({
       coast_fire: { requested: true, primary: coastVariant(coastStated), comparison: coastVariant({}) },
@@ -353,11 +355,54 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
   });
   const coastSummary = coastFollowUp.structuredResponse.summary;
 
+  // Assumptions are allowed, but only from something real: with no cash flow
+  // linked and no earlier figure, there is nothing to read spending from.
   const retirementInputs = resolveRetirementInputs({
     questionParams: { retirementAge: 65 } as any,
     profileAge: 45,
     profileRetirementAge: null,
+    assumeWhenMissing: { currentAnnualSpending: null },
   });
+  const assumedRetirementInputs = resolveRetirementInputs({
+    questionParams: {} as any,
+    profileAge: 45,
+    profileRetirementAge: null,
+    assumeWhenMissing: { currentAnnualSpending: 66_000 },
+  });
+
+  // Someone with nothing linked asking about their own money: an answer, not
+  // "your net worth is $0", and a closing note on what linking would change.
+  const unlinkedSnapshot = baseSnapshot();
+  unlinkedSnapshot.linkedData = { accounts: 0, cash: 0, credit: 0, loans: 0, investments: 0, holdings: 0, transactionMonths: 0 };
+  unlinkedSnapshot.accounts = [];
+  unlinkedSnapshot.financialSummary!.financialOverview = { netWorth: 0, totalCash: 0, totalInvestments: 0, totalDebt: 0, homeValue: null } as any;
+  unlinkedSnapshot.financialSummary!.investmentPortfolio = { totalValue: 0, holdingCount: 0, securityCount: 0, assetAllocation: [] } as any;
+  const unlinkedPlan: ContextPlan = {
+    ...followUpPlan,
+    requestedPacks: [],
+    selectedPacks: [],
+    questionNeeds: questionNeedsFromPacks([], false),
+    needsSecondaryValidation: false,
+    personalDataQuestion: true,
+    summary: 'A question about the user\'s own net worth.',
+  };
+  let unlinkedPrompt = '';
+  const unlinked = await runAskLincAnalysis({
+    question: 'How is my net worth looking? I have about $40,000 in savings and $15,000 on a car loan.',
+    enableValidation: false,
+    evaluation: {
+      snapshot: unlinkedSnapshot,
+      contextPlan: unlinkedPlan,
+      skipToneConfig: true,
+      model: ({ userMessage }) => {
+        unlinkedPrompt = userMessage;
+        return jsonResponse(
+          'From what you told me, you have $40,000 in savings against a $15,000 car loan, so you are comfortably ahead.'
+        );
+      },
+    },
+  });
+  const unlinkedFactIds = unlinked.showTheMathData!.evidenceManifest.facts.map(fact => fact.id);
 
   const groundedManifest = grounded.showTheMathData!.evidenceManifest;
   const retryManifest = retry.showTheMathData!.evidenceManifest;
@@ -433,11 +478,33 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
       detail: 'A calculator lead with nothing linked gets the deterministic answer, a market-history test on a preset mix, and what linking would add -- not a refusal.',
     },
     {
-      id: 'retirement-does-not-default-withdrawal',
+      id: 'retirement-never-invents-spending',
       category: 'retirement',
       passed: retirementInputs.missingParams.includes('annualWithdrawalAmount') &&
         retirementInputs.annualWithdrawalAmount == null,
-      detail: 'Retirement analysis requests a missing withdrawal amount instead of assuming one.',
+      detail: 'With no earlier figure and no linked cash flow, no retirement spending level is invented.',
+    },
+    {
+      id: 'retirement-assumes-current-spending-and-says-so',
+      category: 'retirement',
+      passed: assumedRetirementInputs.annualWithdrawalAmount === 66_000 &&
+        assumedRetirementInputs.retirementAge === 65 &&
+        assumedRetirementInputs.missingParams.length === 0 &&
+        assumedRetirementInputs.assumed.annualWithdrawalAmount === 'current_spending' &&
+        assumedRetirementInputs.assumed.retirementAge === 'convention',
+      detail: 'Missing retirement inputs are filled from current spending and the conventional age, and marked as assumptions.',
+    },
+    {
+      id: 'unlinked-user-gets-an-answer-not-a-zero',
+      category: 'missing_data',
+      passed: !unlinkedFactIds.includes('net_worth') &&
+        !unlinkedFactIds.includes('total_cash') &&
+        unlinkedFactIds.some(fact => fact.startsWith('user_input_usd_')) &&
+        unlinkedPrompt.includes('The user has not linked any accounts yet.') &&
+        unlinked.showTheMathData!.evidenceManifest.validation.deterministic.valid &&
+        unlinked.structuredResponse.summary.includes('$40,000 in savings') &&
+        unlinked.structuredResponse.summary.endsWith('and what you hold.'),
+      detail: 'Nothing linked: no $0 balances are offered as facts, the answer works from the user\'s own figures, and it closes on what linking would change.',
     },
   ];
 }

@@ -97,12 +97,13 @@ function fakeRunner(survivalByAge: Record<number, number> = {}) {
       characteristics: {} as any,
       tradeoffs: {} as any,
     });
+    const rates = request.annualSpending === undefined;
     return {
       version: 1,
       computedAt: '2026-10-04T00:00:00.000Z',
       durationMs: 1,
       cached: false,
-      mode: 'plan',
+      mode: rates ? 'rates' : 'plan',
       assumed: [],
       missing: [],
       inputs: { ...request, allocation: request.allocation ?? 'balanced' } as any,
@@ -115,8 +116,8 @@ function fakeRunner(survivalByAge: Record<number, number> = {}) {
         firstStartMonth: '1926-07',
         lastStartMonth: '1976-06',
       },
-      primary: scenario(request.retirementAge, request.annualSpending, survival),
-      alternatives: [
+      primary: rates ? null : scenario(request.retirementAge, request.annualSpending, survival),
+      alternatives: rates ? [] : [
         scenario(request.retirementAge + 2, request.annualSpending, Math.min(1, survival + 0.04)),
         { ...scenario(request.retirementAge, 63_000, Math.min(1, survival + 0.03)), id: 'spend-10-less' },
       ],
@@ -162,7 +163,7 @@ describe('retirement plan from stated figures', () => {
     expect(execution.standInFor).toBe('no_holdings');
     expect(runner).toHaveBeenCalledTimes(2);
     expect(runner.mock.calls[1][0]).toMatchObject({ ...LEAD, retirementAge: 62, lifeExpectancy: 95 });
-    expect(execution.scenarios.map((scenario) => [scenario.label, scenario.outcome.survivalRate])).toEqual([
+    expect(execution.scenarios.map((scenario) => [scenario.label, scenario.outcome!.survivalRate])).toEqual([
       ['Retiring at 60', 0.88],
       ['Retiring at 62', 0.93],
     ]);
@@ -174,7 +175,7 @@ describe('retirement plan from stated figures', () => {
     expect(execution.scenarios[1].alternatives).toBeUndefined();
   });
 
-  it('asks for the figures it needs, offering the link as the alternative', async () => {
+  it('asks only for the two figures nothing can stand in for, offering the link as the alternative', async () => {
     const runner = fakeRunner();
     const execution = await runStatedRetirementPlan(NO_HOLDINGS, plan({ retirementAge: 60 }), runner as QuickPlanRunner);
 
@@ -183,7 +184,6 @@ describe('retirement plan from stated figures', () => {
       status: 'unavailable',
       missingInputs: [
         'roughly how much you have invested today',
-        'what you expect to spend a year in retirement, in today\'s dollars',
         'your current age',
       ],
     });
@@ -191,6 +191,71 @@ describe('retirement plan from stated figures', () => {
     expect(ask).toContain('before any accounts are linked');
     expect(ask).toContain('Or link your investment accounts');
   });
+
+  it('assumes the conventional retirement age and says so', async () => {
+    const runner = fakeRunner();
+    const execution = await runStatedRetirementPlan(NO_HOLDINGS, plan({
+      currentAge: 45,
+      investableAssets: 800_000,
+      annualSpending: 70_000,
+    }), runner as QuickPlanRunner);
+
+    expect(runner.mock.calls[0][0]).toMatchObject({ retirementAge: 65 });
+    expect(describeStatedRetirementPlanExecution(execution)).toContain('You did not name a retirement age, so I used 65.');
+
+    const pastIt = await runStatedRetirementPlan(NO_HOLDINGS, plan({
+      currentAge: 70,
+      investableAssets: 800_000,
+      annualSpending: 70_000,
+    }), runner as QuickPlanRunner);
+    expect(runner.mock.calls[1][0]).toMatchObject({ retirementAge: 70 });
+    expect(describeStatedRetirementPlanExecution(pastIt)).toContain('so I modeled retiring now');
+  });
+
+  it('assumes retirement costs what the user spends now, when linked accounts say', async () => {
+    const runner = fakeRunner();
+    const execution = await runStatedRetirementPlan(
+      { ...NO_HOLDINGS, expectedMonthly: { spending: 5_500, income: 9_000 } },
+      plan({ currentAge: 45, retirementAge: 60, investableAssets: 800_000 }),
+      runner as QuickPlanRunner
+    );
+
+    expect(runner.mock.calls[0][0]).toMatchObject({ annualSpending: 66_000 });
+    expect(describeStatedRetirementPlanExecution(execution))
+      .toContain('The spending level is what you spend now according to your linked accounts, $66,000 a year; I assumed retirement costs the same.');
+  });
+
+  it('answers with what the mix sustained when nobody knows the spending level', async () => {
+    const runner = fakeRunner();
+    const execution = await runStatedRetirementPlan(
+      NO_HOLDINGS,
+      plan({ currentAge: 45, retirementAge: 60, investableAssets: 800_000 }),
+      runner as QuickPlanRunner
+    ) as CompletedStatedRetirementPlanExecution;
+
+    expect(runner.mock.calls[0][0].annualSpending).toBeUndefined();
+    const [scenario] = execution.scenarios;
+    expect(scenario.mode).toBe('rates');
+    expect(scenario.outcome).toBeUndefined();
+
+    const facts = statedRetirementPlanCanonicalFacts(execution);
+    expect(facts.some((fact) => fact.id.endsWith('_historical_survival_rate'))).toBe(false);
+    expect(facts.find((fact) => fact.id.endsWith('_sustainable_spending_p10'))?.value).toBe(78_000);
+    expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+    expect(describeStatedRetirementPlanExecution(execution)).toContain('instead of a verdict this shows what the mix sustained');
+  });
+
+  it('runs the real engine without a spending level', async () => {
+    const execution = await runStatedRetirementPlan(
+      NO_HOLDINGS,
+      plan({ currentAge: 45, retirementAge: 60, investableAssets: 800_000 })
+    ) as CompletedStatedRetirementPlanExecution;
+    const [scenario] = execution.scenarios;
+
+    expect(scenario.mode).toBe('rates');
+    expect(scenario.sustainableSpending!.p10).toBeGreaterThan(0);
+    expect(scenario.sustainableSpending!.p50).toBeGreaterThanOrEqual(scenario.sustainableSpending!.p10);
+  }, 120_000);
 
   it('never defaults the portfolio, spending, or ages, but does default the horizon and mix', async () => {
     const runner = fakeRunner();
@@ -249,9 +314,9 @@ describe('retirement plan from stated figures', () => {
     expect(execution.status).toBe('completed');
     const [scenario] = (execution as CompletedStatedRetirementPlanExecution).scenarios;
     expect(scenario.allocation).toMatchObject({ id: 'balanced', usEquityPercent: 60, bondsPercent: 35, cashPercent: 5 });
-    expect(scenario.outcome.sequencesTested).toBeGreaterThan(100);
-    expect(scenario.outcome.survivalRate).toBeGreaterThan(0);
-    expect(scenario.outcome.survivalRate).toBeLessThanOrEqual(1);
-    expect(scenario.outcome.projectedPortfolioAtRetirement).toBeGreaterThan(LEAD.investableAssets);
+    expect(scenario.outcome!.sequencesTested).toBeGreaterThan(100);
+    expect(scenario.outcome!.survivalRate).toBeGreaterThan(0);
+    expect(scenario.outcome!.survivalRate).toBeLessThanOrEqual(1);
+    expect(scenario.outcome!.projectedPortfolioAtRetirement).toBeGreaterThan(LEAD.investableAssets);
   }, 120_000);
 });

@@ -110,6 +110,12 @@ export interface CashFlowForecastContext {
   };
   /** The user's choices about what the forecast counts; the figures already reflect them. */
   adjustments?: Array<{ kind: ForecastAdjustmentKind; flow: 'income' | 'spending'; label: string }>;
+  /**
+   * No checking or savings account is linked, so the forecast has no paycheck
+   * to see: its income is unknown, not zero, and so is its net. Only spending,
+   * cards and the user's own plans are published.
+   */
+  incomeNotLinked?: true;
 }
 
 type CardPace = Pick<CardOutcome, 'paidOffBy' | 'carryingBalanceNow' | 'interestTwelveMonths' | 'balanceInTwelveMonths'>;
@@ -125,6 +131,24 @@ function pace(outcome: CardOutcome | null): CardPace | null {
 }
 
 const DAYS_PER_MONTH = 365 / 12;
+
+/**
+ * The forecast for a user with nothing linked that income lands in -- only a
+ * card, say. Its income is $0 and its net is the spending with the sign
+ * flipped, and neither is the user's. Spending, the cards and the user's own
+ * plans are real and stay. Income-side items are dropped from the lists, so
+ * the facts and the pack's details still index the same items. A monthly
+ * income the user set reaches the answer as the expected monthly figure.
+ */
+export function withoutUnlinkedIncome(context: CashFlowForecastContext): CashFlowForecastContext {
+  if (context.status === 'unavailable' && !context.highlights) return context;
+  return {
+    ...context,
+    incomeNotLinked: true,
+    ...(context.recurring && { recurring: context.recurring.filter(item => item.flow !== 'income') }),
+    ...(context.oneOffs && { oneOffs: context.oneOffs.filter(item => item.flow !== 'income') }),
+  };
+}
 
 /**
  * Every recurring item (largest monthly weight first), planned event, one-off
@@ -342,7 +366,7 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
     });
   };
 
-  const measures: Array<keyof CashFlowTotals> = ['income', 'spending', 'net'];
+  const measures: Array<keyof CashFlowTotals> = context.incomeNotLinked ? ['spending'] : ['income', 'spending', 'net'];
   for (const highlight of context.highlights) {
     if (!(CASH_FLOW_HIGHLIGHT_KEYS as readonly string[]).includes(highlight.key)) continue;
     const window = cashFlowWindowLabel(highlight);
@@ -397,7 +421,7 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
         highlight.planned.net,
         `${source}.planned.net`
       );
-      if (highlight.projectedWithoutPlanned) {
+      if (highlight.projectedWithoutPlanned && !context.incomeNotLinked) {
         forecast(
           cashFlowFactId(highlight.key, 'without_planned_events', 'net'),
           `Projected net cash flow for ${window} if none of the user’s planned events happened`,
@@ -417,7 +441,7 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
         'cashFlowForecast.baseline.typicalMonthlySpending'
       );
     }
-    if (context.baseline.incomeSource === 'transactions' && context.baseline.typicalMonthlyIncome >= 1) {
+    if (context.baseline.incomeSource === 'transactions' && context.baseline.typicalMonthlyIncome >= 1 && !context.incomeNotLinked) {
       forecast(
         'cash_flow_typical_monthly_other_income',
         `Typical monthly income outside recurring paychecks, from the last ${basisDays} days, as the forecast spreads it`,
@@ -695,6 +719,9 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
     forecastFrom: context.forecastStart,
     historyStarts: context.coverageStart,
     scope: 'Checking, savings and credit card accounts. Investment accounts and loans are excluded.',
+    ...(context.incomeNotLinked && {
+      incomeNotLinked: 'No checking or savings account is linked, so income and net cash flow are unknown, not zero. Only spending, cards and the user’s own plans are projected.',
+    }),
     windows: (context.highlights ?? []).map(highlight => ({
       window: cashFlowWindowLabel(highlight),
       factIdPrefix: `cash_flow_${highlight.key}_`,

@@ -15,6 +15,7 @@
 
 import { describeMissingRetirementInputs } from './retirement-inputs';
 import type { FinancialContextSnapshot, QuestionNeeds } from './types';
+import { spendingLinked, type LinkedData } from './linked-data';
 import {
   COAST_FIRE_CALCULATOR_ID,
   type CoastFireScenarioExecution,
@@ -145,10 +146,77 @@ function presetStoodIn(executions: FinancialContextSnapshot['scenarioExecutions'
     (coastFire?.status === 'completed' && coastFire.scenarios.some((scenario) => scenario.historicalTest));
 }
 
+type AskNeeds = Pick<QuestionNeeds, 'needsRetirement' | 'needsHomeValue'> &
+  Partial<Pick<QuestionNeeds, 'needsInvestments' | 'needsTransactionDetails' | 'needsMonthlyCashFlow' | 'needsCashFlowForecast'>>;
+
+/**
+ * What linking one specific kind of account would change about this answer.
+ *
+ * Ask Linc answers with what it has, so linking is never the price of an
+ * answer. It is the upgrade, and this says what the upgrade is, concretely,
+ * for the data this question needed and the account it would come from. One
+ * note at most, the most specific that applies:
+ *
+ *  - a question about spending or cash flow, with no checking account or card
+ *    to read it from (or, with only a card, no income);
+ *  - a question about investments, with no brokerage or retirement account;
+ *  - otherwise a question about the user's own money, with nothing linked.
+ *
+ * Nothing is said when the account is linked but has not reported yet, which
+ * the user cannot act on, or when the question is general rather than about
+ * their money. Debt is never raised: no linked card or loan is as likely to
+ * mean no debt as unlinked debt.
+ */
+function linkingAsk(
+  linked: LinkedData | undefined,
+  needs: AskNeeds,
+  personalDataQuestion: boolean
+): MissingInputAsk | null {
+  // A general question is the same for anyone, whatever packs it drew: the
+  // fallback plan selects every pack, so packs alone cannot say it is personal.
+  if (!linked || !personalDataQuestion) return null;
+  const cashFlowNeeded = Boolean(
+    needs.needsTransactionDetails || needs.needsMonthlyCashFlow || needs.needsCashFlowForecast
+  );
+  if (cashFlowNeeded && linked.cash === 0 && linked.credit === 0) {
+    return {
+      id: 'link_for_cash_flow',
+      message: 'Link the checking account your pay lands in, and the cards you spend on, and I will answer this ' +
+        'from your actual money: what you really spend each month and on what, which bills recur, and what is ' +
+        'left after them.',
+    };
+  }
+  if (cashFlowNeeded && linked.cash === 0 && spendingLinked(linked)) {
+    return {
+      id: 'link_for_income',
+      message: 'Link the checking account your pay lands in, and I will add what actually comes in each month, so ' +
+        'this can show what is left after your spending rather than the spending alone.',
+    };
+  }
+  if (needs.needsInvestments && linked.investments === 0) {
+    return {
+      id: 'link_for_investments',
+      message: 'Link your brokerage and retirement accounts, and I will look at what you actually hold: your real ' +
+        'mix of stocks and bonds, what each fund charges, and where you are concentrated.',
+    };
+  }
+  if (linked.accounts === 0) {
+    return {
+      id: 'link_anything',
+      message: 'Link your accounts and I will answer this from your real numbers instead of what you have told ' +
+        'me and general rules of thumb: your actual balances, what comes in and goes out each month, and what ' +
+        'you hold.',
+    };
+  }
+  return null;
+}
+
 export function collectMissingInputAsks(
   snapshot: Pick<FinancialContextSnapshot,
-    'retirementAnalysisNeedsInfo' | 'homeValueSummary' | 'financialSummary' | 'scenarioExecutions'>,
-  needs: Pick<QuestionNeeds, 'needsRetirement' | 'needsHomeValue'>
+    'retirementAnalysisNeedsInfo' | 'homeValueSummary' | 'financialSummary' | 'scenarioExecutions'> &
+    Partial<Pick<FinancialContextSnapshot, 'linkedData'>>,
+  needs: AskNeeds,
+  context: { personalDataQuestion?: boolean } = {}
 ): MissingInputAsk[] {
   const asks: MissingInputAsk[] = [];
   const needsInfo = snapshot.retirementAnalysisNeedsInfo;
@@ -193,7 +261,16 @@ export function collectMissingInputAsks(
     }
   }
 
-  // 2. A figure the question needed that the profile does not carry.
+  // 2. What linking would add, when the retirement path has not already said
+  //    it: a retirement question with nothing linked gets its own, more
+  //    specific note above, or none at all while a calculator asks for figures.
+  const retirementSpokeToLinking = needs.needsRetirement && needsInfo?.unavailableCode === 'no_holdings';
+  if (!retirementSpokeToLinking) {
+    const ask = linkingAsk(snapshot.linkedData, needs, context.personalDataQuestion ?? false);
+    if (ask) asks.push(ask);
+  }
+
+  // 3. A figure the question needed that the profile does not carry.
   if (needs.needsHomeValue && snapshot.homeValueSummary === HOME_VALUE_UNAVAILABLE) {
     asks.push({
       id: 'home_value',
@@ -202,7 +279,7 @@ export function collectMissingInputAsks(
     });
   }
 
-  // 3. A connection that has stopped reporting, which quietly skews every total
+  // 4. A connection that has stopped reporting, which quietly skews every total
   //    derived from it. Stale sources are deliberately not raised here — the
   //    figures are still real, just older than our refresh window, and no user
   //    action (including refresh) can clear that.
@@ -235,8 +312,9 @@ export function collectMissingInputAsks(
 /** The asks as one block of text, or null when there is nothing to ask for. */
 export function describeMissingInputs(
   snapshot: Parameters<typeof collectMissingInputAsks>[0],
-  needs: Parameters<typeof collectMissingInputAsks>[1]
+  needs: Parameters<typeof collectMissingInputAsks>[1],
+  context: Parameters<typeof collectMissingInputAsks>[2] = {}
 ): string | null {
-  const asks = collectMissingInputAsks(snapshot, needs);
+  const asks = collectMissingInputAsks(snapshot, needs, context);
   return asks.length === 0 ? null : asks.map((ask) => ask.message).join('\n\n');
 }

@@ -1,4 +1,11 @@
-import { resolveRetirementInputs, retirementPortfolioFingerprint } from '../../openai/retirement-inputs';
+import {
+  persistableAssumptions,
+  resolveRetirementInputs,
+  retirementPortfolioFingerprint,
+  sameAssumptions,
+  withoutStoredAssumptions,
+} from '../../openai/retirement-inputs';
+import { describeRetirementAssumptions } from '../../openai/retirement-assumptions';
 
 describe('resolveRetirementInputs', () => {
   it('reports missing inputs instead of inventing age and a four-percent withdrawal', () => {
@@ -103,6 +110,98 @@ describe('resolveRetirementInputs', () => {
   });
 });
 
+describe('resolveRetirementInputs with assumptions allowed', () => {
+  const assume = (currentAnnualSpending: number | null = null) => ({ assumeWhenMissing: { currentAnnualSpending } });
+
+  it('assumes the conventional age and current spending rather than stopping to ask', () => {
+    const resolved = resolveRetirementInputs({
+      questionParams: { hasRetirementIntent: true, currentAge: 45 },
+      profileAge: null,
+      profileRetirementAge: null,
+      ...assume(66_000),
+    });
+
+    expect(resolved).toMatchObject({
+      currentAge: 45,
+      retirementAge: 65,
+      withdrawalStartAge: 65,
+      annualWithdrawalAmount: 66_000,
+      missingParams: [],
+      assumed: { retirementAge: 'convention', annualWithdrawalAmount: 'current_spending' },
+    });
+  });
+
+  it('models retiring now for someone already past the conventional age', () => {
+    const resolved = resolveRetirementInputs({
+      questionParams: { hasRetirementIntent: true, currentAge: 70, annualWithdrawalAmount: 50_000 },
+      profileAge: null,
+      profileRetirementAge: null,
+      ...assume(),
+    });
+    expect(resolved.retirementAge).toBe(70);
+  });
+
+  it('prefers the figure the user gave before over what they spend now', () => {
+    const resolved = resolveRetirementInputs({
+      questionParams: { hasRetirementIntent: true },
+      profileAge: null,
+      profileRetirementAge: null,
+      storedInput: { currentAge: 50, retirementAge: 67, annualWithdrawalAmount: 80_000, withdrawalStartAge: 67 },
+      ...assume(66_000),
+    });
+
+    expect(resolved).toMatchObject({
+      annualWithdrawalAmount: 80_000,
+      assumed: { annualWithdrawalAmount: 'earlier' },
+      confirmationRequiredParams: [],
+    });
+  });
+
+  it('never assumes an age, and never invents spending with nothing to read it from', () => {
+    const resolved = resolveRetirementInputs({
+      questionParams: { hasRetirementIntent: true },
+      profileAge: null,
+      profileRetirementAge: null,
+      ...assume(null),
+    });
+
+    expect(resolved.missingParams).toEqual(['currentAge', 'retirementAge', 'annualWithdrawalAmount', 'withdrawalStartAge']);
+    expect(resolved.assumed).toEqual({});
+  });
+
+  it('remembers only real assumptions, so the user\'s earlier figure is never stripped', () => {
+    expect(persistableAssumptions({ retirementAge: 'convention', annualWithdrawalAmount: 'earlier' }))
+      .toEqual({ retirementAge: 'convention' });
+    expect(sameAssumptions(
+      { retirementAge: 'convention', annualWithdrawalAmount: 'current_spending' },
+      { annualWithdrawalAmount: 'current_spending', retirementAge: 'convention' }
+    )).toBe(true);
+    expect(sameAssumptions({}, { retirementAge: 'convention' })).toBe(false);
+  });
+
+  it('forgets an assumed age, and the withdrawal age that followed it, but not one the user named', () => {
+    const stored = { currentAge: 45, retirementAge: 65, annualWithdrawalAmount: 66_000, withdrawalStartAge: 65 };
+    expect(withoutStoredAssumptions(stored, { retirementAge: 'convention', annualWithdrawalAmount: 'current_spending' }))
+      .toEqual({ currentAge: 45 });
+    // "I would start withdrawing at 70", with no retirement age named.
+    expect(withoutStoredAssumptions({ ...stored, withdrawalStartAge: 70 }, { retirementAge: 'convention' }))
+      .toEqual({ currentAge: 45, annualWithdrawalAmount: 66_000, withdrawalStartAge: 70 });
+    expect(withoutStoredAssumptions(stored, {})).toEqual(stored);
+  });
+
+  it('says where each assumed figure came from in the answer', () => {
+    const sentence = describeRetirementAssumptions({
+      retirementAnalysis: {
+        _storedInputParams: { currentAge: 45, retirementAge: 65, annualWithdrawalAmount: 66_000, withdrawalStartAge: 65 },
+        _assumedInputs: { retirementAge: 'convention', annualWithdrawalAmount: 'current_spending' },
+      },
+    } as any);
+
+    expect(sentence).toContain('spending $66,000 a year, which is what you spend now (I assumed retirement costs the same)');
+    expect(sentence).toContain('retiring at 65, a conventional age I assumed because you did not name one');
+  });
+});
+
 describe('retirementPortfolioFingerprint', () => {
   const holdings = [
     { security_id: 'a', account_id: 'one', quantity: 2, institution_value: 200, cost_basis: 150 },
@@ -202,7 +301,7 @@ describe('describeMissingRetirementInputs', () => {
       missingParams: ['annualWithdrawalAmount'],
       detectedParams: {},
     })).toBe(
-      'I could not run a retirement projection because I am missing roughly how much you expect to ' +
+      'To run your retirement projection I need roughly how much you expect to ' +
       'spend per year once retired, in today\'s dollars. Reply with that and I will work it into the next answer.'
     );
   });

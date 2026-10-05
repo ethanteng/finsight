@@ -51,6 +51,15 @@ export interface ContextPlan {
   selectedPacks: ContextPackId[];
   questionNeeds: QuestionNeeds;
   needsSecondaryValidation: boolean;
+  /**
+   * Whether a good answer depends on the user's own money -- their balances,
+   * income, spending, debts or holdings -- whether or not any optional pack
+   * was selected. "What is my net worth?" selects none (the totals are always
+   * present) and is entirely personal; "What is a Roth IRA?" is not. Only
+   * this decides whether a user with nothing linked is told what linking
+   * would change about the answer, since packs alone cannot.
+   */
+  personalDataQuestion: boolean;
   searchQueries: PlannedSearchQuery[];
   /**
    * Inputs the planner extracted from the user's words, before scenario
@@ -185,7 +194,7 @@ const NULLABLE_STRING = { type: ['string', 'null'] as const };
 export const CONTEXT_PLAN_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['packs', 'needsSecondaryValidation', 'searchQueries', 'retirementInputs', 'scenarios', 'summary'],
+  required: ['packs', 'needsSecondaryValidation', 'personalDataQuestion', 'searchQueries', 'retirementInputs', 'scenarios', 'summary'],
   properties: {
     packs: {
       type: 'object',
@@ -194,6 +203,7 @@ export const CONTEXT_PLAN_JSON_SCHEMA = {
       properties: PACK_PROPERTIES,
     },
     needsSecondaryValidation: { type: 'boolean' },
+    personalDataQuestion: { type: 'boolean' },
     searchQueries: SEARCH_QUERY_JSON_SCHEMA,
     retirementInputs: {
       type: 'object',
@@ -229,6 +239,7 @@ Important boundaries:
 - Include every pack materially useful to answer the current message. Prefer inclusion when omission could make the answer incomplete.
 - search_context is for information outside the user's stored data, especially facts that can change over time. market_context is the broader economic/market backdrop.
 - When search_context is selected, return one to three standalone public search queries in searchQueries. Each query must make sense without the transcript and contain only the minimum public facts needed for retrieval. Never copy a person's name, email address, account or card number, transaction description, or other private identifier into a query. Choose freshness from pd (24 hours), pw (7 days), pm (31 days), py (365 days), or null when recency filtering would hide the authoritative source. Return an empty array when search_context is not selected.
+- personalDataQuestion is true when a good answer depends on the user's own money -- their balances, income, spending, debts or holdings -- even when the always-present totals cover it and no optional pack is selected. It is false for general explanations that would be the same for anyone.
 - needsSecondaryValidation is true for projections, comparisons, recommendations, affordability judgments, simulations, optimization, tax reasoning, or other conclusions where an independent reasoning review is useful.
 - The application enforces access, subscription, dependencies and calculations. You only plan context.
 
@@ -313,6 +324,9 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
     ...scenarioCalculatorRegistry.requiredPacksForPlans(scenarioPlans),
   ]);
   const needsSecondaryValidation = record.needsSecondaryValidation === true;
+  // A plan that omits the flag (an older payload) reads as personal: offering
+  // what linking would add is the recall-safe side of the decision.
+  const personalDataQuestion = record.personalDataQuestion !== false;
   const statedRetirementInputs = validateExtractedInputs(record.retirementInputs);
   const retirementInputs = retirementInputsForBaseline(
     statedRetirementInputs,
@@ -327,6 +341,7 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
     selectedPacks,
     questionNeeds: questionNeedsFromPacks(selectedPacks, needsSecondaryValidation),
     needsSecondaryValidation,
+    personalDataQuestion,
     searchQueries,
     ...(statedRetirementInputs && { statedRetirementInputs }),
     retirementInputs,
@@ -361,6 +376,10 @@ export function fallbackContextPlan(
     selectedPacks,
     questionNeeds: questionNeedsFromPacks(selectedPacks, true),
     needsSecondaryValidation: true,
+    // Nothing here knows what the question means, and with every pack
+    // selected the packs cannot say either. No closing note beats a note about
+    // linking a checking account on "What is a Roth IRA?".
+    personalDataQuestion: false,
     scenarioPlans: {},
     searchQueries: [],
     summary,

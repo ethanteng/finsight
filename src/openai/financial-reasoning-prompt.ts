@@ -8,6 +8,7 @@ import { getActiveResponseTone } from './prompt-config';
 import { FinancialContextSnapshot, QuestionNeeds } from './types';
 import { buildCanonicalFactPack, type CanonicalFactPack } from './canonical-facts';
 import { buildQuestionContextPack, formatQuestionContextPack } from './context-pack';
+import { describeLinkedDataForModel } from './linked-data';
 import {
   LINC_IDENTITY_LINE,
   buildSecurityRulesSection,
@@ -26,6 +27,8 @@ export interface FinancialReasoningPromptInput {
   conversationHistory?: Array<{ question: string; answer: string }>;
   /** When present, instructs Claude to fix these validation issues from a previous response. */
   validationFeedback?: string[];
+  /** What the user has and has not linked, so an empty connection is never read as zero. */
+  linkedDataNote?: string | null;
 }
 
 function buildReasoningSystemPrompt(): string {
@@ -36,12 +39,18 @@ ${buildSecurityRulesSection()}
 Tone for all user-facing fields:
 ${getActiveResponseTone()}
 
+Answer first:
+- Always give the most useful answer that the supplied facts, the figures the user has stated, and sound general principles support. Lead with it. Never open with what you cannot see, and never reply only that something is missing.
+- When the answer would need a figure that is not supplied, do not estimate it. Answer anyway: reason from what is supplied, explain the principle or rule of thumb in words, and then, briefly and after the answer, name the one figure that would sharpen it.
+- Whenever an answer rests on an assumption, say so in the same sentence, in plain words ("assuming you keep spending what you spend now"). A fact whose label or caveat calls it an assumption or a default is one: present it as such, never as something the user told you.
+- Do not tell the user to link or connect accounts. The application adds its own note about what linking would change, tailored to this answer.
+
 Grounding and calculation rules:
 - Do not invent financial data that is not present in the Canonical Fact Pack.
 - Treat all monetary amounts as USD unless clearly specified otherwise.
 - Canonical facts are exact. Copy them; never recompute or modify them from detail rows.
 - Do not perform authoritative arithmetic. Any supported derived value is already supplied as a fact with calculation provenance.
-- If the answer would require a number that is absent from the fact pack, explain what is missing instead of estimating it.
+- If the answer would require a number that is absent from the fact pack, never estimate it: answer with what the facts support and say which figure would pin it down.
 - Earlier answers in this conversation were checked against the data available when they were written, and some came straight from a calculator the user ran. Never tell the user that a figure in an earlier answer is unverified, unconfirmed, or not backed by data. If the fact pack does not carry it now, simply do not repeat it.
 - Facts with scenario_input provenance are the validated inputs to a named what-if variant. Facts with scenario_calculation provenance are deterministic model outputs conditional on those assumptions. You may compare them, but describe outputs as modeled scenario results rather than observed or guaranteed outcomes.
 - Facts with forecast provenance are deterministic projections of the user's own cash flow, built from their recurring income and bills, typical spending and, where their labels say so, saved planned events. Present them as expected or projected amounts, never as observed or guaranteed ones. Forecast facts that share a caveat need it stated only once in the answer, beside the first projected figure that carries it. Observed-so-far, still-expected and projected-total facts are separate figures: quote the one the question asks about rather than combining them. To weigh what to do with a projected surplus, set the projected net beside other supplied facts such as cash, debt, card APRs and investments; describe any split as proportions unless the dollar amount of each part is itself a fact.
@@ -71,7 +80,7 @@ Return only one valid JSON object with this exact shape:
 - A fact whose value is negative may be written as a magnitude when the sentence says so: a -3000 cash-flow fact may be "negative $3,000" or "a $3,000 monthly shortfall". Never restate a positive fact as a negative one.
 - Ages, time horizons, counts, and allocation splits ("age 62", "over 10 years", "a 60/40 mix") are ordinary prose and need no fact, as long as they are not amounts of money. When the pack does supply one -- a remembered age, a dependent count -- a key number may cite it like any other fact.
 - Name a slice of the historical distribution by its rank rather than as a percentage: "the 10th-percentile sequence", "the bottom decile of sequences", "the worst historical sequence" -- not "the worst 10% of sequences". A written percentage reads as a claim about the user's own money and is checked against the fact pack as one, while a rank is not a percentage of anything they own. The outcome you state for that slice -- the depletion year, the ending balance -- still comes from a fact.
-- If the answer would need a dollar amount or percentage that is absent from the fact pack, say what is missing instead of estimating it. Use words such as "a few" when a recommendation does not need an authoritative number.
+- If the answer would need a dollar amount or percentage that is absent from the fact pack, do not estimate it: answer around it and name what would pin it down. Use words such as "a few" when a recommendation does not need an authoritative number.
 - Keep arrays to 3-5 items max to avoid truncation.
 - Use each key once and emit complete JSON.`;
 }
@@ -107,6 +116,14 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
     '',
     financialContext || '(No financial data available)'
   );
+
+  if (input.linkedDataNote) {
+    contextParts.push(
+      '',
+      '## What the User Has Linked',
+      input.linkedDataNote
+    );
+  }
 
   if (userProfile) {
     contextParts.push(
@@ -173,10 +190,19 @@ export function buildPromptInputFromSnapshot(
   questionNeeds: QuestionNeeds,
   conversationHistory?: Array<{ question: string; answer: string }>
 ): FinancialReasoningPromptInput {
-  const canonicalFacts = buildCanonicalFactPack(snapshot, question, questionNeeds);
+  // The user's own words from earlier in this decision are theirs to have
+  // repeated back: a balance stated in the first message is still a balance
+  // they stated when the third asks about it.
+  const canonicalFacts = buildCanonicalFactPack(
+    snapshot,
+    question,
+    questionNeeds,
+    (conversationHistory ?? []).map((entry) => entry.question)
+  );
   const contextPack = buildQuestionContextPack(snapshot, questionNeeds, canonicalFacts, question);
   return {
     question,
+    linkedDataNote: describeLinkedDataForModel(snapshot.linkedData),
     financialContext: formatQuestionContextPack(contextPack),
     userProfile: snapshot.userProfile || '',
     marketSummary: snapshot.marketContext || '',
