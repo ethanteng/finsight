@@ -300,6 +300,9 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
     if (forecast.status === 'unavailable') {
       parts.push(`Cash flow forecast: unavailable (${forecast.reason ?? 'unknown reason'})`);
     }
+    if (forecast.incomeNotLinked) {
+      parts.push('Cash flow forecast: no checking or savings account is linked, so income and net cash flow are unknown and not projected');
+    }
     // Every fact, uncapped. The pack already bounds each part where it is
     // built (recurring items, planned events, cards, cash accounts, one-offs),
     // the primary model sees all of them, and a figure dropped here is one the

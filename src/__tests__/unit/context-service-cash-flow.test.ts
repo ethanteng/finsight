@@ -24,6 +24,9 @@ jest.mock('../../services/cash-flow-service', () => ({
 }));
 
 import { gatherContextSnapshot } from '../../openai/context-service';
+import { buildCanonicalFactPack } from '../../openai/canonical-facts';
+import { cashFlowForecastFacts } from '../../openai/cash-flow-forecast-context';
+import { questionNeedsFromPacks } from '../../openai/context-packs';
 
 const model = buildCashFlowModel({
   transactions: householdTransactions('2026-06-03', '2026-09-30'),
@@ -163,6 +166,53 @@ describe('gatherContextSnapshot cash flow', () => {
       expect(result.expectedMonthly).toBeNull();
       expect(result.averageMonthlyIncome).toBeNull();
       expect(result.averageMonthlyExpense).toBeNull();
+    });
+
+    it('leaves the income side out of the history and the forecast when only a card is linked', async () => {
+      const current = await mockGetSnapshot();
+      mockGetSnapshot.mockResolvedValue({
+        ...current,
+        accounts: [{ account_id: 'card', name: 'Card', type: 'credit', subtype: 'credit card', balance: { current: 1_000 } }],
+        transactionsSummary: {
+          reportingCurrency: 'USD',
+          incomeTotal: 0,
+          expenseTotal: 20_000,
+          operatingCashFlow: -20_000,
+          byCategory: { Dining: 3_000 },
+          byMonth: {
+            '2026-07': { income: 0, expense: 6_000, operatingCashFlow: -6_000 },
+            '2026-08': { income: 0, expense: 7_000, operatingCashFlow: -7_000 },
+            '2026-09': { income: 0, expense: 7_000, operatingCashFlow: -7_000 },
+          },
+          coverageStartDate: '2026-07-04',
+        },
+      });
+
+      const result = await gather(true);
+      expect(result.linkedData).toMatchObject({ cash: 0, credit: 1, transactionMonths: 3 });
+      expect(result.transactionSummary).toEqual({
+        reportingCurrency: 'USD',
+        expenseTotal: 20_000,
+        byCategory: { Dining: 3_000 },
+        byMonth: { '2026-07': { expense: 6_000 }, '2026-08': { expense: 7_000 }, '2026-09': { expense: 7_000 } },
+        coverageStartDate: '2026-07-04',
+      });
+      expect(result.averageMonthlyIncome).toBeNull();
+      expect(result.averageMonthlyExpense).toBe(7_000);
+      expect(result.incomeAnalysis).toBeUndefined();
+      expect(result.expenseAnalysis).toContain('Average Monthly Expenses');
+
+      const ids = buildCanonicalFactPack(result, 'How much can I save each month?', questionNeedsFromPacks(['cash_flow_forecast'], false))
+        .facts.map(fact => fact.id);
+      expect(ids).toEqual(expect.arrayContaining(['expenses_2026-08', 'category_spending_dining']));
+      expect(ids.filter(id => /^(income_|operating_cash_flow_|average_monthly_income|savings_rate)/.test(id))).toEqual([]);
+
+      // The forecast keeps spending and the card, and publishes no income or net.
+      expect(result.cashFlowForecast).toMatchObject({ status: 'available', incomeNotLinked: true });
+      const forecastIds = cashFlowForecastFacts(result.cashFlowForecast).map(fact => fact.id);
+      expect(forecastIds).toEqual(expect.arrayContaining(['cash_flow_this_month_projected_spending', 'cash_flow_card_1_balance']));
+      expect(forecastIds.filter(id => /_(income|net)$|other_income/.test(id))).toEqual([]);
+      expect(result.cashFlowForecast?.recurring?.some(item => item.flow === 'income')).toBe(false);
     });
 
     it('keeps a figure the user set even with nothing linked to read it from', async () => {

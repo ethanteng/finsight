@@ -13,7 +13,7 @@ import {
   UNMODELED_VALUE_NOTE_PREFIX,
   type UnmodeledInvestmentValue,
 } from '../services/investment-coverage';
-import { buildCanonicalCashFlowAnalyses } from './cash-flow-context';
+import { buildCanonicalCashFlowAnalyses, withoutUnknownSides } from './cash-flow-context';
 import {
   persistableAssumptions,
   resolveRetirementInputs,
@@ -30,7 +30,7 @@ import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-typ
 import { compactSearchQueryEvidence } from '../data/search-types';
 import type { SearchContext } from '../data/orchestrator';
 import type { PersonalContextValues } from '../profile/personal-context';
-import { buildCashFlowForecastContext, type CashFlowForecastContext } from './cash-flow-forecast-context';
+import { buildCashFlowForecastContext, withoutUnlinkedIncome, type CashFlowForecastContext } from './cash-flow-forecast-context';
 import { expectedMonthly } from '../cash-flow/forecast';
 
 interface GatherContextArgs {
@@ -514,11 +514,20 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     ? knownExpected
     : null;
 
+  // The same goes for the history and the forecast built from it: with only a
+  // card linked, every month's income is $0 and its net is the spending.
+  const knownSides = { income: knowsIncome, spending: knowsSpending };
+  const knownTransactionSummary = withoutUnknownSides(transactionSummary, knownSides);
+  const knownCashFlowForecast = cashFlowForecast && !knowsIncome
+    ? withoutUnlinkedIncome(cashFlowForecast)
+    : cashFlowForecast;
+
   const { averages, incomeAnalysis, expenseAnalysis, monthlyAnalysis } = buildCanonicalCashFlowAnalyses(
-    transactionSummary,
+    knownTransactionSummary,
     financialSummary?.computedAt,
     expectedForAnswer,
-    questionNeeds.needsMonthlyCashFlow
+    questionNeeds.needsMonthlyCashFlow,
+    knownSides
   );
 
   const assembledSnapshot: FinancialContextSnapshot = {
@@ -537,8 +546,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       ? { count: averages.monthCount, firstMonth: averages.firstMonth, lastMonth: averages.lastMonth }
       : null,
     expectedMonthly: expectedForAnswer,
-    transactionSummary,
-    ...(cashFlowForecast && { cashFlowForecast }),
+    transactionSummary: knownTransactionSummary,
+    ...(knownCashFlowForecast && { cashFlowForecast: knownCashFlowForecast }),
     contextSelection: {
       accountsIncluded: questionNeeds.needsAccountDetails,
       transactionDetailsIncluded: questionNeeds.needsTransactionDetails,
