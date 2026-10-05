@@ -881,7 +881,16 @@ async function fetchOrCreateRetirementAnalysis(args: {
   );
   const storedInputForResolution: Record<string, number | null | undefined> = { ...storedInput };
   for (const field of Object.keys(storedAssumptions)) delete storedInputForResolution[field];
-  if (storedAssumptions.retirementAge) delete storedInputForResolution.withdrawalStartAge;
+  // Withdrawal start equals the assumed retirement age only when it was
+  // derived from that assumption. A user-stated distinct age (e.g. withdraw
+  // at 70 while retirement age was assumed 65) must survive the next turn.
+  if (
+    storedAssumptions.retirementAge &&
+    storedInput.withdrawalStartAge != null &&
+    storedInput.withdrawalStartAge === storedInput.retirementAge
+  ) {
+    delete storedInputForResolution.withdrawalStartAge;
+  }
   const { getHistoricalDatasetVersion } = await import('../retirement-analytics/engine/historical-data-loader');
   const historicalDatasetVersion = getHistoricalDatasetVersion();
   const confirmsStoredAnnualWithdrawal =
