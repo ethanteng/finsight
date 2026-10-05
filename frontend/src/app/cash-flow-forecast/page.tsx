@@ -113,9 +113,9 @@ export default function CashFlowForecastPage() {
 
       <section className="story-hero shell">
         <p className="section-kicker">PERSONAL CASH FLOW FORECAST</p>
-        <h1>Can I afford this — and what will I have left?</h1>
+        <h1>See your future cash. Make better plans.</h1>
         <p className="story-hero-copy">
-          Forecast your cash using what you earn, spend, and already know is coming.
+          Forecast your cash after income, bills, and upcoming plans. Add a vacation, bonus, or big purchase and see what changes.
         </p>
         <div className="hero-actions">
           <MarketingGetStartedButton
