@@ -165,6 +165,33 @@ describe('gatherContextSnapshot cash flow', () => {
       expect(result.averageMonthlyExpense).toBeNull();
     });
 
+    it('does not narrate $0 income for a card-only connection with spend history', async () => {
+      const current = await mockGetSnapshot();
+      mockGetSnapshot.mockResolvedValue({
+        ...current,
+        accounts: [{ account_id: 'card', name: 'Card', type: 'credit', subtype: 'credit card', balance: { current: 500 } }],
+        financialOverview: { netWorth: -500, totalCash: 0, totalInvestments: 0, totalDebt: 500, homeValue: null },
+        transactionsSummary: {
+          reportingCurrency: 'USD',
+          incomeTotal: 0,
+          expenseTotal: 800,
+          byCategory: { Shopping: 800 },
+          byMonth: {
+            '2026-08': { income: 0, expense: 400, operatingCashFlow: -400 },
+            '2026-09': { income: 0, expense: 400, operatingCashFlow: -400 },
+          },
+        },
+      });
+
+      const result = await gather(true);
+      expect(result.linkedData).toMatchObject({ accounts: 1, credit: 1, cash: 0, transactionMonths: 2 });
+      expect(result.averageMonthlyIncome).toBeNull();
+      expect(result.averageMonthlyExpense).not.toBeNull();
+      expect(result.incomeAnalysis).toBeUndefined();
+      expect(result.expenseAnalysis).toMatch(/Average Monthly Expenses/);
+      expect(result.incomeAnalysis ?? '').not.toMatch(/\$0/);
+    });
+
     it('keeps a figure the user set even with nothing linked to read it from', async () => {
       const current = await mockGetSnapshot();
       mockGetSnapshot.mockResolvedValue({ ...current, accounts: [], transactionsSummary: { byMonth: {} },

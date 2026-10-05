@@ -285,12 +285,24 @@ export function cashFlowFactId(key: CashFlowHighlightKey, part: string, measure:
 }
 
 /**
+ * Which cash-flow sides describe the user. An unlinked side is unknown, not
+ * zero: publishing its $0 facts produced "your income is $0" for card-only
+ * connections. Defaults keep the prior behavior when the record is absent.
+ */
+export type KnownCashFlowSides = { income?: boolean; spending?: boolean };
+
+/**
  * Canonical facts for the forecast pack. Observed amounts are snapshot facts;
  * everything projected carries `forecast` provenance and a caveat that says
  * what it is built from, so it cannot be quoted as an observed result.
  */
-export function cashFlowForecastFacts(context: CashFlowForecastContext | undefined): CanonicalFact[] {
+export function cashFlowForecastFacts(
+  context: CashFlowForecastContext | undefined,
+  knownSides: KnownCashFlowSides = {}
+): CanonicalFact[] {
   if (!context?.highlights) return [];
+  const knowsIncome = knownSides.income !== false;
+  const knowsSpending = knownSides.spending !== false;
   const facts = new Map<string, CanonicalFact>();
   const asOf = context.dataThrough;
   const basisDays = context.baseline?.typicalBasisDays ?? 0;
@@ -356,6 +368,11 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
     const partial = highlight.actualCoverage === 'partial';
 
     for (const measure of measures) {
+      // Net needs both sides; an unlinked income of $0 made every card-only
+      // projection look like a pure shortfall.
+      if (measure === 'income' && !knowsIncome) continue;
+      if (measure === 'spending' && !knowsSpending) continue;
+      if (measure === 'net' && (!knowsIncome || !knowsSpending)) continue;
       if (highlight.actualToDate) {
         observed(
           cashFlowFactId(highlight.key, 'so_far', measure),
@@ -409,7 +426,7 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
   }
 
   if (context.status === 'available' && context.baseline) {
-    if (context.baseline.spendingSource === 'transactions') {
+    if (knowsSpending && context.baseline.spendingSource === 'transactions') {
       forecast(
         'cash_flow_typical_monthly_other_spending',
         `Typical monthly spending outside recurring bills, from the last ${basisDays} days, as the forecast spreads it`,
@@ -417,7 +434,7 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
         'cashFlowForecast.baseline.typicalMonthlySpending'
       );
     }
-    if (context.baseline.incomeSource === 'transactions' && context.baseline.typicalMonthlyIncome >= 1) {
+    if (knowsIncome && context.baseline.incomeSource === 'transactions' && context.baseline.typicalMonthlyIncome >= 1) {
       forecast(
         'cash_flow_typical_monthly_other_income',
         `Typical monthly income outside recurring paychecks, from the last ${basisDays} days, as the forecast spreads it`,
@@ -428,6 +445,8 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
   }
 
   (context.recurring ?? []).forEach((item, index) => {
+    if (item.flow === 'income' && !knowsIncome) return;
+    if (item.flow !== 'income' && !knowsSpending) return;
     forecast(
       `cash_flow_recurring_${index + 1}_amount`,
       `Typical amount of recurring ${item.flow === 'income' ? 'income' : 'bill'} “${item.label}”${recurringPlace(item)} each time (${item.cadence})`,

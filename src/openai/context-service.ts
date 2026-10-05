@@ -518,7 +518,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     transactionSummary,
     financialSummary?.computedAt,
     expectedForAnswer,
-    questionNeeds.needsMonthlyCashFlow
+    questionNeeds.needsMonthlyCashFlow,
+    { income: knowsIncome, spending: knowsSpending }
   );
 
   const assembledSnapshot: FinancialContextSnapshot = {

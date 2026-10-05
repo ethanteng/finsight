@@ -116,6 +116,46 @@ describe('the fact pack never quotes an empty connection', () => {
     ]));
     expect(earlier.every((fact) => fact.provenance.kind === 'user_input')).toBe(true);
   });
+
+  it('does not publish $0 monthly income for a card-only connection', () => {
+    const pack = buildCanonicalFactPack(
+      snapshot({
+        linkedData: linked({ accounts: 1, credit: 1, transactionMonths: 2 }),
+        transactionSummary: {
+          byMonth: {
+            '2026-01': { income: 0, expense: 400, operatingCashFlow: -400 },
+            '2026-02': { income: 0, expense: 350, operatingCashFlow: -350 },
+          },
+        },
+        cashFlowForecast: {
+          status: 'available',
+          highlights: [{
+            key: 'this_month',
+            start: '2026-03-01',
+            endExclusive: '2026-04-01',
+            actualToDate: null,
+            actualCoverage: 'none',
+            remaining: null,
+            projected: { income: 0, spending: 400, net: -400 },
+            planned: { income: 0, spending: 0, net: 0 },
+            projectedWithoutPlanned: null,
+          }],
+          recurring: [{ flow: 'income', label: 'Pay', amount: 0, cadence: 'monthly' }],
+        },
+      }),
+      'What am I spending?',
+      needs('monthly_cash_flow', 'cash_flow_forecast')
+    );
+    const ids = pack.facts.map((fact) => fact.id);
+
+    expect(ids.some((id) => id.startsWith('income_'))).toBe(false);
+    expect(ids.some((id) => id.startsWith('operating_cash_flow_'))).toBe(false);
+    expect(ids).toContain('expenses_2026-01');
+    expect(ids.some((id) => id.includes('projected_income'))).toBe(false);
+    expect(ids.some((id) => id.includes('projected_net'))).toBe(false);
+    expect(ids.some((id) => id.includes('projected_spending'))).toBe(true);
+    expect(ids.some((id) => id.startsWith('cash_flow_recurring_'))).toBe(false);
+  });
 });
 
 describe('the answer prompt answers first', () => {
