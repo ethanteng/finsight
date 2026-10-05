@@ -177,7 +177,7 @@ describe('the answer prompt answers first', () => {
 });
 
 describe('the closing note says what linking would change', () => {
-  const ask = (data: Record<string, unknown>, packs: ContextPackId[], personalDataQuestion = false) =>
+  const ask = (data: Record<string, unknown>, packs: ContextPackId[], personalDataQuestion = true) =>
     collectMissingInputAsks(data as any, needs(...packs), { personalDataQuestion });
 
   it('names the account and the better answer for a spending question', () => {
@@ -200,8 +200,9 @@ describe('the closing note says what linking would change', () => {
 
   it('covers a question about the user\'s own money that needed no pack, when nothing is linked', () => {
     expect(ask({ linkedData: NOTHING_LINKED }, [], true).map((note) => note.id)).toEqual(['link_anything']);
-    // A general question is the same for anyone; no note.
+    // A general question is the same for anyone; packs alone must not force a note.
     expect(ask({ linkedData: NOTHING_LINKED }, [], false)).toEqual([]);
+    expect(ask({ linkedData: NOTHING_LINKED }, ['transaction_details', 'investment_details'], false)).toEqual([]);
   });
 
   it('says nothing when the account is linked and only has not reported yet', () => {
