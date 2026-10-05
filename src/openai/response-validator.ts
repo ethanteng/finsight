@@ -14,7 +14,7 @@ import { mergeAssetAllocation } from '../services/asset-class';
 import { MAX_UNMODELED_REASON_FACTS } from './canonical-facts';
 import { getActiveModel, getActiveNumericGenerationSetting } from './model-config';
 import { cashFlowForecastFacts } from './cash-flow-forecast-context';
-import { describeLinkedDataForModel } from './linked-data';
+import { describeLinkedDataForModel, incomeLinked, spendingLinked } from './linked-data';
 
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
@@ -165,9 +165,25 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
 
   const overview = snapshot.financialSummary?.financialOverview;
   if (overview) {
-    parts.push(
-      `Financial overview: netWorth=${overview.netWorth}, totalCash=${overview.totalCash}, totalInvestments=${overview.totalInvestments}, totalDebt=${overview.totalDebt}, homeValue=${overview.homeValue ?? 'null'}`
-    );
+    // Mirror the fact-pack empty-connection rule: a $0 total for an unlinked
+    // kind must not sit beside "never describe their cash as zero", or the
+    // reviewer treats a careful answer as inventing the absence — or a $0
+    // claim as snapshot-backed.
+    const linked = snapshot.linkedData;
+    const empty = (linkedCount: number | undefined, value: unknown) =>
+      linked !== undefined && linkedCount === 0 && (typeof value !== 'number' || !Number.isFinite(value) || value === 0);
+    if (linked?.accounts === 0) {
+      parts.push('Financial overview: no linked accounts; balance totals are not available (not zero)');
+    } else {
+      const fields = [
+        linked?.accounts !== 0 ? `netWorth=${overview.netWorth}` : null,
+        !empty(linked?.cash, overview.totalCash) ? `totalCash=${overview.totalCash}` : null,
+        !empty(linked?.investments, overview.totalInvestments) ? `totalInvestments=${overview.totalInvestments}` : null,
+        !empty(linked && linked.credit + linked.loans, overview.totalDebt) ? `totalDebt=${overview.totalDebt}` : null,
+        `homeValue=${overview.homeValue ?? 'null'}`,
+      ].filter(Boolean);
+      if (fields.length > 0) parts.push(`Financial overview: ${fields.join(', ')}`);
+    }
   }
 
   // The primary model is handed the account list only when the plan asks for
@@ -304,7 +320,10 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
     // built (recurring items, planned events, cards, cash accounts, one-offs),
     // the primary model sees all of them, and a figure dropped here is one the
     // reviewer would treat as invented.
-    const lines = cashFlowForecastFacts(forecast)
+    const lines = cashFlowForecastFacts(forecast, {
+      income: !snapshot.linkedData || incomeLinked(snapshot.linkedData),
+      spending: !snapshot.linkedData || spendingLinked(snapshot.linkedData),
+    })
       .map(fact => `- ${fact.label}: ${fact.value < 0 ? '-' : ''}$${Math.abs(fact.value).toFixed(2)}${fact.provenance.kind === 'forecast' ? ' (projection)' : ''}`);
     if (lines.length > 0) parts.push(`Cash flow forecast facts:\n${lines.join('\n')}`);
   }
