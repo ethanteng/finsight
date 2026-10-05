@@ -77,7 +77,6 @@ export default function SiteFooter({ variant = 'default' }: { variant?: 'default
               className="flex flex-wrap items-center justify-center gap-0.5"
               linkClassName="grid h-11 w-11 place-items-center rounded-lg text-muted-foreground transition-colors hover:text-primary"
               iconClassName="h-[18px] w-[18px] fill-current"
-              badgeClassName="h-9 w-9"
             />
           </div>
         </div>

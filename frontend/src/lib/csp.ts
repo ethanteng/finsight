@@ -30,6 +30,7 @@ export const CSP_HEADER_SOURCE = "/:path((?!video/(?:embed|captions)$).*)";
 export const DIRECTORY_BADGE_HOSTS = [
   "https://alternativeto.net",
   "https://cdn-b.saashub.com",
+  "https://media.theresanaiforthat.com",
   "https://www.uneed.best",
   "https://peerlist.io",
   "https://peerpush.com",
@@ -93,10 +94,9 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     // whatever is in its query string with it. Hosts here are the
     // ones the app actually renders: next/image remotePatterns, the
     // Plaid merchant logos on transaction rows, institution logos,
-    // and analytics pixels, the There's An AI For That badge in the
-    // marketing footer, and the directory badges on the homepage
+    // and analytics pixels, and the directory badges on the homepage
     // (components/marketing/ListedOn), each pinned to its exact host.
-    `img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://*.google-analytics.com https://www.googletagmanager.com https://*.g.doubleclick.net https://google.com https://www.google.com https://*.google.com https://pagead2.googlesyndication.com https://www.googleadservices.com ${CONTENTSQUARE} https://alb.reddit.com https://bat.bing.com https://bat.bing.net https://media.theresanaiforthat.com ${DIRECTORY_BADGE_HOSTS.join(" ")}`,
+    `img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://*.google-analytics.com https://www.googletagmanager.com https://*.g.doubleclick.net https://google.com https://www.google.com https://*.google.com https://pagead2.googlesyndication.com https://www.googleadservices.com ${CONTENTSQUARE} https://alb.reddit.com https://bat.bing.com https://bat.bing.net ${DIRECTORY_BADGE_HOSTS.join(" ")}`,
     "font-src 'self' data: https://fonts.gstatic.com",
     connectSrc,
     // The marketing teaser video's frame loads /video/embed ('self'), which

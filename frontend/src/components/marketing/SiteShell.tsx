@@ -39,7 +39,7 @@ export function SiteFooter() {
           </Link>
           <p>Your finances. Your questions. Your next decision.</p>
           <MarketingGetStartedButton className="button button-primary footer-start-button" trackingLocation="footer" csOverrideId="cta-start-free-trial-footer" />
-          <SocialLinks className="footer-social" badgeClassName="footer-social-taaft" />
+          <SocialLinks className="footer-social" />
         </div>
         <div className="footer-column">
           <b>PRODUCT</b>
