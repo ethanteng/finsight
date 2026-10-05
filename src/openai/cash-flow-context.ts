@@ -73,14 +73,16 @@ export function buildCanonicalCashFlowAnalyses(
   known: KnownCashFlowSides = BOTH_SIDES_KNOWN
 ): CanonicalCashFlowAnalyses {
   const averages = averageCanonicalTransactionSummary(summary, computedAt);
+  const knowsIncome = known.income;
+  const knowsSpending = known.spending;
 
   const finite = (value: unknown): number | null =>
     typeof value === 'number' && Number.isFinite(value) ? value : null;
   const span = averages
     ? ` over ${averages.monthCount} complete month${averages.monthCount === 1 ? '' : 's'} (${averages.firstMonth} to ${averages.lastMonth})`
     : '';
-  const incomeTotal = finite(summary?.incomeTotal);
-  const expenseTotal = finite(summary?.expenseTotal);
+  const incomeTotal = knowsIncome ? finite(summary?.incomeTotal) : null;
+  const expenseTotal = knowsSpending ? finite(summary?.expenseTotal) : null;
   const exclusions = (summary?.unclassifiedTransactionIds?.length || 0)
     + (summary?.currencyMismatchTransactionIds?.length || 0);
   const topCategories = Object.entries(mergeLabelKeyedTotals(summary?.byCategory, 'Uncategorized'))
@@ -94,25 +96,26 @@ export function buildCanonicalCashFlowAnalyses(
         Boolean(entry[1]) && typeof entry[1] === 'object')
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([month, values]) => {
-        const income = finite(values.income);
-        const expense = finite(values.expense);
-        const cashFlow = finite(values.operatingCashFlow);
+        const income = knowsIncome ? finite(values.income) : null;
+        const expense = knowsSpending ? finite(values.expense) : null;
+        const cashFlow = knowsIncome && knowsSpending ? finite(values.operatingCashFlow) : null;
         const valuesForMonth = [
           income !== null ? `income $${income.toFixed(2)}` : null,
           expense !== null ? `expenses $${expense.toFixed(2)}` : null,
           cashFlow !== null ? `operating cash flow $${cashFlow.toFixed(2)}` : null,
         ].filter(Boolean);
-        return `${month}: ${valuesForMonth.join(', ')}`;
+        return valuesForMonth.length > 0 ? `${month}: ${valuesForMonth.join(', ')}` : null;
       })
+      .filter((line): line is string => Boolean(line))
       .join('\n')
     : undefined;
 
   const incomeLines = [
-    averages && known.income ? `Average Monthly Income${span}: $${averages.averageIncome.toFixed(2)}` : null,
+    knowsIncome && averages ? `Average Monthly Income${span}: $${averages.averageIncome.toFixed(2)}` : null,
     expectedLine('Income', expected?.income, expected?.incomeSource),
   ].filter((line): line is string => line !== null);
   const expenseLines = [
-    averages && known.spending ? `Average Monthly Expenses${span}: $${averages.averageExpenses.toFixed(2)}` : null,
+    knowsSpending && averages ? `Average Monthly Expenses${span}: $${averages.averageExpenses.toFixed(2)}` : null,
     expectedLine('Expenses', expected?.spending, expected?.spendingSource),
   ].filter((line): line is string => line !== null);
 

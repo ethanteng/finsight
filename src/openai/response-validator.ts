@@ -13,8 +13,8 @@ import { FinancialContextSnapshot } from './types';
 import { mergeAssetAllocation } from '../services/asset-class';
 import { MAX_UNMODELED_REASON_FACTS } from './canonical-facts';
 import { getActiveModel, getActiveNumericGenerationSetting } from './model-config';
-import { cashFlowForecastFacts } from './cash-flow-forecast-context';
-import { describeLinkedDataForModel, emptyPortfolio, linkedOverview } from './linked-data';
+import { cashFlowForecastFacts, withoutUnlinkedIncome } from './cash-flow-forecast-context';
+import { describeLinkedDataForModel, emptyPortfolio, incomeLinked, linkedOverview } from './linked-data';
 
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
@@ -170,6 +170,7 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
   if (overview) {
     const { shown, netWorthLeavesOut } = linkedOverview(snapshot.linkedData, overview);
     const totals = [
+      snapshot.linkedData?.accounts === 0 ? 'no linked accounts; balance totals are not available (not zero)' : null,
       shown.has('netWorth')
         ? `netWorth=${overview.netWorth}${netWorthLeavesOut.length > 0 ? ` (linked accounts only; no ${netWorthLeavesOut.join(', no ')} linked)` : ''}`
         : null,
@@ -306,7 +307,9 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
 
   // The forecast pack's figures are the ones an answer may quote, so the
   // reviewer sees the same facts, labelled as projections where they are.
-  const forecast = snapshot.cashFlowForecast;
+  const forecast = snapshot.cashFlowForecast && snapshot.linkedData && !incomeLinked(snapshot.linkedData)
+    ? withoutUnlinkedIncome(snapshot.cashFlowForecast)
+    : snapshot.cashFlowForecast;
   if (forecast) {
     if (forecast.status === 'unavailable') {
       parts.push(`Cash flow forecast: unavailable (${forecast.reason ?? 'unknown reason'})`);

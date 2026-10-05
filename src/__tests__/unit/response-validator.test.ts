@@ -258,4 +258,21 @@ describe('buildSnapshotSummaryForValidation', () => {
 
     expect(summary).not.toContain('Projection coverage');
   });
+
+  it('does not hand the reviewer empty-connection zeros beside the linked-data note', () => {
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      linkedData: {
+        accounts: 0, cash: 0, credit: 0, loans: 0, investments: 0, holdings: 0, transactionMonths: 0,
+      },
+      financialSummary: {
+        financialOverview: { netWorth: 0, totalCash: 0, totalInvestments: 0, totalDebt: 0, homeValue: null },
+      },
+    } as any);
+
+    expect(summary).toContain('never describe their cash, investments, debt, income or spending as zero');
+    expect(summary).toContain('no linked accounts; balance totals are not available (not zero)');
+    expect(summary).not.toMatch(/netWorth=0/);
+    expect(summary).not.toMatch(/totalCash=0/);
+  });
 });

@@ -118,6 +118,46 @@ describe('the fact pack never quotes an empty connection', () => {
     ]));
     expect(earlier.every((fact) => fact.provenance.kind === 'user_input')).toBe(true);
   });
+
+  it('does not publish $0 monthly income for a card-only connection', () => {
+    const pack = buildCanonicalFactPack(
+      snapshot({
+        linkedData: linked({ accounts: 1, credit: 1, transactionMonths: 2 }),
+        transactionSummary: {
+          byMonth: {
+            '2026-01': { income: 0, expense: 400, operatingCashFlow: -400 },
+            '2026-02': { income: 0, expense: 350, operatingCashFlow: -350 },
+          },
+        },
+        cashFlowForecast: {
+          status: 'available',
+          highlights: [{
+            key: 'this_month',
+            start: '2026-03-01',
+            endExclusive: '2026-04-01',
+            actualToDate: null,
+            actualCoverage: 'none',
+            remaining: null,
+            projected: { income: 0, spending: 400, net: -400 },
+            planned: { income: 0, spending: 0, net: 0 },
+            projectedWithoutPlanned: null,
+          }],
+          recurring: [{ flow: 'income', label: 'Pay', amount: 0, cadence: 'monthly' }],
+        },
+      }),
+      'What am I spending?',
+      needs('monthly_cash_flow', 'cash_flow_forecast')
+    );
+    const ids = pack.facts.map((fact) => fact.id);
+
+    expect(ids.some((id) => id.startsWith('income_'))).toBe(false);
+    expect(ids.some((id) => id.startsWith('operating_cash_flow_'))).toBe(false);
+    expect(ids).toContain('expenses_2026-01');
+    expect(ids.some((id) => id.includes('projected_income'))).toBe(false);
+    expect(ids.some((id) => id.includes('projected_net'))).toBe(false);
+    expect(ids.some((id) => id.includes('projected_spending'))).toBe(true);
+    expect(ids.some((id) => id.startsWith('cash_flow_recurring_'))).toBe(false);
+  });
 });
 
 describe('the reviewer is shown the same totals as the answer', () => {
@@ -138,7 +178,7 @@ describe('the reviewer is shown the same totals as the answer', () => {
 
   it('shows no balances when nothing is linked', () => {
     const summary = buildSnapshotSummaryForValidation(snapshot({ linkedData: NOTHING_LINKED }));
-    expect(summary).toContain('Financial overview: homeValue=null');
+    expect(summary).toContain('Financial overview: no linked accounts; balance totals are not available (not zero), homeValue=null');
     expect(summary).not.toMatch(/netWorth=|totalCash=/);
   });
 });
@@ -185,8 +225,9 @@ describe('the closing note says what linking would change', () => {
 
   it('covers a question about the user\'s own money that needed no pack, when nothing is linked', () => {
     expect(ask({ linkedData: NOTHING_LINKED }, [], true).map((note) => note.id)).toEqual(['link_anything']);
-    // A general question is the same for anyone; no note.
+    // A general question is the same for anyone; packs alone must not force a note.
     expect(ask({ linkedData: NOTHING_LINKED }, [], false)).toEqual([]);
+    expect(ask({ linkedData: NOTHING_LINKED }, ['transaction_details', 'investment_details'], false)).toEqual([]);
   });
 
   it('says nothing for a general question, whatever packs it drew', () => {
@@ -195,7 +236,6 @@ describe('the closing note says what linking would change', () => {
     expect(collectMissingInputAsks({ linkedData: NOTHING_LINKED } as any, fallback.questionNeeds, {
       personalDataQuestion: fallback.personalDataQuestion,
     })).toEqual([]);
-    expect(ask({ linkedData: NOTHING_LINKED }, ['transaction_details', 'investment_details'], false)).toEqual([]);
   });
 
   it('says nothing when the account is linked and only has not reported yet', () => {

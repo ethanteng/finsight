@@ -5,8 +5,8 @@ import { isProviderIdentifierLabel } from '../services/holding-label';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 import { questionMentionsSecurity } from './security-question-match';
-import { cashFlowForecastFacts, expectedMonthlyFacts, EXPECTED_MONTHLY_SURPLUS, EXPECTED_SAVINGS_RATE } from './cash-flow-forecast-context';
-import { emptyPortfolio, linkedOverview } from './linked-data';
+import { cashFlowForecastFacts, expectedMonthlyFacts, EXPECTED_MONTHLY_SURPLUS, EXPECTED_SAVINGS_RATE, withoutUnlinkedIncome } from './cash-flow-forecast-context';
+import { emptyPortfolio, incomeLinked, linkedOverview, spendingLinked } from './linked-data';
 
 export type CanonicalFactUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
@@ -387,11 +387,22 @@ export function buildCanonicalFactPack(
   }
   for (const fact of expectedMonthlyFacts(snapshot.expectedMonthly)) facts.set(fact.id, fact);
 
+  // Same empty-connection rule as the averages: with no cash account linked,
+  // a month of card spend still has income $0 in the summary, and quoting it
+  // said the user earned nothing. Without the linked-data record, as before.
+  const knowsIncome = !snapshot.linkedData || incomeLinked(snapshot.linkedData);
+  const knowsSpending = !snapshot.linkedData || spendingLinked(snapshot.linkedData);
   for (const [month, values] of Object.entries(snapshot.transactionSummary?.byMonth || {})) {
     const safeMonth = month.replace(/[^0-9-]/g, '');
-    addSnapshotFact(`income_${safeMonth}`, `Income for ${month}`, values.income, 'usd', `transactionSummary.byMonth.${month}.income`);
-    addSnapshotFact(`expenses_${safeMonth}`, `Expenses for ${month}`, values.expense, 'usd', `transactionSummary.byMonth.${month}.expense`);
-    addSnapshotFact(`operating_cash_flow_${safeMonth}`, `Operating cash flow for ${month}`, values.operatingCashFlow, 'usd', `transactionSummary.byMonth.${month}.operatingCashFlow`);
+    if (knowsIncome) {
+      addSnapshotFact(`income_${safeMonth}`, `Income for ${month}`, values.income, 'usd', `transactionSummary.byMonth.${month}.income`);
+    }
+    if (knowsSpending) {
+      addSnapshotFact(`expenses_${safeMonth}`, `Expenses for ${month}`, values.expense, 'usd', `transactionSummary.byMonth.${month}.expense`);
+    }
+    if (knowsIncome && knowsSpending) {
+      addSnapshotFact(`operating_cash_flow_${safeMonth}`, `Operating cash flow for ${month}`, values.operatingCashFlow, 'usd', `transactionSummary.byMonth.${month}.operatingCashFlow`);
+    }
   }
 
   if (needs.needsTransactionDetails) {
@@ -968,7 +979,13 @@ export function buildCanonicalFactPack(
   // The forecast is computed only when the semantic plan asked for the
   // cash_flow_forecast pack, so its presence is the routing decision, as with
   // the remembered profile below.
-  for (const fact of cashFlowForecastFacts(snapshot.cashFlowForecast)) facts.set(fact.id, fact);
+  // With no cash account, the forecast's income and net are an empty
+  // connection too; `gatherContextSnapshot` already marks them, and marking
+  // again is a no-op.
+  const cashFlowForecast = snapshot.cashFlowForecast && !knowsIncome
+    ? withoutUnlinkedIncome(snapshot.cashFlowForecast)
+    : snapshot.cashFlowForecast;
+  for (const fact of cashFlowForecastFacts(cashFlowForecast)) facts.set(fact.id, fact);
 
   // What Linc remembers about the user is loaded only when the semantic plan
   // asked for the user_profile pack, so its presence is the routing decision.
