@@ -166,7 +166,7 @@ export function acquisitionFilter(window: CohortWindow): Prisma.UserWhereInput {
   if (window.channel === 'google_ads') {
     filter.OR = [
       { gclid: { not: null } }, { gbraid: { not: null } }, { wbraid: { not: null } },
-      { utmSource: { equals: 'google', mode: 'insensitive' }, utmMedium: { in: ['cpc', 'ppc', 'paid'], mode: 'insensitive' } },
+      { utmSource: { equals: 'google', mode: 'insensitive' }, utmMedium: { in: ['cpc', 'ppc', 'paid', 'display'], mode: 'insensitive' } },
     ];
   }
   return Object.keys(filter).length ? { acquisition: { is: filter } } : {};
