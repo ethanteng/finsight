@@ -18,6 +18,7 @@ import ForecastBoard from '../../components/cash-flow/ForecastBoard';
 import PlannedEventsPanel, { type CardPaymentRequest } from '../../components/cash-flow/PlannedEventsPanel';
 import { clearStoredUserTimeZone } from '../../lib/browser-time-zone';
 import { CONNECT_ACCOUNTS_PATH } from '../../lib/connect-accounts';
+import { loginUrlForCurrentPage } from '../../lib/post-login-redirect';
 import {
   cardsLeftOutText,
   coversAllCash,
@@ -156,7 +157,7 @@ export default function CashFlowPageClient() {
   const load = useCallback(async () => {
     const token = localStorage.getItem('auth_token');
     if (!token) {
-      router.push('/login');
+      router.push(loginUrlForCurrentPage());
       return;
     }
     const requestId = ++requestRef.current;
@@ -168,7 +169,7 @@ export default function CashFlowPageClient() {
       // A newer request was made while this one was in flight; let it decide.
       if (requestId !== requestRef.current) return;
       if (response.status === 401) {
-        router.push('/login');
+        router.push(loginUrlForCurrentPage());
         return;
       }
       if (response.status === 204) {

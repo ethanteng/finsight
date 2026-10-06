@@ -66,7 +66,9 @@ describe('BillingPortalRedirect', () => {
 
     await screen.findByText('Please sign in first');
     expect(global.fetch).not.toHaveBeenCalled();
-    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
+    // Signing in comes back here, so the portal opens without a second click.
+    expect(screen.getByRole('link', { name: 'Sign in' }))
+      .toHaveAttribute('href', `/login?returnTo=${encodeURIComponent('/billing')}`);
   });
 
   it('treats a rejected token as signed out', async () => {
