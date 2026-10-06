@@ -123,7 +123,14 @@ export interface CohortExclusions {
   payingWithoutRecordedCharge?: number;
 }
 
+export interface SourceCoverage {
+  recorded: number;
+  recovered: number;
+  unknown: number;
+}
+
 interface CohortReportBase {
+  sourceCoverage?: SourceCoverage;
   quality?: QualitySummary;
   segment: CohortSegment;
   cohortGrain: CohortGrain;

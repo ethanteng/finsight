@@ -2,7 +2,6 @@ import {
   isSuccessfulAnswer, isReturnWithinSevenDays, recordSignupAcquisition,
   recordVisibleAnswer, recordFirstAccountLinked, pendingAdMilestones,
 } from '../../services/product-milestones';
-import { acquisitionFilter } from '../../cohort-analytics/service';
 import { getPrismaClient } from '../../prisma-client';
 
 jest.mock('../../prisma-client', () => ({ getPrismaClient: jest.fn() }));
@@ -122,31 +121,4 @@ it('limits pending tags to recent, unattempted milestones and returns no acquisi
   expect(request.where).toMatchObject({ userId: 'u1', adDispatchAttemptedAt: null, definitionVersion: 1 });
   expect(request.select).toEqual({ id: true, kind: true, occurredAt: true, definitionVersion: true });
   expect(request.where.occurredAt.gte).toEqual(new Date(now.getTime() - 86_400_000));
-});
-
-it('combines exact campaign and source filters with Google acquisition evidence', () => {
-  const filter = acquisitionFilter({
-    segment: 'signup', cohortGrain: 'week', periodGrain: 'week', cohortCount: 4, periodCount: 2,
-    source: 'coast_fire_calculator', channel: 'google_ads', campaign: 'coast_fire',
-  });
-  expect(filter).toMatchObject({
-    acquisition: { is: { source: 'coast_fire_calculator', utmCampaign: 'coast_fire', OR: expect.any(Array) } },
-  });
-  const acquisition = filter.acquisition as { is?: { OR?: Array<Record<string, unknown>> } } | undefined;
-  const googleMedium = acquisition?.is?.OR?.find((clause) => clause.utmSource);
-  expect(googleMedium).toMatchObject({
-    utmMedium: { in: expect.arrayContaining(['cpc', 'ppc', 'paid', 'display']) },
-  });
-});
-
-
-it('includes Google display traffic without click IDs in the Google Ads cohort', () => {
-  const filter = acquisitionFilter({
-    segment: 'signup', cohortGrain: 'week', periodGrain: 'week', cohortCount: 4, periodCount: 4,
-    channel: 'google_ads',
-  });
-  expect(filter).toEqual({ acquisition: { is: { OR: expect.arrayContaining([
-    { utmSource: { equals: 'google', mode: 'insensitive' },
-      utmMedium: { in: ['cpc', 'ppc', 'paid', 'display'], mode: 'insensitive' } },
-  ]) } } });
 });

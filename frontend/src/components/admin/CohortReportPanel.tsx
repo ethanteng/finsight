@@ -48,6 +48,7 @@ interface CohortRow<Member> {
 }
 
 interface CohortReport {
+  sourceCoverage?: { recorded: number; recovered: number; unknown: number };
   quality?: {
     measuredSignups: number; unmeasuredSignups: number;
     resultViewed: number; meaningfulAnswer: number; accountLinked: number;
@@ -480,18 +481,26 @@ export default function CohortReportPanel({
 
       {report && (
         <div className="rounded-lg bg-white/70 p-6">
+          {report.sourceCoverage && (
+            <p className="mb-4 text-sm text-[#5e6b63]" aria-label="Signup source coverage">
+              Signup source: {report.sourceCoverage.recorded} recorded at signup,{' '}
+              {report.sourceCoverage.recovered} inferred from an initial calculator result,{' '}
+              {report.sourceCoverage.unknown} unknown. Historical accounts remain in the cohort table below.
+            </p>
+          )}
           {report.quality && (
             <div className="mb-6 rounded-lg border border-[#102319]/10 p-4" aria-label="Quality milestones">
               <h3 className="font-semibold text-[#102319]">First value and early engagement</h3>
               <p className="mt-1 text-xs text-[#5e6b63]">Since signup, among {report.quality.measuredSignups} accounts with the new measurement.
                 {' '}{report.quality.unmeasuredSignups} older or unmeasured accounts are excluded from these totals.</p>
+              {report.quality.measuredSignups === 0 && <p className="mt-2 text-sm text-[#5e6b63]">No signups with milestone tracking in this selection yet. Historical activity is shown in the cohort table.</p>}
               <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
                 {([
                   ['Result viewed in app', report.quality.resultViewed],
                   ['Meaningful answer viewed', report.quality.meaningfulAnswer],
                   ['Account linked', report.quality.accountLinked],
                   ['Returned and engaged in 7 days', report.quality.returnedEngaged],
-                ] as const).map(([label, value]) => <div key={label}><dt className="text-xs text-[#5e6b63]">{label}</dt><dd className="text-xl font-semibold tabular-nums">{value}</dd></div>)}
+                ] as const).map(([label, value]) => <div key={label}><dt className="text-xs text-[#5e6b63]">{label}</dt><dd className="text-xl font-semibold tabular-nums">{report.quality?.measuredSignups ? value : '—'}</dd></div>)}
               </dl>
               <p className="mt-3 text-xs text-[#5e6b63]">Completed seven-day return rate: {report.quality.returnEligible
                 ? `${report.quality.returnMaturedCount}/${report.quality.returnEligible} (${percent(report.quality.returnMaturedCount / report.quality.returnEligible)})`
