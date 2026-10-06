@@ -176,7 +176,7 @@ Each highlight card on the page breaks its headline into one sum. The parts are:
 - **Usual income** and **Usual spending:** the forecast before any plans, one line for each side. Planned income and spending stay out of these, in the planned line.
 - **Planned events:** what the plans change.
 
-A total row repeats the headline. Each part is rounded to the dollar, and the larger of the two forecast parts absorbs the rounding remainder, so the shown parts always add up to the shown headline. A window that history only partly reaches has no "so far" part, because its headline is only what is still expected. The card states what was observed since history began in its note instead.
+A total row repeats the headline. Each part is rounded to the dollar, and one part absorbs the rounding remainder, so the shown parts always add up to the shown headline. An estimate takes it before a fact: the larger usual part, then the planned line, then "so far". A part that shows $0 takes it only when every part does, so an empty side never shows a stray dollar. A window that history only partly reaches has no "so far" part, because its headline is only what is still expected. The card states what was observed since history began in its note instead.
 
 ## Cash position
 

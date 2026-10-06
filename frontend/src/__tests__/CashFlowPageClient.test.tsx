@@ -235,6 +235,30 @@ describe('CashFlowPageClient', () => {
     ]);
   });
 
+  it('keeps the rounding remainder off a usual line that is really $0', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?') ? {
+      status: 200,
+      body: report({
+        highlights: [
+          // Nothing usual is expected, only a planned $1,000.60. With $1,000.60 so far,
+          // the parts round to $1,001 + $1,001, a dollar over the $2,001 headline.
+          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(1000.6, 0), actualCoverage: 'full', remaining: { ...totals(1000.6, 0), components }, projected: totals(2001.2, 0), planned: totals(1000.6, 0), projectedWithoutPlanned: totals(1000.6, 0) },
+        ],
+      }),
+    } : undefined));
+    render(<CashFlowPageClient />);
+
+    const month = (await screen.findByRole('heading', { name: 'This month' })).closest('article')!;
+    expect(breakdown(month)).toEqual([
+      ['So far', 'Actual · Oct 1–14', '+$1,001'],
+      ['Usual income', 'Forecast · Oct 15–31', '$0'],
+      ['Usual spending', 'Forecast · Oct 15–31', '$0'],
+      // The plans take it before what was observed.
+      ['Planned events', null, '+$1,000'],
+      ['Expected to save', null, '+$2,001'],
+    ]);
+  });
+
   it('asks for the chosen grouping and forecast length', async () => {
     const calls = mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
     const reportUrls = () => calls.map(call => call.url).filter(url => url.includes('/api/cash-flow?'));
