@@ -95,7 +95,6 @@ export default function CashFlowSampleCapture() {
         <h3>Get a sample forecast by email</h3>
         <p className="cfs-lead">
           See what a forecast shows, including the low point a budget misses, before you connect anything.
-          Then a few short notes over the next two weeks. Unsubscribe anytime.
         </p>
       </div>
 
