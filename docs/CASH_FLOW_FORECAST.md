@@ -76,7 +76,7 @@ The Finances page shows the expected month as Monthly Income and Monthly Expense
 `expectedSpendingByCategory(model)` splits the expected month's spending by category. The report carries it as `usualSpending`, and the cash flow page draws it as a ranked bar chart below the highlight cards. Its parts:
 
 - **Regular bills:** each one still running, at its monthly rate, in the category its transactions carry.
-- **The typical rate:** split the way the basis spent it, with refunds netted inside their own category. The categories are scaled to the rate itself rather than summed, for two reasons. A category whose refunds outweighed its purchases has nothing to show. An account's rate is held at zero rather than going below it.
+- **The typical rate:** split the way the basis spent it, with refunds netted inside their own category. Only the accounts the rate counts are split: an account whose refunds outweighed its spending adds nothing to the rate, so its transactions are behind no category either. A category whose refunds outweighed its purchases has nothing to show, so the rest are scaled to the rate itself rather than summed.
 - **Card interest:** every card's interest goes in one category, "Credit card interest". That covers interest projected from an APR at the usual pace and interest charges carried forward for a card with no terms, whatever category the bank gave the charge.
 
 Together the categories add up to `expectedMonthly(model).spending` to the cent (spare cents go to the parts that lost the most when floored). A spending override has no breakdown, because it says how much is spent but not on what. Neither does an unavailable forecast. In both cases `usualSpending` is null, and under an override the page says why.
