@@ -39,23 +39,25 @@ describe('admin cohort routes', () => {
 
     expect(response.status).toBe(200);
     expect(getEngagementReport).toHaveBeenCalledWith(
-      { segment: 'signup', cohortGrain: 'week', periodGrain: 'month', cohortCount: 12, periodCount: 12 },
+      { segment: 'signup', cohortGrain: 'week', periodGrain: 'month', cohortCount: 12, periodCount: 12, source: 'all', channel: 'all', campaign: undefined },
       { questions: 1, per: 'month' },
     );
   });
 
   it('passes every control through', async () => {
     const response = await request(adminApp())
-      .get('/admin/cohorts/engagement?segment=paid&cohort=month&period=week&cohorts=6&periods=8&questions=3&per=day');
+      .get('/admin/cohorts/engagement?segment=paid&cohort=month&period=week&cohorts=6&periods=8&questions=3&per=day&source=coast_fire_calculator&channel=google_ads&campaign=coast_fire');
 
     expect(response.status).toBe(200);
     expect(getEngagementReport).toHaveBeenCalledWith(
-      { segment: 'paid', cohortGrain: 'month', periodGrain: 'week', cohortCount: 6, periodCount: 8 },
+      { segment: 'paid', cohortGrain: 'month', periodGrain: 'week', cohortCount: 6, periodCount: 8, source: 'coast_fire_calculator', channel: 'google_ads', campaign: 'coast_fire' },
       { questions: 3, per: 'day' },
     );
   });
 
   it.each([
+    ['source=other', 'source must be one of all, coast_fire_calculator, retirement_calculator, direct_or_unknown'],
+    ['channel=facebook', 'channel must be one of all, google_ads'],
     ['segment=free', 'segment must be one of signup, trial, paid'],
     ['cohort=year', 'cohort must be one of day, week, month'],
     ['periods=0', 'periods must be a whole number from 1 to 90'],
@@ -76,7 +78,7 @@ describe('admin cohort routes', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ kind: 'activation' });
     expect(getActivationReport).toHaveBeenCalledWith(
-      { segment: 'paid', cohortGrain: 'day', periodGrain: 'day', cohortCount: 30, periodCount: 14 },
+      { segment: 'paid', cohortGrain: 'day', periodGrain: 'day', cohortCount: 30, periodCount: 14, source: 'all', channel: 'all', campaign: undefined },
     );
   });
 

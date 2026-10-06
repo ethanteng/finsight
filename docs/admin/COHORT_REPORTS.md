@@ -59,8 +59,9 @@ key that has verified at least once. Manual accounts are not links. The cells ar
 the share linked by the end of that period — because linking happens once. A link made before
 the member's start (a trial or paid account that linked before it started) counts from period 1.
 
-No column records when a user first linked, and disconnecting deletes the rows that did, so
-the first link is reconstructed from what survives:
+For signups after the product-milestone release, a durable, provider-confirmed first-link
+record supplies the timestamp, even after disconnecting. Older accounts retain the existing
+reconstruction from surviving evidence:
 
 | Provider | Evidence | Date used |
 |---|---|---|
@@ -69,5 +70,23 @@ the first link is reconstructed from what survives:
 | Public | a credential that has verified; a stored `public-` account row; a Public connect or removal in history | earliest of these |
 
 So the report undercounts anyone who linked and later removed every connection without a
-provider-specific history row surviving. Recording a first-link date on the user would make
-this exact going forward; it was considered and not done.
+provider-specific history row surviving. New signups use the durable milestone instead of this historical inference.
+
+
+## Acquisition and quality
+
+Signup source, acquisition channel, and exact `utm_campaign` filters use immutable signup
+attribution. For Coast FIRE ads choose **Coast FIRE calculator / Google Ads / coast_fire**.
+The original server-resolved calculator lead outranks later signup-page parameters. Filters
+are prospective: historical accounts without attribution remain in All sources, but cannot
+be assigned to a campaign reliably.
+
+The quality summary is separate from the question-count heatmap. It measures the first
+calculator result actually viewed, first successful user answer viewed, first successful
+account connection, and a later-day successful answer within seven days. It shows measured
+and unmeasured signups separately. Seven-day return rates include only signups at least seven
+days old; immature cohorts show “Not yet measurable.” Milestone totals are since signup,
+even when the selected cohort clock is a trial or paid date.
+
+See [Product milestones](PRODUCT_MILESTONES.md) for exact definitions, Google Ads configuration,
+rollout order, and delivery limitations.

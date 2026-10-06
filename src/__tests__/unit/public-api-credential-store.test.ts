@@ -1,3 +1,5 @@
+import { recordFirstAccountLinked } from '../../services/product-milestones';
+jest.mock('../../services/product-milestones', () => ({ recordFirstAccountLinked: jest.fn().mockResolvedValue(undefined) }));
 import { DataEncryptionService } from '../../auth/encryption';
 
 const findUnique = jest.fn();
@@ -17,6 +19,7 @@ import {
   getStatus,
   readSecret,
   recordFailure,
+  recordSuccess,
   storeSecret,
 } from '../../services/public-api/credential-store';
 
@@ -108,6 +111,15 @@ describe('Public API credential store', () => {
       lastError: null,
     });
     expect(findUnique.mock.calls[0][0].select).toEqual({ lastVerifiedAt: true, lastError: true });
+  });
+
+  it('records a link only after an existing credential verifies successfully', async () => {
+    updateMany.mockResolvedValueOnce({ count: 0 });
+    await recordSuccess('user-1');
+    expect(recordFirstAccountLinked).not.toHaveBeenCalled();
+    updateMany.mockResolvedValueOnce({ count: 1 });
+    await recordSuccess('user-1');
+    expect(recordFirstAccountLinked).toHaveBeenCalledWith('user-1', 'public');
   });
 
   it('records a failure message against the credential', async () => {

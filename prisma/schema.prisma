@@ -43,8 +43,52 @@ model User {
   transactionCategoryOverrides TransactionCategoryOverride[]
 
   publicApiCredential PublicApiCredential?
+  acquisition         UserAcquisition?
+  productMilestones   ProductMilestone[]
 
   @@map("users")
+}
+
+/// Immutable signup attribution. No email, financial inputs, or question text.
+model UserAcquisition {
+  userId       String   @id
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source       String
+  capturedAt   DateTime @default(now())
+  flowVersion  String   @default("calculator_in_app_v1")
+  landingPage  String?
+  referrer     String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  utmTerm      String?
+  utmContent   String?
+  gclid        String?
+  gbraid       String?
+  wbraid       String?
+  gaClientId   String?
+  gaSessionId  String?
+
+  @@index([source, utmCampaign])
+  @@map("user_acquisitions")
+}
+
+/// One durable occurrence per user and definition; survives provider disconnects.
+model ProductMilestone {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind                  String
+  definitionVersion     Int      @default(1)
+  occurredAt            DateTime @default(now())
+  source                String?
+  conversationId        String?
+  /// Tag callback confirms a dispatch attempt, not acceptance or attribution.
+  adDispatchAttemptedAt DateTime?
+
+  @@unique([userId, kind, definitionVersion])
+  @@index([kind, occurredAt])
+  @@map("product_milestones")
 }
 
 /// A user-chosen category that replaces the provider category for one transaction.

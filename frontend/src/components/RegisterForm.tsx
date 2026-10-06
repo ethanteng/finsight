@@ -1,4 +1,5 @@
 "use client";
+import { readCalculatorLeadAttribution, type CalculatorLeadAttribution } from '../lib/calculator-lead-attribution';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { getBrowserTimeZone, setStoredUserTimeZone } from '@/lib/browser-time-zone';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -643,7 +644,8 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       calculatorRef?: string;
       acceptsFirstDecisionHandoff?: boolean;
       signupOrigin?: CalculatorSignupOrigin;
-    } = { email, password, timeZone: getBrowserTimeZone() };
+      attribution?: CalculatorLeadAttribution;
+    } = { email, password, timeZone: getBrowserTimeZone(), attribution: readCalculatorLeadAttribution() };
 
     /*
      * Which calculator this signup continued from, so the new account joins

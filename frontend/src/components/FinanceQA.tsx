@@ -11,6 +11,7 @@ import { ShowTheMathContent, DatabaseSourceSection, downloadShowTheMathAsText, t
 import { formatKeyNumberValue, formatProvenance, type DisplayKeyNumber } from '@/lib/formatKeyNumber';
 import { relativeTurnTime } from '@/lib/relative-time';
 import type { DisplayStructuredResponse, StructuredPromptHistory } from '@/lib/structured-answer';
+import { useVisibleAnswerMeasurement } from '@/lib/use-visible-answer-measurement';
 
 type PromptHistory = StructuredPromptHistory;
 
@@ -71,6 +72,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   const [activeView, setActiveView] = useState<'answer' | 'math' | 'sources'>('answer');
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
   const { trackEvent } = useAnalytics();
+  const measuredAnswerRef = useVisibleAnswerMeasurement(conversationId,
+    Boolean(answer) && !loading && !error && activeView === 'answer');
 
   // Rotate placeholder every 4 seconds.
   useEffect(() => {
@@ -452,7 +455,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
 
           <div className="p-5 sm:p-8">
             {activeView === 'answer' && (
-              <div className="space-y-7">
+              <div ref={measuredAnswerRef} className="space-y-7">
                 {structuredResponse?.key_numbers && Object.keys(structuredResponse.key_numbers).length > 0 && (
                   <section aria-labelledby="key-metrics-heading">
                     <h3 id="key-metrics-heading" className="mb-3 text-sm font-semibold text-[#102319]">Key metrics</h3>

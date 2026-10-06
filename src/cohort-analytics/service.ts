@@ -19,6 +19,7 @@ import type {
   EngagementReport,
   EngagementRule,
   FirstLink,
+  QualitySummary,
 } from './types';
 
 /** Stripe statuses that mean the account is paying now. */
@@ -158,11 +159,24 @@ function toMember(user: UserRow, startedAt: Date, milestones: StripeMilestones):
   };
 }
 
-async function usersByIds(ids: string[]): Promise<UserRow[]> {
+export function acquisitionFilter(window: CohortWindow): Prisma.UserWhereInput {
+  const filter: Prisma.UserAcquisitionWhereInput = {};
+  if (window.source && window.source !== 'all') filter.source = window.source;
+  if (window.campaign) filter.utmCampaign = window.campaign;
+  if (window.channel === 'google_ads') {
+    filter.OR = [
+      { gclid: { not: null } }, { gbraid: { not: null } }, { wbraid: { not: null } },
+      { utmSource: { equals: 'google', mode: 'insensitive' }, utmMedium: { in: ['cpc', 'ppc', 'paid'], mode: 'insensitive' } },
+    ];
+  }
+  return Object.keys(filter).length ? { acquisition: { is: filter } } : {};
+}
+
+async function usersByIds(ids: string[], window: CohortWindow): Promise<UserRow[]> {
   const prisma = getPrismaClient();
   const users: UserRow[] = [];
   for (const chunk of chunks(ids)) {
-    users.push(...await prisma.user.findMany({ where: { id: { in: chunk } }, select: USER_SELECT }));
+    users.push(...await prisma.user.findMany({ where: { id: { in: chunk }, ...acquisitionFilter(window) }, select: USER_SELECT }));
   }
   return users;
 }
@@ -179,9 +193,9 @@ async function loadMembers(window: CohortWindow, now: Date): Promise<{ members: 
   const users = starts
     ? await usersByIds([...starts.entries()]
       .filter(([, at]) => at.getTime() >= start.getTime() && at.getTime() <= now.getTime())
-      .map(([userId]) => userId))
+      .map(([userId]) => userId), window)
     : await prisma.user.findMany({
-      where: { createdAt: { gte: start, lte: now } },
+      where: { createdAt: { gte: start, lte: now }, ...acquisitionFilter(window) },
       select: USER_SELECT,
     });
 
@@ -193,6 +207,7 @@ async function loadMembers(window: CohortWindow, now: Date): Promise<{ members: 
   if (window.segment === 'paid') {
     const paying = await prisma.user.findMany({
       where: {
+        ...acquisitionFilter(window),
         OR: [
           { subscriptionStatus: { in: PAYING_STATUSES } },
           { subscriptions: { some: { status: { in: PAYING_STATUSES } } } },
@@ -331,32 +346,83 @@ async function loadFirstLinks(userIds: string[]): Promise<Map<string, FirstLink>
     const link = resolveFirstLink(entry);
     if (link) links.set(userId, link);
   }
+  // New instrumented accounts have an exact first successful provider observation.
+  // This survives a disconnect and outranks historical registration-time inference.
+  for (const ids of chunks(userIds)) {
+    const durable = await prisma.productMilestone.findMany({
+      where: { userId: { in: ids }, kind: 'first_account_linked', definitionVersion: 1 },
+      select: { userId: true, occurredAt: true, source: true },
+    });
+    for (const milestone of durable) {
+      if (milestone.source === 'plaid' || milestone.source === 'snaptrade' || milestone.source === 'public') {
+        links.set(milestone.userId, { at: milestone.occurredAt, sources: [milestone.source] });
+      }
+    }
+  }
   return links;
 }
+
+async function loadQuality(members: CohortMember[], now: Date): Promise<QualitySummary> {
+  const db = getPrismaClient();
+  const quality: QualitySummary = {
+    measuredSignups: 0, unmeasuredSignups: 0, resultViewed: 0, meaningfulAnswer: 0,
+    accountLinked: 0, returnedEngaged: 0, returnEligible: 0, returnMaturedCount: 0,
+  };
+  const mature = new Set(members.filter(member =>
+    now.getTime() - member.signedUpAt.getTime() >= 7 * 86_400_000).map(member => member.userId));
+  for (const ids of chunks(members.map(member => member.userId))) {
+    const [acquisitions, milestones] = await Promise.all([
+      db.userAcquisition.findMany({ where: { userId: { in: ids } }, select: { userId: true } }),
+      db.productMilestone.findMany({
+        where: { userId: { in: ids }, definitionVersion: 1, occurredAt: { lte: now } },
+        select: { userId: true, kind: true },
+      }),
+    ]);
+    const measured = new Set(acquisitions.map(row => row.userId));
+    quality.measuredSignups += measured.size;
+    quality.returnEligible += [...measured].filter(id => mature.has(id)).length;
+    for (const row of milestones) {
+      if (!measured.has(row.userId)) continue;
+      if (row.kind === 'first_result_viewed') quality.resultViewed++;
+      if (row.kind === 'first_meaningful_answer') quality.meaningfulAnswer++;
+      if (row.kind === 'first_account_linked') quality.accountLinked++;
+      if (row.kind === 'returned_engaged_7d') {
+        quality.returnedEngaged++;
+        if (mature.has(row.userId)) quality.returnMaturedCount++;
+      }
+    }
+  }
+  quality.unmeasuredSignups = members.length - quality.measuredSignups;
+  return quality;
+}
+
+const QUALITY_NOTE = 'Quality milestones and acquisition filters cover signups recorded after the measurement release; older accounts are not backfilled or treated as zero. Milestone totals are since signup, even in trial and paid views. A meaningful answer is user-initiated, passes the server validation checks, and is viewed in the app. Return engagement requires a new successful answer on a later signup-relative day within seven days.';
 
 export async function getEngagementReport(window: CohortWindow, rule: EngagementRule, now = new Date()): Promise<EngagementReport> {
   const { members, excluded } = await loadMembers(window, now);
   const questionTimes = await loadQuestionTimes(members, window, now);
-  return buildEngagementReport({
+  const report = buildEngagementReport({
     members,
     questionTimes,
     window,
     rule,
     now,
     excluded,
-    notes: [SEGMENT_NOTES[window.segment], QUESTION_NOTE, OPERATOR_NOTE],
+    notes: [SEGMENT_NOTES[window.segment], QUESTION_NOTE, OPERATOR_NOTE, QUALITY_NOTE],
   });
+  return { ...report, quality: await loadQuality(members, now) };
 }
 
 export async function getActivationReport(window: CohortWindow, now = new Date()): Promise<ActivationReport> {
   const { members, excluded } = await loadMembers(window, now);
   const firstLinks = await loadFirstLinks(members.map(member => member.userId));
-  return buildActivationReport({
+  const report = buildActivationReport({
     members,
     firstLinks,
     window,
     now,
     excluded,
-    notes: [SEGMENT_NOTES[window.segment], LINK_NOTE, OPERATOR_NOTE],
+    notes: [SEGMENT_NOTES[window.segment], 'New instrumented signups use durable, provider-confirmed first-link timestamps. ' + LINK_NOTE, OPERATOR_NOTE, QUALITY_NOTE],
   });
+  return { ...report, quality: await loadQuality(members, now) };
 }

@@ -136,8 +136,8 @@ function buildJourney(
   const previousValues = values(previous, previousCoverageComplete);
   const labels = [
     ['qualified_visit', 'Qualified visits', 'Sessions with an explicit page, campaign, query, or tracking signal for this journey.'],
-    ['calculator_result', 'Calculated result', `Sessions that intentionally reached ${resultEvent}. Calculator reliability lives in the separate calculator dashboard.`],
-    ['plan_cta', 'Actual-plan CTA', 'Result sessions that clicked the journey-specific plan CTA after the result in the same session.'],
+    ['calculator_result', 'Completed calculation', `Sessions that intentionally reached ${resultEvent}. The new flow shows a locked card here; this does not mean the answer was viewed. See the cohort reports for confirmed in-app result views.`],
+    ['plan_cta', 'Legacy actual-plan CTA', 'Historical optional-CTA branch. The current calculator opens results through the save/signup path below.'],
     ['trial_complete', 'Signup handoff', 'CTA sessions with an ordered account creation and app handoff. Email-link, code, and skipped verification are valid branches; login is not required. This is not proof the app loaded.'],
   ] as const;
 

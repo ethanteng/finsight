@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getPrismaClient } from '../prisma-client';
+import { recordSignupAcquisition } from '../services/product-milestones';
 import { 
   hashPassword, 
   generateToken, 
@@ -341,6 +342,11 @@ router.post('/register', registerRateLimit, async (req: Request, res: Response) 
         ? 'retirement_calculator' as const
         : 'coast_fire_calculator' as const)
       : normalizeCalculatorSignupOrigin(signupOrigin);
+
+    await recordSignupAcquisition({
+      userId: user.id, email: user.email, lead: calculatorLead,
+      signupOrigin: calculatorOrigin ?? undefined, attribution: req.body.attribution,
+    });
 
     // Generate token
     const token = generateToken({
