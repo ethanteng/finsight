@@ -97,13 +97,24 @@ function clampWhole(value: string, max: number): number | null {
   return parsed >= 1 && parsed <= max ? parsed : null;
 }
 
-/** Shades a cell by its rate; deeper green is higher. */
+/**
+ * One green, light to dark, with the text color that reads on each step: every
+ * pair clears 4.5:1, and the lightest step still stands out from the page, so
+ * a 0% cell is visibly a cell. 0% has its own step; the rest are 20-point bands.
+ */
+const HEAT_STEPS: Array<{ background: string; text: string }> = [
+  { background: '#94bf9d', text: '#102319' },
+  { background: '#76aa85', text: '#102319' },
+  { background: '#5c946d', text: '#102319' },
+  { background: '#3f7a55', text: '#ffffff' },
+  { background: '#2c6043', text: '#ffffff' },
+  { background: '#1b4530', text: '#ffffff' },
+];
+
 function cellStyle(cell: CohortCell): CSSProperties {
   if (cell.rate === null) return { backgroundColor: 'transparent' };
-  return {
-    backgroundColor: `rgba(57, 112, 82, ${0.08 + cell.rate * 0.82})`,
-    color: cell.rate >= 0.5 ? '#ffffff' : '#102319',
-  };
+  const step = cell.rate === 0 ? HEAT_STEPS[0] : HEAT_STEPS[Math.min(5, 1 + Math.floor(cell.rate * 5))];
+  return { backgroundColor: step.background, color: step.text };
 }
 
 function cellTitle(cell: CohortCell, kind: Kind, size: number): string {
@@ -171,26 +182,21 @@ function GrainSelect({ label, value, onChange, plural = false }: {
 
 const SEGMENT_LABEL: Record<Segment, string> = { signup: 'Signups', trial: 'Trials', paid: 'Paid' };
 
-/** Each segment's start, as a member date column. */
-const MILESTONES: Array<{ segment: Segment; label: string; field: 'signedUpAt' | 'trialStartedAt' | 'firstChargeAt' }> = [
-  { segment: 'signup', label: 'Signed up', field: 'signedUpAt' },
-  { segment: 'trial', label: 'Trial started', field: 'trialStartedAt' },
-  { segment: 'paid', label: 'First charge', field: 'firstChargeAt' },
+/** Each segment's start, as a member date column, in the order an account reaches them. */
+const MILESTONES: Array<{ label: string; field: 'signedUpAt' | 'trialStartedAt' | 'firstChargeAt' }> = [
+  { label: 'Signed up', field: 'signedUpAt' },
+  { label: 'Trial started', field: 'trialStartedAt' },
+  { label: 'First charge', field: 'firstChargeAt' },
 ];
 
-/** The segment's own start first, then the other two in lifecycle order. */
-function milestoneColumns(segment: Segment) {
-  return [...MILESTONES].sort((a, b) => Number(b.segment === segment) - Number(a.segment === segment));
-}
-
-function EngagementMembers({ members, periodGrain, segment }: { members: EngagementMember[]; periodGrain: Grain; segment: Segment }) {
+function EngagementMembers({ members, periodGrain }: { members: EngagementMember[]; periodGrain: Grain }) {
   const columns = members[0]?.periods.length ?? 0;
   return (
     <table className="min-w-full text-left text-sm">
       <thead className="whitespace-nowrap text-xs uppercase tracking-wide text-[#5e6b63]">
         <tr>
           <th className="px-3 py-2">User</th>
-          {milestoneColumns(segment).map((column) => (
+          {MILESTONES.map((column) => (
             <th key={column.field} className="px-3 py-2">{column.label}</th>
           ))}
           <th className="px-3 py-2">Plan now</th>
@@ -204,7 +210,7 @@ function EngagementMembers({ members, periodGrain, segment }: { members: Engagem
         {members.map((member) => (
           <tr key={member.userId} className="border-t border-[#102319]/10">
             <td className="px-3 py-2 font-medium text-[#102319]">{member.email}</td>
-            {milestoneColumns(segment).map((column) => (
+            {MILESTONES.map((column) => (
               <td key={column.field} className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{formatDate(member[column.field])}</td>
             ))}
             <td className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{STATUS_LABEL[member.subscriptionStatus] ?? member.subscriptionStatus}</td>
@@ -227,13 +233,13 @@ function EngagementMembers({ members, periodGrain, segment }: { members: Engagem
   );
 }
 
-function ActivationMembers({ members, periodGrain, segment }: { members: ActivationMember[]; periodGrain: Grain; segment: Segment }) {
+function ActivationMembers({ members, periodGrain }: { members: ActivationMember[]; periodGrain: Grain }) {
   return (
     <table className="min-w-full text-left text-sm">
       <thead className="whitespace-nowrap text-xs uppercase tracking-wide text-[#5e6b63]">
         <tr>
           <th className="px-3 py-2">User</th>
-          {milestoneColumns(segment).map((column) => (
+          {MILESTONES.map((column) => (
             <th key={column.field} className="px-3 py-2">{column.label}</th>
           ))}
           <th className="px-3 py-2">Plan now</th>
@@ -247,7 +253,7 @@ function ActivationMembers({ members, periodGrain, segment }: { members: Activat
         {members.map((member) => (
           <tr key={member.userId} className="border-t border-[#102319]/10">
             <td className="px-3 py-2 font-medium text-[#102319]">{member.email}</td>
-            {milestoneColumns(segment).map((column) => (
+            {MILESTONES.map((column) => (
               <td key={column.field} className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{formatDate(member[column.field])}</td>
             ))}
             <td className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{STATUS_LABEL[member.subscriptionStatus] ?? member.subscriptionStatus}</td>
@@ -277,7 +283,7 @@ export default function CohortReportPanel({
   apiUrl: string | undefined;
   getAuthHeaders: () => Record<string, string>;
 }) {
-  const [segment, setSegment] = useState<Segment>('trial');
+  const [segment, setSegment] = useState<Segment>('signup');
   const [cohortGrain, setCohortGrain] = useState<Grain>('week');
   const [periodGrain, setPeriodGrain] = useState<Grain>('week');
   const [cohortCount, setCohortCount] = useState(12);
@@ -438,7 +444,7 @@ export default function CohortReportPanel({
                 <tr>
                   <th className="sticky left-0 bg-[#f4f6f1] px-3 py-2 text-left">Cohort</th>
                   <th className="px-3 py-2 text-right">Users</th>
-                  {!isEngagement && <th className="px-3 py-2 text-right">Linked to date</th>}
+                  {!isEngagement && <th className="px-3 py-2 text-right">Activated to-date</th>}
                   {!isEngagement && <th className="px-3 py-2 text-right">Median days</th>}
                   {Array.from({ length: report.periodCount }, (_, index) => (
                     <th key={index} className="min-w-14 px-2 py-2 text-center">{periodTitle} {index + 1}</th>
@@ -524,16 +530,16 @@ export default function CohortReportPanel({
               ) : (
                 <div className="overflow-x-auto">
                   {isEngagement ? (
-                    <EngagementMembers members={selected.members as EngagementMember[]} periodGrain={report.periodGrain} segment={report.segment} />
+                    <EngagementMembers members={selected.members as EngagementMember[]} periodGrain={report.periodGrain} />
                   ) : (
-                    <ActivationMembers members={selected.members as ActivationMember[]} periodGrain={report.periodGrain} segment={report.segment} />
+                    <ActivationMembers members={selected.members as ActivationMember[]} periodGrain={report.periodGrain} />
                   )}
                 </div>
               )}
               <p className="mt-3 text-xs text-[#5e6b63]">
                 Dates are UTC. {isEngagement
                   ? 'Each column shows the questions asked in that period; shaded means engaged, a dot means still in that period.'
-                  : 'Each account is clocked from the first date column: its signup, trial start or first charge.'}
+                  : 'Each account is clocked from its signup, trial start or first charge, depending on the view.'}
               </p>
             </div>
           )}
