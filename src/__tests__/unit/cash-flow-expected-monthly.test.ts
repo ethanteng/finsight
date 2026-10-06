@@ -223,16 +223,40 @@ describe('expectedSpendingByCategory', () => {
       .map(transaction => transaction.label)).not.toContain('UNITED AIRLINES');
   });
 
+  it('splits only the accounts the typical rate counts, so every part has its transactions', () => {
+    const groceries = { personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_GROCERIES' } };
+    // $100 of groceries on the card, and a $150 grocery refund into checking,
+    // which has no other everyday spending: checking adds nothing to the rate.
+    const purchases = [['2026-07-03', 20], ['2026-07-20', 30], ['2026-08-09', 22], ['2026-09-22', 28]]
+      .map(([date, amount]) => tx('card', date as string, 'expense', amount as number, 'Corner Market', { merchant_name: 'Corner Market', ...groceries }));
+    const refund = tx('checking', '2026-08-15', 'refund', 150, 'Safeway', { merchant_name: 'Safeway', ...groceries });
+    const paychecks = householdTransactions(FROM, THROUGH).filter(transaction => String(transaction.name).startsWith('GUSTO'));
+    const rent = categorized.filter(transaction => transaction.name === 'Oak Street Apartments');
+    const built = model({ transactions: [...paychecks, ...rent, ...purchases, refund] });
+    expect(built.typical.dailySpending).toBeCloseTo(100 / built.typical.basisDays, 6);
+
+    // Across both accounts groceries net to -$50, but only the card is in the
+    // rate: the category is its four purchases, not an empty "Uncategorized".
+    const categories = expectedSpendingByCategory(built)!;
+    expect(categories.map(category => category.label)).toEqual(['Rent', 'Groceries']);
+    const typical = categories[1].sources[0];
+    if (typical.kind !== 'typical') throw new Error(`expected typical spending, got ${typical.kind}`);
+    expect(typical.transactionCount).toBe(4);
+    expect(typical.transactions.map(transaction => transaction.label)).not.toContain('Safeway');
+    expect(typical.total).toBe(100);
+    expect(categories[1].monthly).toBeCloseTo(100 / built.typical.basisDays * (365 / 12), 2);
+  });
+
   it('explains projected card interest, which no transaction is behind yet', () => {
     const projected = model({ transactions: [...categorized, ...interestCharges(FROM, THROUGH)], accounts: accountsWithCardTerms() });
     const interest = expectedSpendingByCategory(projected)!.find(category => category.label === CARD_INTEREST_CATEGORY)!;
     expect(interest.sources).toEqual([{ kind: 'projected_interest', monthly: interest.monthly }]);
   });
 
-  it('keeps the residual transactions when account floors leave only an Uncategorized typical rate', () => {
-    // A grocery purchase on checking and a larger grocery refund on the card:
-    // the category nets negative, but checking's floor keeps a positive typical
-    // rate that lands in Uncategorized.
+  it('leaves a refund into an account the rate does not count out of every category', () => {
+    // The mirror of the case above: a grocery purchase on checking and a larger
+    // grocery refund on the card. The category nets negative across both, but the
+    // card adds nothing to the rate, so groceries are the checking purchase alone.
     const paychecks = ['2026-06-15', '2026-06-29', '2026-07-13', '2026-07-27', '2026-08-10', '2026-08-24', '2026-09-07', '2026-09-21']
       .map(date => tx('checking', date, 'income', 2500, 'ACME CORP', { merchant_name: 'ACME CORP' }));
     const rent = ['2026-07-01', '2026-08-01', '2026-09-01']
@@ -251,17 +275,14 @@ describe('expectedSpendingByCategory', () => {
       }),
     ];
     const built = model({ transactions: [...paychecks, ...rent, ...groceries] });
-    expect(built.typical.dailySpending).toBeGreaterThan(0);
-    expect([...built.typicalSpendingByCategory.values()].every(part => part.daily <= 0)).toBe(true);
+    expect(built.typical.dailySpending).toBeCloseTo(100 / built.typical.basisDays, 6);
 
-    const uncategorized = expectedSpendingByCategory(built)!.find(category => category.label === 'Uncategorized')!;
-    expect(uncategorized.monthly).toBeGreaterThan(0);
-    expect(uncategorized.sources).toHaveLength(1);
-    const typical = uncategorized.sources[0];
+    const categories = expectedSpendingByCategory(built)!;
+    expect(categories.map(category => category.label)).toEqual(['Rent', 'Groceries']);
+    const typical = categories[1].sources[0];
     if (typical.kind !== 'typical') throw new Error(`expected typical spending, got ${typical.kind}`);
-    expect(typical.transactionCount).toBe(2);
-    expect(typical.transactions.map(transaction => transaction.amount).sort((a, b) => a - b)).toEqual([-150, 100]);
-    expect(typical.total).toBe(-50);
+    expect(typical.transactions.map(transaction => transaction.amount)).toEqual([100]);
+    expect(typical.total).toBe(100);
   });
 
   it('follows what the user left out and what they kept', () => {

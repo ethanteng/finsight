@@ -161,8 +161,9 @@ export interface CashFlowModel {
   typicalPayees: TypicalPayee[];
   /**
    * The typical spending rate's categories as the basis spent them, net of
-   * refunds, keyed by `labelKey`. Before an account's rate is held at zero, so
-   * they can add up to a little more than `typical.dailySpending`.
+   * refunds, keyed by `labelKey`, from the accounts the rate counts. They add
+   * up to `typical.dailySpending`, though a category whose refunds outweighed
+   * its purchases can be below zero.
    */
   typicalSpendingByCategory: Map<string, TypicalSpendingCategory>;
   /** How large a non-repeating amount must be to be left out as a one-off; null without a basis. */
@@ -410,6 +411,7 @@ function learnFlows(
   const oneOffs = residual.filter(entry => looksOneOff(entry) && !countedIds.has(entry.id));
   const oneOffIds = new Set(oneOffs.map(entry => entry.id));
   const totalsByAccount = new Map<string, Record<CashFlowDirection, number>>();
+  const categoriesByAccount = new Map<string, Map<string, TypicalSpendingCategory>>();
   const byPayee = new Map<string, TypicalPayee & { latest: CalendarDate }>();
   for (const entry of residual) {
     if (oneOffIds.has(entry.id)) continue;
@@ -422,10 +424,12 @@ function learnFlows(
     if (entry.flow === 'spending') {
       const label = spendingCategoryLabel(entry);
       const key = labelKey(label);
-      const category = spendingByCategory.get(key) ?? { label, daily: 0, entryIds: [] };
+      const categories = categoriesByAccount.get(entry.accountId) ?? new Map<string, TypicalSpendingCategory>();
+      const category = categories.get(key) ?? { label, daily: 0, entryIds: [] };
       category.daily += entry.amount / basisDays;
       category.entryIds.push(entry.id);
-      spendingByCategory.set(key, category);
+      categories.set(key, category);
+      categoriesByAccount.set(entry.accountId, categories);
     }
     if (!entry.counterpartyKey) continue;
     const key = payeeKey(entry.flow, entry.counterpartyKey);
@@ -446,6 +450,18 @@ function learnFlows(
       income: Math.max(0, account.income / basisDays),
       spending: Math.max(0, account.spending / basisDays),
     });
+  }
+  // An account whose refunds outweighed its spending adds nothing to the rate,
+  // so its transactions are behind no category either. The categories of the
+  // rest add up to the rate.
+  for (const [accountId, categories] of categoriesByAccount) {
+    if ((totalsByAccount.get(accountId)?.spending ?? 0) <= 0) continue;
+    for (const [key, part] of categories) {
+      const category = spendingByCategory.get(key) ?? { label: part.label, daily: 0, entryIds: [] };
+      category.daily += part.daily;
+      category.entryIds.push(...part.entryIds);
+      spendingByCategory.set(key, category);
+    }
   }
   const typicalPayees = [...byPayee.values()]
     .filter(payee => payee.daily > 0)
@@ -1160,9 +1176,8 @@ export function expectedSpendingByCategory(model: CashFlowModel): SpendingCatego
     });
   }
 
-  // An account's typical rate never goes below zero, and a category whose
-  // refunds outweighed its purchases has nothing to show, so the categories are
-  // scaled to the rate itself rather than summed.
+  // A category whose refunds outweighed its purchases has nothing to show, so
+  // the rest are scaled to the rate itself rather than summed.
   const typicalMonthly = model.typical.dailySpending * DAYS_PER_MONTH;
   const parts = [...model.typicalSpendingByCategory.values()].filter(part => part.daily > 0);
   const partsDaily = parts.reduce((sum, part) => sum + part.daily, 0);
@@ -1175,16 +1190,9 @@ export function expectedSpendingByCategory(model: CashFlowModel): SpendingCatego
     transactions: listed(entryIds, CATEGORY_TRANSACTIONS_LISTED),
     transactionCount: entryIds.length,
   });
+  // The categories add up to the rate, so with any rate there is a part above zero.
   if (partsDaily > 0) {
     for (const part of parts) add(part.label, typical(typicalMonthly * (part.daily / partsDaily), part.entryIds, part.daily));
-  } else if (typicalMonthly > 0) {
-    // Per-account floors can leave a positive typical rate when every category
-    // nets to a refund (purchase in one account, larger refund in another). Keep
-    // the residual transactions so the drill-down is not an empty box.
-    const residual = [...model.typicalSpendingByCategory.values()];
-    const entryIds = residual.flatMap(part => part.entryIds);
-    const daily = residual.reduce((sum, part) => sum + part.daily, 0);
-    add('Uncategorized', typical(typicalMonthly, entryIds, daily));
   }
 
   const interest = cardInterestTotal(model, model.forecastStart, addMonths(model.forecastStart, 12), false) / 12;
