@@ -1178,7 +1178,13 @@ export function expectedSpendingByCategory(model: CashFlowModel): SpendingCatego
   if (partsDaily > 0) {
     for (const part of parts) add(part.label, typical(typicalMonthly * (part.daily / partsDaily), part.entryIds, part.daily));
   } else if (typicalMonthly > 0) {
-    add('Uncategorized', typical(typicalMonthly, [], 0));
+    // Per-account floors can leave a positive typical rate when every category
+    // nets to a refund (purchase in one account, larger refund in another). Keep
+    // the residual transactions so the drill-down is not an empty box.
+    const residual = [...model.typicalSpendingByCategory.values()];
+    const entryIds = residual.flatMap(part => part.entryIds);
+    const daily = residual.reduce((sum, part) => sum + part.daily, 0);
+    add('Uncategorized', typical(typicalMonthly, entryIds, daily));
   }
 
   const interest = cardInterestTotal(model, model.forecastStart, addMonths(model.forecastStart, 12), false) / 12;

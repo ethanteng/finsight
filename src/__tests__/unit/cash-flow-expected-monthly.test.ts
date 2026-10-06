@@ -229,6 +229,41 @@ describe('expectedSpendingByCategory', () => {
     expect(interest.sources).toEqual([{ kind: 'projected_interest', monthly: interest.monthly }]);
   });
 
+  it('keeps the residual transactions when account floors leave only an Uncategorized typical rate', () => {
+    // A grocery purchase on checking and a larger grocery refund on the card:
+    // the category nets negative, but checking's floor keeps a positive typical
+    // rate that lands in Uncategorized.
+    const paychecks = ['2026-06-15', '2026-06-29', '2026-07-13', '2026-07-27', '2026-08-10', '2026-08-24', '2026-09-07', '2026-09-21']
+      .map(date => tx('checking', date, 'income', 2500, 'ACME CORP', { merchant_name: 'ACME CORP' }));
+    const rent = ['2026-07-01', '2026-08-01', '2026-09-01']
+      .map(date => tx('checking', date, 'expense', 2000, 'Oak Street Apartments', {
+        merchant_name: 'Oak Street Apartments',
+        personal_finance_category: { primary: 'RENT_AND_UTILITIES', detailed: 'RENT_AND_UTILITIES_RENT' },
+      }));
+    const groceries = [
+      tx('checking', '2026-08-10', 'expense', 100, 'Safeway', {
+        merchant_name: 'Safeway',
+        personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_GROCERIES' },
+      }),
+      tx('card', '2026-08-12', 'refund', 150, 'Safeway', {
+        merchant_name: 'Safeway',
+        personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_GROCERIES' },
+      }),
+    ];
+    const built = model({ transactions: [...paychecks, ...rent, ...groceries] });
+    expect(built.typical.dailySpending).toBeGreaterThan(0);
+    expect([...built.typicalSpendingByCategory.values()].every(part => part.daily <= 0)).toBe(true);
+
+    const uncategorized = expectedSpendingByCategory(built)!.find(category => category.label === 'Uncategorized')!;
+    expect(uncategorized.monthly).toBeGreaterThan(0);
+    expect(uncategorized.sources).toHaveLength(1);
+    const typical = uncategorized.sources[0];
+    if (typical.kind !== 'typical') throw new Error(`expected typical spending, got ${typical.kind}`);
+    expect(typical.transactionCount).toBe(2);
+    expect(typical.transactions.map(transaction => transaction.amount).sort((a, b) => a - b)).toEqual([-150, 100]);
+    expect(typical.total).toBe(-50);
+  });
+
   it('follows what the user left out and what they kept', () => {
     const rentLeftOut = expectedSpendingByCategory(model({
       transactions: categorized,
