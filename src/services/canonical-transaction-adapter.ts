@@ -159,6 +159,13 @@ export function resolveCanonicalTransactionType(transaction: any): CanonicalTran
   return null;
 }
 
+/** Which way a type moves the user's cash: in, out, or neither (an adjustment, a split). */
+export function cashFlowDirection(type: CanonicalTransactionType): 'in' | 'out' | null {
+  if (INFLOW_TYPES.has(type)) return 'in';
+  if (OUTFLOW_TYPES.has(type)) return 'out';
+  return null;
+}
+
 export function canonicalCashFlowAmount(
   amount: number,
   type: CanonicalTransactionType

@@ -4,6 +4,7 @@ import { getPrismaClient } from '../prisma-client';
 import {
   findMatchingSnapshotTransactions,
   findSnapshotTransaction,
+  moneyDirection,
   patchSnapshotTransactionCategories,
   patchSnapshotTransactionCategory,
   providerCategoryFromTransaction,
@@ -46,7 +47,9 @@ router.get('/:transactionId/matches', requireAuth, async (req: AuthenticatedRequ
     if (!found) {
       return res.status(404).json({ success: false, error: 'Transaction not found' });
     }
-    res.json({ success: true, data: { count: found.matches.length } });
+    // The direction lets the page say which way the matches go, which the
+    // amount's sign can't: card purchases are stored positive.
+    res.json({ success: true, data: { count: found.matches.length, direction: moneyDirection(found.target) } });
   } catch (error) {
     console.error('Failed to find matching transactions:', error);
     res.status(500).json({ success: false, error: 'Failed to find matching transactions' });

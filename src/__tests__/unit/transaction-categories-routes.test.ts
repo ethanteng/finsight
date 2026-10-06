@@ -33,13 +33,13 @@ app.use('/api/transaction-categories', transactionCategoryRoutes);
 
 const computedAt = new Date('2026-10-01T00:00:00.000Z');
 const snapshotTransactions = () => [
-  { transaction_id: 'txn-1', name: 'VENMO PAYMENT 1234', merchant_name: 'Venmo', amount: -1200, category: ['TRANSFER_OUT'] },
-  { transaction_id: 'txn-2', name: 'VENMO PAYMENT 5678', merchant_name: 'Venmo', amount: -1200, category: ['TRANSFER_OUT'] },
+  { transaction_id: 'txn-1', name: 'VENMO PAYMENT 1234', merchant_name: 'Venmo', amount: -1200, category: ['TRANSFER_OUT'], transaction_type: 'transfer_out' },
+  { transaction_id: 'txn-2', name: 'VENMO PAYMENT 5678', merchant_name: 'Venmo', amount: -1200, category: ['TRANSFER_OUT'], transaction_type: 'transfer_out' },
   // Already set by the user: keeps the provider category it had then.
-  { transaction_id: 'txn-3', name: 'VENMO PAYMENT 9012', merchant_name: 'Venmo', amount: -1200, category: ['RENT_AND_UTILITIES'], category_source: 'user' },
+  { transaction_id: 'txn-3', name: 'VENMO PAYMENT 9012', merchant_name: 'Venmo', amount: -1200, category: ['RENT_AND_UTILITIES'], category_source: 'user', transaction_type: 'expense' },
   // Money a friend sent: not the same as paying someone.
-  { transaction_id: 'txn-4', name: 'VENMO CASHOUT', merchant_name: 'Venmo', amount: 60, category: ['TRANSFER_IN'] },
-  { transaction_id: 'txn-5', name: 'Safeway', merchant_name: 'Safeway', amount: -82.1, category: ['FOOD_AND_DRINK'] },
+  { transaction_id: 'txn-4', name: 'VENMO CASHOUT', merchant_name: 'Venmo', amount: 60, category: ['TRANSFER_IN'], transaction_type: 'transfer_in' },
+  { transaction_id: 'txn-5', name: 'Safeway', merchant_name: 'Safeway', amount: -82.1, category: ['FOOD_AND_DRINK'], transaction_type: 'expense' },
 ];
 
 beforeEach(() => {
@@ -59,7 +59,7 @@ describe('GET /api/transaction-categories/:transactionId/matches', () => {
   it('counts the other transactions with the same payee, money moving the same way', async () => {
     const response = await request(app).get('/api/transaction-categories/txn-1/matches');
     expect(response.status).toBe(200);
-    expect(response.body.data).toEqual({ count: 2 });
+    expect(response.body.data).toEqual({ count: 2, direction: 'out' });
   });
 
   it('is a 404 for a transaction the snapshot does not have', async () => {

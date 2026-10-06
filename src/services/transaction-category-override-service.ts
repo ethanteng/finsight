@@ -1,5 +1,6 @@
 import { getPrismaClient } from '../prisma-client';
 import { counterpartyKey } from '../cash-flow/ledger';
+import { cashFlowDirection, resolveCanonicalTransactionType } from './canonical-transaction-adapter';
 import { canonicalTypeForCategory } from './transaction-category-taxonomy';
 
 /**
@@ -227,29 +228,50 @@ export async function findSnapshotTransactionCategory(
 }
 
 /**
+ * Which way a transaction moves the user's cash, read from its cash-flow type
+ * rather than its amount: a card account stores purchases and refunds alike as
+ * positive, the opposite of a bank account, so the sign says nothing on its own.
+ * Null when the type has no direction or can't be told.
+ */
+export function moneyDirection(transaction: any): 'in' | 'out' | null {
+  const type = resolveCanonicalTransactionType(transaction);
+  return type ? cashFlowDirection(type) : null;
+}
+
+/** Investment activity, from any provider: SnapTrade rows carry a plain `transaction_id`. */
+function isInvestmentActivity(transaction: any): boolean {
+  return Boolean(
+    transaction?.investment_transaction_id
+      || transaction?.isInvestmentTransaction
+      || transaction?.snapTradeData
+      || transaction?.source === 'snaptrade'
+  );
+}
+
+/**
  * The other transactions a category edit can be applied to along with this one:
  * the same payee, keyed the way the cash-flow forecast groups a payee's
  * transactions, with money moving the same way, and the same kind of activity
  * (banking or investment). Direction matters because one payee can be both: an
  * edit to outgoing Venmo payments should not recategorize money friends sent,
- * and a merchant's refunds keep their own category. Only the sign is compared,
- * so it holds whichever sign convention the provider uses.
+ * and a merchant's refunds keep their own category. A transaction whose
+ * direction can't be told matches nothing, rather than risk mixing the two.
  *
  * Transactions without a provider id cannot carry an override and are skipped,
  * as is everything when the payee has no name to match on.
  */
 export function matchingTransactions(transactions: readonly any[], target: any): any[] {
   const key = counterpartyKey(target?.merchant_name, target?.name);
-  if (!key) return [];
+  const direction = moneyDirection(target);
+  if (!key || !direction) return [];
   const targetId = resolveProviderTransactionId(target);
-  const sign = Math.sign(Number(target?.amount) || 0);
-  const investment = Boolean(target?.investment_transaction_id);
+  const investment = isInvestmentActivity(target);
   return transactions.filter(transaction => {
     const id = resolveProviderTransactionId(transaction);
     return id !== null
       && id !== targetId
-      && Boolean(transaction?.investment_transaction_id) === investment
-      && Math.sign(Number(transaction?.amount) || 0) === sign
+      && isInvestmentActivity(transaction) === investment
+      && moneyDirection(transaction) === direction
       && counterpartyKey(transaction?.merchant_name, transaction?.name) === key;
   });
 }

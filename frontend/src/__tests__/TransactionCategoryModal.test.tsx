@@ -22,14 +22,14 @@ const venmo: TransactionCategorySubject = {
   isUserCategory: false,
 };
 
-function mockFetch(matchCount: number) {
+function mockFetch(matchCount: number, direction: 'in' | 'out' = 'out') {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, init });
     let body: unknown = {};
     if (url.endsWith('/options')) body = { success: true, data: options };
-    else if (url.endsWith('/matches')) body = { success: true, data: { count: matchCount } };
+    else if (url.endsWith('/matches')) body = { success: true, data: { count: matchCount, direction } };
     else if (init?.method === 'PUT') {
       const sent = JSON.parse(String(init.body));
       body = {
@@ -96,8 +96,9 @@ describe('TransactionCategoryModal', () => {
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 
-  it('says which way the money goes for money coming in', async () => {
-    mockFetch(4);
+  it('says which way the money goes as the server reports it, not by the sign', async () => {
+    // A card refund is stored positive, like a card purchase; only the server can tell them apart.
+    mockFetch(4, 'in');
     render(
       <TransactionCategoryModal
         transaction={{ ...venmo, amount: 60, category: ['TRANSFER_IN'] }}
@@ -107,5 +108,14 @@ describe('TransactionCategoryModal', () => {
     );
     expect(await screen.findByRole('checkbox', { name: /Also apply to 4 other transactions with Venmo/ })).toBeInTheDocument();
     expect(screen.getByText(/Only money coming in\. Payments to them keep/)).toBeInTheDocument();
+  });
+
+  it('says money going out for a card purchase stored as a positive amount', async () => {
+    mockFetch(3, 'out');
+    render(
+      <TransactionCategoryModal transaction={{ ...venmo, amount: 45 }} onClose={jest.fn()} onSaved={jest.fn()} />
+    );
+    await screen.findByRole('checkbox');
+    expect(screen.getByText(/Only money going out\./)).toBeInTheDocument();
   });
 });

@@ -278,28 +278,34 @@ describe('snapshot patching', () => {
 });
 
 describe('transactions a category edit can also apply to', () => {
-  const target = { transaction_id: 'txn-1', name: 'SAFEWAY #1234 SAN FRANCISCO', merchant_name: 'Safeway', amount: -82.1 };
+  // A debit-card purchase, stored negative like all money out of a bank account.
+  const target = { transaction_id: 'txn-1', name: 'SAFEWAY #1234 SAN FRANCISCO', merchant_name: 'Safeway', amount: -82.1, transaction_type: 'expense' };
 
-  it('matches the same payee with money moving the same way', () => {
+  it('matches the same payee with money moving the same way, whatever sign the account stores', () => {
     const others = [
-      { transaction_id: 'txn-2', name: 'SAFEWAY #567', merchant_name: 'Safeway', amount: -45 },
-      // Store numbers differ, but no merchant name: the description still names the payee.
-      { transaction_id: 'txn-3', name: 'SAFEWAY 0042', amount: -12.5 },
-      // A refund from the same store keeps its own category.
-      { transaction_id: 'txn-4', name: 'SAFEWAY REFUND', merchant_name: 'Safeway', amount: 20 },
-      { transaction_id: 'txn-5', name: 'TRADER JOES', merchant_name: 'Trader Joe’s', amount: -40 },
+      { transaction_id: 'txn-2', name: 'SAFEWAY #567', merchant_name: 'Safeway', amount: -45, transaction_type: 'expense' },
+      // A credit-card purchase is stored positive, but it is money out all the same.
+      { transaction_id: 'txn-3', name: 'SAFEWAY 0042', amount: 12.5, transaction_type: 'expense' },
+      // A card refund is positive too, and it is money in: it keeps its own category.
+      { transaction_id: 'txn-4', name: 'SAFEWAY', merchant_name: 'Safeway', amount: 20, transaction_type: 'refund' },
+      { transaction_id: 'txn-5', name: 'TRADER JOES', merchant_name: 'Trader Joe’s', amount: -40, transaction_type: 'expense' },
       // No provider id, so it cannot carry an override.
-      { name: 'SAFEWAY', merchant_name: 'Safeway', amount: -9 },
-      // Investment activity is never matched against banking.
-      { investment_transaction_id: 'inv-1', name: 'Safeway', amount: -100 },
+      { name: 'SAFEWAY', merchant_name: 'Safeway', amount: -9, transaction_type: 'expense' },
+      // Investment activity is never matched against banking, from either provider.
+      { investment_transaction_id: 'inv-1', name: 'Safeway', amount: -100, transaction_type: 'buy' },
+      { transaction_id: 'snap-1', name: 'Safeway', amount: -100, transaction_type: 'expense', source: 'snaptrade', isInvestmentTransaction: true },
     ];
     const matches = matchingTransactions([target, ...others], target);
     expect(matches.map(transaction => transaction.transaction_id)).toEqual(['txn-2', 'txn-3']);
   });
 
-  it('matches nothing for a payee with no name', () => {
-    const unnamed = { transaction_id: 'txn-1', name: '', amount: -5 };
-    expect(matchingTransactions([unnamed, { transaction_id: 'txn-2', name: '', amount: -5 }], unnamed)).toEqual([]);
+  it('matches nothing when the payee has no name or the direction can’t be told', () => {
+    const unnamed = { transaction_id: 'txn-1', name: '', amount: -5, transaction_type: 'expense' };
+    expect(matchingTransactions([unnamed, { ...unnamed, transaction_id: 'txn-2' }], unnamed)).toEqual([]);
+
+    // A transfer with no in or out detail has no direction to match on.
+    const transfer = { transaction_id: 'txn-1', name: 'ZELLE', amount: -50, personal_finance_category: { primary: 'TRANSFER', detailed: 'TRANSFER' } };
+    expect(matchingTransactions([transfer, { ...transfer, transaction_id: 'txn-2' }], transfer)).toEqual([]);
   });
 });
 

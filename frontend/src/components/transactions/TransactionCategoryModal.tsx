@@ -58,6 +58,9 @@ export default function TransactionCategoryModal({
   // How many other transactions the edit could also apply to; null until known,
   // and left null if the count can't be had, which just hides the option.
   const [matchCount, setMatchCount] = useState<number | null>(null);
+  // Which way the matches move money, from the server: the amount's sign can't
+  // say, since a card account stores purchases and refunds alike as positive.
+  const [matchDirection, setMatchDirection] = useState<'in' | 'out' | null>(null);
   const [applyToMatching, setApplyToMatching] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const primaryRef = useRef<HTMLSelectElement>(null);
@@ -96,7 +99,11 @@ export default function TransactionCategoryModal({
         if (!response.ok) return;
         const body = await response.json();
         const count = Number(body?.data?.count);
-        if (!cancelled && Number.isInteger(count) && count > 0) setMatchCount(count);
+        const direction = body?.data?.direction;
+        if (!cancelled && Number.isInteger(count) && count > 0) {
+          setMatchCount(count);
+          setMatchDirection(direction === 'in' || direction === 'out' ? direction : null);
+        }
       } catch {
         // Without a count the option is simply not offered.
       }
@@ -360,10 +367,9 @@ export default function TransactionCategoryModal({
                   Also apply to {matchCount} other {matchCount === 1 ? 'transaction' : 'transactions'} with {transaction.name}
                 </span>
                 <span className="mt-0.5 block text-xs leading-5 text-gray-400">
-                  {transaction.amount < 0
-                    ? 'Only money going out. Refunds and other money coming in from them keep their own categories.'
-                    : 'Only money coming in. Payments to them keep their own categories.'}
-                  {' '}Each one can still be restored on its own.
+                  {matchDirection === 'out' && 'Only money going out. Refunds and other money coming in from them keep their own categories. '}
+                  {matchDirection === 'in' && 'Only money coming in. Payments to them keep their own categories. '}
+                  Each one can still be restored on its own.
                 </span>
               </span>
             </label>
