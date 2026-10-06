@@ -1024,6 +1024,39 @@ export interface SpendingCategory {
 }
 
 /**
+ * Whole cents for `values` that add up to `total` exactly. Each is floored to
+ * a cent, then the ones that lost the most take the spare cents (or give them
+ * back when the floors already overshoot). Independent `roundCents` on each
+ * part would leave the category total a cent or two off the expected month.
+ */
+function roundCentsToTotal(values: readonly number[], total: number): number[] {
+  const cents = values.map(value => Math.floor((value + Number.EPSILON) * 100));
+  const byRemainder = values
+    .map((value, index) => ({ index, remainder: (value + Number.EPSILON) * 100 - cents[index] }))
+    .sort((left, right) => right.remainder - left.remainder || left.index - right.index);
+  let left = Math.round((total + Number.EPSILON) * 100) - cents.reduce((sum, value) => sum + value, 0);
+  for (let step = 0; left !== 0 && byRemainder.length > 0; step += 1) {
+    if (left > 0) {
+      cents[byRemainder[step % byRemainder.length].index] += 1;
+      left -= 1;
+      continue;
+    }
+    // Never push a line below $0: skip zeros and stop if nothing can give back.
+    let gave = false;
+    for (let probe = 0; probe < byRemainder.length; probe += 1) {
+      const index = byRemainder[byRemainder.length - 1 - ((step + probe) % byRemainder.length)].index;
+      if (cents[index] <= 0) continue;
+      cents[index] -= 1;
+      left += 1;
+      gave = true;
+      break;
+    }
+    if (!gave) break;
+  }
+  return cents.map(value => value / 100);
+}
+
+/**
  * The expected month's spending by category, largest first: each running
  * regular bill at its monthly rate in its own category, the typical rate split
  * the way the basis spent it, and the interest the usual pace runs up. Together
@@ -1033,6 +1066,9 @@ export interface SpendingCategory {
  */
 export function expectedSpendingByCategory(model: CashFlowModel): SpendingCategory[] | null {
   if (!model.forecast.available || model.typical.spendingSource === 'override') return null;
+  const spending = expectedMonthly(model).spending;
+  if (spending === null) return null;
+
   const byKey = new Map<string, SpendingCategory>();
   const add = (label: string, monthly: number) => {
     const key = labelKey(label);
@@ -1062,10 +1098,15 @@ export function expectedSpendingByCategory(model: CashFlowModel): SpendingCatego
 
   add(CARD_INTEREST_CATEGORY, cardInterestTotal(model, model.forecastStart, addMonths(model.forecastStart, 12), false) / 12);
 
-  return [...byKey.values()]
-    .map(category => ({ label: category.label, monthly: roundCents(category.monthly) }))
+  const raw = [...byKey.values()]
     .filter(category => category.monthly > 0)
     .sort((left, right) => right.monthly - left.monthly || left.label.localeCompare(right.label));
+  if (raw.length === 0) return spending > 0 ? [{ label: 'Uncategorized', monthly: spending }] : [];
+
+  const monthlies = roundCentsToTotal(raw.map(category => category.monthly), spending);
+  return raw
+    .map((category, index) => ({ label: category.label, monthly: monthlies[index] }))
+    .filter(category => category.monthly > 0);
 }
 
 

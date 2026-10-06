@@ -79,7 +79,7 @@ The Finances page shows the expected month as Monthly Income and Monthly Expense
 - **The typical rate:** split the way the basis spent it, with refunds netted inside their own category. The categories are scaled to the rate itself rather than summed, for two reasons. A category whose refunds outweighed its purchases has nothing to show. An account's rate is held at zero rather than going below it.
 - **Card interest:** every card's interest goes in one category, "Credit card interest". That covers interest projected from an APR at the usual pace and interest charges carried forward for a card with no terms, whatever category the bank gave the charge.
 
-Together the categories are `expectedMonthly(model).spending`, each rounded to the cent. A spending override has no breakdown, because it says how much is spent but not on what. Neither does an unavailable forecast. In both cases `usualSpending` is null, and under an override the page says why.
+Together the categories add up to `expectedMonthly(model).spending` to the cent (spare cents go to the parts that lost the most when floored). A spending override has no breakdown, because it says how much is spent but not on what. Neither does an unavailable forecast. In both cases `usualSpending` is null, and under an override the page says why.
 
 The page lists the eight largest categories and folds the rest into one line, unless only one would be folded. It rounds the dollars and percentages of the lines it lists to the month's total and to 100% together, so they add up.
 

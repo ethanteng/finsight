@@ -177,8 +177,8 @@ describe('expectedSpendingByCategory', () => {
     // and the stopped gym are not part of a usual month.
     expect(categories.find(category => category.label === 'Groceries')!.monthly
       + categories.find(category => category.label === 'Coffee')!.monthly).toBeCloseTo(report.baseline.typicalMonthlySpending, 1);
-    // Each category is rounded to the cent on its own.
-    expect(Math.abs(sum(categories) - expectedMonthly(built).spending!)).toBeLessThan(0.05);
+    // Rounded together, the categories add up to the expected month to the cent.
+    expect(sum(categories)).toBe(expectedMonthly(built).spending);
     expect(report.usualSpending).toEqual({ monthly: expectedMonthly(built).spending, categories });
   });
 
@@ -210,7 +210,7 @@ describe('expectedSpendingByCategory', () => {
       .filter(posting => posting.date < end)
       .reduce((total, posting) => total + posting.amount, 0);
     expect(projectedCategories.find(category => category.label === CARD_INTEREST_CATEGORY)!.monthly).toBeCloseTo(interest / 12, 2);
-    expect(Math.abs(sum(projectedCategories) - expectedMonthly(projected).spending!)).toBeLessThan(0.05);
+    expect(sum(projectedCategories)).toBe(expectedMonthly(projected).spending);
 
     // Without terms, the charges themselves carry forward, under the same name
     // rather than the bank's category for them.
