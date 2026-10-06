@@ -18,33 +18,54 @@ interface BreakdownLine {
   value: number;
 }
 
+/** A breakdown line while it is built, with the figure it was rounded from. */
+type BreakdownPart = BreakdownLine & { exact: number };
+
+function part(label: string, exact: number, detail?: string): BreakdownPart {
+  return { label, detail, exact, value: Math.round(exact) };
+}
+
 /**
  * The parts that add up to the card's headline: what happened so far (only
- * when the headline includes it), the forecast before any plans, and what the
- * plans change. Each part is rounded and the forecast part takes the rounding
- * remainder, so the figures shown always sum to the headline shown.
+ * when the headline includes it), the forecast's income and spending before
+ * any plans, and what the plans change. Each part is rounded on its own and one
+ * part takes the rounding remainder, so the figures shown always sum to the
+ * headline shown.
  */
 function breakdownLines(highlight: CashFlowHighlight, forecastStart: string): BreakdownLine[] {
   const headline = highlight.projected ?? highlight.remaining;
   if (!headline) return [];
   const lastDay = lastIncludedDay(highlight.endExclusive);
   const forecastFrom = forecastStart > highlight.start ? forecastStart : highlight.start;
-  const actual = highlight.projected && highlight.actualToDate ? Math.round(highlight.actualToDate.net) : null;
-  const planned = Math.round(highlight.planned.net);
-  const lines: BreakdownLine[] = [];
-  if (actual !== null) {
-    const actualLast = forecastFrom <= lastDay ? lastIncludedDay(forecastFrom) : lastDay;
-    lines.push({ label: 'So far', detail: `Actual · ${formatShortRange(highlight.start, actualLast)}`, value: actual });
+  const forecastInWindow = forecastFrom <= lastDay;
+
+  let actual: BreakdownPart | null = null;
+  if (highlight.projected && highlight.actualToDate) {
+    const actualLast = forecastInWindow ? lastIncludedDay(forecastFrom) : lastDay;
+    actual = part('So far', highlight.actualToDate.net, `Actual · ${formatShortRange(highlight.start, actualLast)}`);
   }
-  if (forecastFrom <= lastDay) {
-    lines.push({
-      label: 'Usual income and spending',
-      detail: forecastFrom > highlight.start ? `Forecast · ${formatShortRange(forecastFrom, lastDay)}` : undefined,
-      value: Math.round(headline.net) - (actual ?? 0) - planned,
-    });
+  let usual: BreakdownPart[] = [];
+  if (forecastInWindow && highlight.remaining) {
+    const detail = forecastFrom > highlight.start ? `Forecast · ${formatShortRange(forecastFrom, lastDay)}` : undefined;
+    usual = [
+      part('Usual income', highlight.remaining.income - highlight.planned.income, detail),
+      part('Usual spending', -(highlight.remaining.spending - highlight.planned.spending), detail),
+    ];
   }
-  if (planned !== 0) lines.push({ label: 'Planned events', value: planned });
-  return lines;
+  const planned = Math.round(highlight.planned.net) !== 0 ? part('Planned events', highlight.planned.net) : null;
+  const parts = [actual, ...usual, planned].filter((p): p is BreakdownPart => p !== null);
+
+  // An estimate takes the remainder before a fact: the larger usual part, then
+  // the plans, then what was observed. A line showing $0 takes it only when
+  // every line does, so an empty side doesn't turn into a stray dollar.
+  const remainder = Math.round(headline.net) - parts.reduce((sum, p) => sum + p.value, 0);
+  if (remainder !== 0) {
+    const byMagnitude = [...usual].sort((a, b) => Math.abs(b.exact) - Math.abs(a.exact));
+    const candidates = [...byMagnitude, planned, actual].filter((p): p is BreakdownPart => p !== null);
+    const target = candidates.find(p => p.value !== 0) ?? candidates[0];
+    if (target) target.value += remainder;
+  }
+  return parts.map(({ label, detail, value }) => ({ label, detail, value }));
 }
 
 function Line({ label, detail, value }: BreakdownLine) {
