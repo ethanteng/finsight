@@ -34,6 +34,24 @@ const pace = (
 });
 const usualPayments = { nextPayment: { date: '2026-10-20', amount: 1520.83 }, paymentsTwelveMonths: 7349.62 };
 
+const rentBill = {
+  kind: 'bill' as const, streamId: 'spending:rent', label: 'Oak Street Apartments', cadence: 'monthly' as const,
+  amount: 2000, monthly: 2000, transactionCount: 5,
+  transactions: ['2026-10-01', '2026-09-01', '2026-08-01', '2026-07-01', '2026-06-01']
+    .map(date => ({ id: `rent-${date}`, date, label: 'Oak Street Apartments', amount: 2000 })),
+};
+// Twelve grocery runs, one a week, the latest first; one was a refund.
+const groceryRuns = Array.from({ length: 12 }, (_, index) => ({
+  id: `grocery-${index}`,
+  date: `2026-${index < 2 ? '10' : index < 6 ? '09' : '08'}-${String(28 - (index % 4) * 7).padStart(2, '0')}`,
+  label: index % 2 === 0 ? 'Safeway' : 'Trader Joes',
+  amount: index === 3 ? -42.5 : 280.85,
+}));
+const groceriesTypical = {
+  kind: 'typical' as const, monthly: 1090.2, total: 3046.85, from: '2026-07-17', through: '2026-10-14',
+  transactions: groceryRuns, transactionCount: 12,
+};
+
 function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
   return {
     version: 1,
@@ -60,10 +78,10 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
     usualSpending: {
       monthly: 3115.49,
       categories: [
-        { label: 'Rent', monthly: 2000 },
-        { label: 'Groceries', monthly: 1090.2 },
-        { label: 'Tv And Movies', monthly: 15.49 },
-        { label: 'Credit card interest', monthly: 9.8 },
+        { label: 'Rent', monthly: 2000, sources: [rentBill] },
+        { label: 'Groceries', monthly: 1090.2, sources: [groceriesTypical] },
+        { label: 'Tv And Movies', monthly: 15.49, sources: [] },
+        { label: 'Credit card interest', monthly: 9.8, sources: [{ kind: 'projected_interest', monthly: 9.8 }] },
       ],
     },
     baseline: {
@@ -139,9 +157,13 @@ function mockFetch(handler: Handler) {
 /** The usual spending chart, row by row: category, amount and share. */
 function spendingRows(): string[][] {
   const list = screen.getByRole('list', { name: 'Usual spending by category, largest first' });
-  return within(list).getAllByRole('listitem').map(item => Array.from(item.children)
-    .filter(cell => cell.getAttribute('aria-hidden') !== 'true')
-    .map(cell => cell.textContent!));
+  return Array.from(list.children).map(item => {
+    // A category's cells are in its button; the folded line has no button.
+    const row = item.firstElementChild?.tagName === 'BUTTON' ? item.firstElementChild : item;
+    return Array.from(row.children)
+      .filter(cell => cell.getAttribute('aria-hidden') !== 'true')
+      .map(cell => cell.textContent!);
+  });
 }
 
 /** A highlight card's breakdown, row by row: label, its detail line if any, and amount. */
@@ -291,12 +313,13 @@ describe('CashFlowPageClient', () => {
         // Rounded on its own it would be $9; it takes the dollar the total needs.
         ['Credit card interest', '$10', '<1%'],
       ]);
-      expect(within(section).queryByRole('button')).not.toBeInTheDocument();
+      // Four categories: nothing to fold.
+      expect(within(section).queryByRole('button', { name: /^Show all/ })).not.toBeInTheDocument();
     });
 
     it('folds a long tail into one line, and lists it on request', async () => {
       const categories = ['Rent', 'Groceries', 'Restaurants', 'Gas', 'Utilities', 'Insurance', 'Coffee', 'Gym', 'Books', 'Parking', 'Gifts']
-        .map((label, index) => ({ label, monthly: 1100 - index * 100 }));
+        .map((label, index) => ({ label, monthly: 1100 - index * 100, sources: [] }));
       mockFetch(url => (url.includes('/api/cash-flow?') ? {
         status: 200,
         body: report({ usualSpending: { monthly: 6600, categories } }),
@@ -313,6 +336,50 @@ describe('CashFlowPageClient', () => {
       expect(spendingRows().map(row => row[0])).toEqual(categories.map(category => category.label));
       fireEvent.click(screen.getByRole('button', { name: 'Show the top 8' }));
       expect(spendingRows()).toHaveLength(9);
+    });
+
+    it('opens a category on what it is made of and the transactions behind it', async () => {
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'Where your usual spending goes' });
+
+      // A regular bill: the payee, each payment, and its latest payments.
+      const rent = screen.getByRole('button', { name: /^Rent/ });
+      expect(rent).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.click(rent);
+      expect(rent).toHaveAttribute('aria-expanded', 'true');
+      const rentDetails = document.getElementById(rent.getAttribute('aria-controls')!)!;
+      expect(within(rentDetails).getByText('Oak Street Apartments')).toBeInTheDocument();
+      expect(within(rentDetails).getByText(/regular bill, \$2,000\.00 every month/)).toBeInTheDocument();
+      expect(within(rentDetails).getByText('$2,000 a month')).toBeInTheDocument();
+      expect(within(rentDetails).getByText('Oct 1, 2026')).toBeInTheDocument();
+      expect(within(rentDetails).getAllByRole('listitem')).toHaveLength(5);
+
+      // One category is open at a time.
+      const groceries = screen.getByRole('button', { name: /^Groceries/ });
+      fireEvent.click(groceries);
+      expect(rent).toHaveAttribute('aria-expanded', 'false');
+      const groceryDetails = document.getElementById(groceries.getAttribute('aria-controls')!)!;
+      // The part adds up to the $1,090 the row shows.
+      expect(within(groceryDetails).getByText('$1,090 a month')).toBeInTheDocument();
+      expect(within(groceryDetails).getByText('12 transactions from Jul 17, 2026 to Oct 14, 2026 add up to $3,046.85.')).toBeInTheDocument();
+      expect(within(groceryDetails).getAllByRole('listitem')).toHaveLength(10);
+      // A refund nets out of the category.
+      expect(within(groceryDetails).getByText('−$42.50')).toBeInTheDocument();
+      fireEvent.click(within(groceryDetails).getByRole('button', { name: 'Show all 12' }));
+      expect(within(groceryDetails).getAllByRole('listitem')).toHaveLength(12);
+      expect(within(groceryDetails).getAllByText('Safeway')).toHaveLength(6);
+
+      // Projected interest has nothing charged behind it yet, and says so.
+      const interest = screen.getByRole('button', { name: /^Credit card interest/ });
+      fireEvent.click(interest);
+      const interestDetails = document.getElementById(interest.getAttribute('aria-controls')!)!;
+      expect(within(interestDetails).getByText('Projected card interest')).toBeInTheDocument();
+      expect(within(interestDetails).getByText(/no transactions are behind it/)).toBeInTheDocument();
+
+      fireEvent.click(interest);
+      expect(interest).toHaveAttribute('aria-expanded', 'false');
+      expect(document.getElementById('usual-spending-category-3')).toBeNull();
     });
 
     it('says why there is no breakdown when the Finances page sets spending', async () => {
