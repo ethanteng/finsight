@@ -5,7 +5,8 @@ import CohortReportPanel from '@/components/admin/CohortReportPanel';
 
 const member = {
   startedAt: '2026-09-21T09:00:00.000Z',
-  signedUpAt: '2026-09-21T09:00:00.000Z',
+  signedUpAt: '2026-08-02T09:00:00.000Z',
+  trialStartedAt: '2026-09-21T09:00:00.000Z',
   firstChargeAt: null,
   subscriptionStatus: 'inactive',
   tier: 'premium',
@@ -109,7 +110,12 @@ describe('CohortReportPanel', () => {
 
     const detail = screen.getByLabelText('Week of Sep 21, 2026 users');
     expect(within(detail).getByText('Week of Sep 21, 2026: 2 users')).toBeInTheDocument();
+    // A trial cohort leads with the trial start, then the other milestones.
+    expect(within(detail).getAllByRole('columnheader').slice(0, 5).map(cell => cell.textContent))
+      .toEqual(['User', 'Trial started', 'Signed up', 'First charge', 'Plan now']);
     const alice = within(detail).getByText('alice@example.com').closest('tr')!;
+    expect(within(alice).getByText('Sep 21, 2026')).toBeInTheDocument();
+    expect(within(alice).getByText('Aug 2, 2026')).toBeInTheDocument();
     expect(within(alice).getByText('3')).toBeInTheDocument();
     expect(within(alice).getByTitle('2 asked, 2 needed')).toHaveClass('bg-[#397052]');
     const bob = within(detail).getByText('bob@example.com').closest('tr')!;
@@ -125,6 +131,9 @@ describe('CohortReportPanel', () => {
     render(<CohortReportPanel kind="engagement" apiUrl="https://api.example.test" getAuthHeaders={headers} />);
     await screen.findByRole('button', { name: 'Week of Sep 21, 2026' });
 
+    expect(screen.getByRole('button', { name: 'Trials' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Signups' }));
+    await waitFor(() => expect(requestedUrls().at(-1)!.searchParams.get('segment')).toBe('signup'));
     fireEvent.click(screen.getByRole('button', { name: 'Paid' }));
     await waitFor(() => expect(requestedUrls().at(-1)!.searchParams.get('segment')).toBe('paid'));
 

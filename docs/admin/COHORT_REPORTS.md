@@ -9,14 +9,22 @@ Served by `GET /admin/cohorts/engagement` and `GET /admin/cohorts/activation`
 
 ## Who is in a cohort
 
-- **Trials** — every new account, clocked from signup. That covers no-card signups, checkout
-  card trials and admin trials. Most of them carry no trial state at all: a no-card signup is
-  `subscriptionStatus: inactive` with no end date, the same shape as an admin-created account,
-  so signup is the only start every one of them has.
+The **Signups / Trials / Paid** toggle picks which start clocks a cohort. An account that goes
+through all three appears in each, from that start.
+
+- **Signups** — every new account, clocked from account creation.
+- **Trials** — accounts that started a Stripe trial, clocked from the trial's start. That is
+  **Convert to trial** in User Management (`/admin/user-trial`, see `ADMIN_TRIALS.md`) or a
+  checkout card trial. A no-card signup carries no trial state — it is `subscriptionStatus:
+  inactive` with no end date — until it is converted, so a signup converted two weeks in starts
+  its trial clock on the conversion day, and one never converted is only in signup cohorts.
+  The start is `trial_start` from the logged `customer.subscription.*` webhooks, which stays
+  on the subscription after the trial converts or lapses. A trial running now whose webhook
+  was never logged is dated from its `Subscription` row. A finished trial with neither is
+  missed.
 - **Paid** — clocked from the first successful charge above $0, read from the
   `invoice.payment_succeeded` / `invoice.paid` webhooks in `SubscriptionEvent`. The $0
-  invoice that opens a trial does not count. An account that converts appears in both
-  segments, each from the start of that stage.
+  invoice that opens a trial does not count.
 - Accounts in `ADMIN_EMAILS` are left out and counted beside the report.
 - A paying account with no logged charge cannot be placed and is counted as
   `payingWithoutRecordedCharge` rather than guessed at. A Stripe backfill of old invoices
@@ -31,7 +39,7 @@ Months keep the day of month, clamped to shorter months.
 
 A cell counts only members whose period has fully elapsed. A period still in progress is not
 a zero: when part of the cohort has finished it, the share is of those who have (marked `*`);
-when nobody has, the cell is blank.
+when nobody has, it shows a dash.
 
 ### Engagement
 
@@ -48,7 +56,7 @@ account (`calculator_*` origins) are not questions.
 Activation is linking at least one account: a Plaid bank, a SnapTrade brokerage, or a Public
 key that has verified at least once. Manual accounts are not links. The cells are cumulative —
 the share linked by the end of that period — because linking happens once. A link made before
-the member's start (a paid account that linked during its trial) counts from period 1.
+the member's start (a trial or paid account that linked before it started) counts from period 1.
 
 No column records when a user first linked, and disconnecting deletes the rows that did, so
 the first link is reconstructed from what survives:
@@ -56,8 +64,8 @@ the first link is reconstructed from what survives:
 | Provider | Evidence | Date used |
 |---|---|---|
 | Plaid | any `AccessToken` row, including superseded and errored Items; a `plaid-connection-disconnected` history row | earliest of these |
-| SnapTrade | a `SnapTradeUser` row **plus** a sign a brokerage was reached: a SnapTrade account in the snapshot, synced activity, a renamed `snaptrade-` account, or a SnapTrade removal in history | registration, the first step of connecting |
-| Public | a credential that has verified; a renamed `public-` account; a Public connect or removal in history | earliest of these |
+| SnapTrade | a `SnapTradeUser` row **plus** a sign a brokerage was reached: a SnapTrade account in the snapshot, synced activity, a stored `snaptrade-` account row (written on sync), a SnapTrade removal in history, or any Public evidence below — a direct Public key can only be added to an account already linked to Public through SnapTrade | registration, the first step of connecting |
+| Public | a credential that has verified; a stored `public-` account row; a Public connect or removal in history | earliest of these |
 
 So the report undercounts anyone who linked and later removed every connection without a
 provider-specific history row surviving. Recording a first-link date on the user would make

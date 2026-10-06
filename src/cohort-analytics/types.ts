@@ -2,13 +2,15 @@ export const COHORT_GRAINS = ['day', 'week', 'month'] as const;
 export type CohortGrain = typeof COHORT_GRAINS[number];
 
 /**
- * `trial` is every new account, clocked from signup — no-card signups, checkout
- * card trials and admin trials alike, because most of them carry no trial state
- * at all (a no-card signup is `inactive` with no end date). `paid` is clocked
- * from the first successful charge above zero, so an account that converts
- * appears in both, each time from the start of that stage.
+ * Three starts an account can have, each its own clock:
+ * - `signup`: every new account, from account creation.
+ * - `trial`: accounts that began a Stripe trial — "Convert to trial" in the
+ *   admin panel, or a checkout card trial — from the trial's start. A no-card
+ *   signup carries no trial state until it is converted.
+ * - `paid`: from the first successful charge above zero.
+ * An account that goes through all three appears in each, from that start.
  */
-export const COHORT_SEGMENTS = ['trial', 'paid'] as const;
+export const COHORT_SEGMENTS = ['signup', 'trial', 'paid'] as const;
 export type CohortSegment = typeof COHORT_SEGMENTS[number];
 
 export const LINK_SOURCES = ['plaid', 'snaptrade', 'public'] as const;
@@ -33,9 +35,10 @@ export interface EngagementRule {
 export interface CohortMember {
   userId: string;
   email: string;
-  /** Where this member's clock starts: signup for trials, first charge for paid. */
+  /** Where this member's clock starts: the segment's own start. */
   startedAt: Date;
   signedUpAt: Date;
+  trialStartedAt: Date | null;
   firstChargeAt: Date | null;
   subscriptionStatus: string;
   tier: string;
@@ -63,6 +66,7 @@ export interface MemberSummary {
   email: string;
   startedAt: string;
   signedUpAt: string;
+  trialStartedAt: string | null;
   firstChargeAt: string | null;
   subscriptionStatus: string;
   tier: string;

@@ -56,7 +56,7 @@ describe('admin cohort routes', () => {
   });
 
   it.each([
-    ['segment=free', 'segment must be one of trial, paid'],
+    ['segment=free', 'segment must be one of signup, trial, paid'],
     ['cohort=year', 'cohort must be one of day, week, month'],
     ['periods=0', 'periods must be a whole number from 1 to 90'],
     ['cohorts=2.5', 'cohorts must be a whole number from 1 to 90'],

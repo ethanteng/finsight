@@ -1,4 +1,4 @@
-import { firstChargesFromEvents } from '../../cohort-analytics/charges';
+import { addRunningTrials, firstChargesFromEvents, trialStartsFromEvents } from '../../cohort-analytics/stripe-events';
 import { getActivationReport, getEngagementReport } from '../../cohort-analytics/service';
 import { getPrismaClient } from '../../prisma-client';
 
@@ -71,11 +71,38 @@ describe('firstChargesFromEvents', () => {
   });
 });
 
+describe('trialStartsFromEvents', () => {
+  it('dates each user’s first trial from logged subscriptions, then adds running trials never logged', () => {
+    const starts = trialStartsFromEvents(
+      [
+        // Converted to a trial, and still carrying trial_start after it lapsed.
+        { eventData: { object: { id: 'sub_a', customer: 'cus_a', trial_start: seconds('2026-09-10T00:00:00Z') } }, processedAt: now, subscriptionUserId: null },
+        { eventData: { object: { id: 'sub_a2', customer: 'cus_a', trial_start: seconds('2026-09-20T00:00:00Z') } }, processedAt: now, subscriptionUserId: null },
+        { eventData: { object: { id: 'sub_b', customer: { id: 'cus_b' } } }, processedAt: now, subscriptionUserId: null },
+        { eventData: { object: { id: 'sub_c', trial_start: seconds('2026-09-12T00:00:00Z') } }, processedAt: now, subscriptionUserId: 'c' },
+      ],
+      new Map([['cus_a', 'a'], ['cus_b', 'b']]),
+      new Map(),
+    );
+    addRunningTrials(starts, [
+      { userId: 'r', status: 'trialing', createdAt: at('2026-10-01T00:00:05Z'), currentPeriodStart: at('2026-10-01T00:00:00Z') },
+      { userId: 'paying', status: 'active', createdAt: at('2026-09-01T00:00:00Z'), currentPeriodStart: at('2026-09-01T00:00:00Z') },
+      // A logged start is not moved later by the running row.
+      { userId: 'a', status: 'trialing', createdAt: at('2026-09-20T00:00:00Z'), currentPeriodStart: at('2026-09-20T00:00:00Z') },
+    ]);
+    expect(Object.fromEntries([...starts].map(([id, date]) => [id, date.toISOString()]))).toEqual({
+      a: '2026-09-10T00:00:00.000Z',
+      c: '2026-09-12T00:00:00.000Z',
+      r: '2026-10-01T00:00:00.000Z',
+    });
+  });
+});
+
 describe('getEngagementReport', () => {
   const originalAdminEmails = process.env.ADMIN_EMAILS;
   afterEach(() => { process.env.ADMIN_EMAILS = originalAdminEmails; });
 
-  it('builds trial cohorts from signups, without operators, from typed questions only', async () => {
+  it('builds signup cohorts from account creation, without operators, from typed questions only', async () => {
     process.env.ADMIN_EMAILS = 'ops@example.com';
     const prisma = fakePrisma({
       user: {
@@ -88,7 +115,7 @@ describe('getEngagementReport', () => {
       },
     });
 
-    const report = await getEngagementReport({ ...weekly, segment: 'trial' }, { questions: 1, per: 'week' }, now);
+    const report = await getEngagementReport({ ...weekly, segment: 'signup' }, { questions: 1, per: 'week' }, now);
 
     expect(prisma.conversation.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ userId: { in: ['a'] }, origin: 'user' }),
@@ -102,11 +129,15 @@ describe('getEngagementReport', () => {
 
   it('builds paid cohorts from first charges and counts paying accounts it cannot place', async () => {
     fakePrisma({
-      $queryRaw: jest.fn().mockResolvedValue([
-        invoiceEvent({ amount_paid: 900, status_transitions: { paid_at: seconds('2026-09-29T00:00:00Z') } }, 'p'),
-        // Charged before the window opened.
-        invoiceEvent({ amount_paid: 900, status_transitions: { paid_at: seconds('2026-08-01T00:00:00Z') } }, 'old'),
-      ]),
+      $queryRaw: jest.fn()
+        .mockResolvedValueOnce([
+          invoiceEvent({ amount_paid: 900, status_transitions: { paid_at: seconds('2026-09-29T00:00:00Z') } }, 'p'),
+          // Charged before the window opened.
+          invoiceEvent({ amount_paid: 900, status_transitions: { paid_at: seconds('2026-08-01T00:00:00Z') } }, 'old'),
+        ])
+        .mockResolvedValueOnce([
+          { eventData: { object: { id: 'sub_p', trial_start: seconds('2026-08-30T00:00:00Z') } }, processedAt: now, subscriptionUserId: 'p' },
+        ]),
       user: {
         findMany: jest.fn()
           .mockResolvedValueOnce([]) // Stripe customers
@@ -121,7 +152,43 @@ describe('getEngagementReport', () => {
     expect(members.map(m => m.userId)).toEqual(['p']);
     expect(members[0].startedAt).toBe('2026-09-29T00:00:00.000Z');
     expect(members[0].signedUpAt).toBe('2026-08-15T00:00:00.000Z');
+    expect(members[0].trialStartedAt).toBe('2026-08-30T00:00:00.000Z');
     expect(report.excluded).toEqual({ operatorAccounts: 0, payingWithoutRecordedCharge: 1 });
+  });
+
+  it('builds trial cohorts from each trial’s start, not from signup', async () => {
+    fakePrisma({
+      $queryRaw: jest.fn()
+        .mockResolvedValueOnce([]) // no charges
+        .mockResolvedValueOnce([
+          // Signed up in August, converted to a trial on Sep 22.
+          { eventData: { object: { id: 'sub_late', trial_start: seconds('2026-09-22T00:00:00Z') } }, processedAt: now, subscriptionUserId: 'late' },
+          // A trial that started before the window.
+          { eventData: { object: { id: 'sub_early', trial_start: seconds('2026-08-01T00:00:00Z') } }, processedAt: now, subscriptionUserId: 'early' },
+        ]),
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([
+          // Converted this week; Stripe's webhook has not been logged yet.
+          { userId: 'fresh', stripeCustomerId: 'cus_f', stripeSubscriptionId: 'sub_f', status: 'trialing', createdAt: at('2026-10-05T12:00:00Z'), currentPeriodStart: at('2026-10-05T12:00:00Z') },
+        ]),
+      },
+      user: {
+        findMany: jest.fn()
+          .mockResolvedValueOnce([]) // Stripe customers
+          .mockResolvedValueOnce([
+            user('late', '2026-08-10T00:00:00Z', { subscriptionStatus: 'canceled' }),
+            user('fresh', '2026-09-01T00:00:00Z', { subscriptionStatus: 'trialing' }),
+          ]),
+      },
+    });
+
+    const report = await getEngagementReport({ ...weekly, segment: 'trial' }, { questions: 1, per: 'week' }, now);
+
+    const byId = Object.fromEntries(report.cohorts.flatMap(row => row.members.map(m => [m.userId, { cohort: row.key, ...m }])));
+    expect(Object.keys(byId).sort()).toEqual(['fresh', 'late']);
+    expect(byId.late).toMatchObject({ cohort: '2026-09-21', startedAt: '2026-09-22T00:00:00.000Z', signedUpAt: '2026-08-10T00:00:00.000Z', trialStartedAt: '2026-09-22T00:00:00.000Z' });
+    expect(byId.fresh).toMatchObject({ cohort: '2026-10-05', startedAt: '2026-10-05T12:00:00.000Z' });
+    expect(report.notes[0]).toMatch(/Convert to trial/);
   });
 });
 
@@ -158,7 +225,7 @@ describe('getActivationReport', () => {
       },
     });
 
-    const report = await getActivationReport({ ...weekly, segment: 'trial' }, now);
+    const report = await getActivationReport({ ...weekly, segment: 'signup' }, now);
 
     const byId = Object.fromEntries(report.cohorts.flatMap(row => row.members).map(m => [m.userId, m]));
     expect(byId.plaid).toMatchObject({ firstLinkedAt: '2026-09-22T00:00:00.000Z', linkSources: ['plaid'], activatedInPeriod: 0 });

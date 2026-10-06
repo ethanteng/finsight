@@ -139,6 +139,7 @@ function summarize(member: CohortMember): MemberSummary {
     email: member.email,
     startedAt: member.startedAt.toISOString(),
     signedUpAt: member.signedUpAt.toISOString(),
+    trialStartedAt: member.trialStartedAt?.toISOString() ?? null,
     firstChargeAt: member.firstChargeAt?.toISOString() ?? null,
     subscriptionStatus: member.subscriptionStatus,
     tier: member.tier,

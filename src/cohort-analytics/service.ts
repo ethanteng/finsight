@@ -1,13 +1,20 @@
 import { Prisma } from '@prisma/client';
 import { getPrismaClient } from '../prisma-client';
 import { isAdminOperatorEmail } from '../auth/admin-emails';
-import { CHARGE_EVENT_TYPES, firstChargesFromEvents, type LoggedChargeEvent } from './charges';
+import {
+  addRunningTrials,
+  CHARGE_EVENT_TYPES,
+  firstChargesFromEvents,
+  trialStartsFromEvents,
+  type LoggedStripeEvent,
+} from './stripe-events';
 import { buildActivationReport, buildEngagementReport, windowStart } from './engine';
 import { resolveFirstLink, type FirstLinkEvidence } from './first-link';
 import type {
   ActivationReport,
   CohortExclusions,
   CohortMember,
+  CohortSegment,
   CohortWindow,
   EngagementReport,
   EngagementRule,
@@ -24,8 +31,11 @@ const ID_CHUNK = 1000;
 
 const QUESTION_NOTE = 'A question is one typed into Ask Linc. Calculator results saved into a new account are not counted.';
 const OPERATOR_NOTE = 'Accounts in ADMIN_EMAILS are left out. Deleted accounts are gone from every cohort, along with their questions.';
-const TRIAL_NOTE = 'Trial cohorts are every new account, from its signup: no-card signups, checkout card trials and admin trials.';
-const PAID_NOTE = 'Paid cohorts start at the first successful charge above $0 logged from Stripe, so a converted account also appears in the trial cohort for its signup.';
+const SEGMENT_NOTES: Record<CohortSegment, string> = {
+  signup: 'Signup cohorts are every new account, from its signup.',
+  trial: 'Trial cohorts are accounts that started a Stripe trial (Convert to trial in User Management, or a checkout card trial), from the day the trial started. A signup that was never put on a trial is only in signup cohorts.',
+  paid: 'Paid cohorts start at the first successful charge above $0 logged from Stripe, so a converted account also appears in its signup and trial cohorts.',
+};
 const LINK_NOTE = 'Linking means a Plaid bank, a SnapTrade brokerage, or a Public key that has verified. Disconnecting deletes those records, so someone who linked and later removed every connection counts only when the removal was recorded in history. SnapTrade links are dated from registration, the first step of connecting.';
 
 const USER_SELECT = {
@@ -46,20 +56,29 @@ interface UserRow {
   lastLoginAt: Date | null;
 }
 
+interface StripeMilestones {
+  trialStarts: Map<string, Date>;
+  firstCharges: Map<string, Date>;
+}
+
 function chunks<T>(items: T[]): T[][] {
   const result: T[][] = [];
   for (let index = 0; index < items.length; index += ID_CHUNK) result.push(items.slice(index, index + ID_CHUNK));
   return result;
 }
 
-async function loadFirstCharges(): Promise<Map<string, Date>> {
+/**
+ * When each account's first trial began and when it was first charged.
+ *
+ * Both are built in SQL so only the fields they need cross the wire: every
+ * logged webhook carries a full invoice or subscription, one per renewal and
+ * per subscription change. Numbers are type-checked before they are cast, so a
+ * malformed payload is skipped rather than failing the query.
+ */
+async function loadStripeMilestones(): Promise<StripeMilestones> {
   const prisma = getPrismaClient();
-  const [events, customers, subscriptions] = await Promise.all([
-    // Built in SQL so only the fields a first charge needs cross the wire: one
-    // event per invoice, renewals included, and each payload is a full invoice.
-    // The amount is checked as a number before it is cast, so a malformed
-    // payload is skipped rather than failing the query.
-    prisma.$queryRaw<LoggedChargeEvent[]>`
+  const [chargeEvents, trialEvents, customers, subscriptions] = await Promise.all([
+    prisma.$queryRaw<LoggedStripeEvent[]>`
       SELECT
         se."processedAt",
         s."userId" AS "subscriptionUserId",
@@ -80,12 +99,33 @@ async function loadFirstCharges(): Promise<Map<string, Date>> {
           ELSE false
         END
     `,
+    prisma.$queryRaw<LoggedStripeEvent[]>`
+      SELECT
+        se."processedAt",
+        s."userId" AS "subscriptionUserId",
+        jsonb_build_object('object', jsonb_build_object(
+          'id', se."eventData"->'object'->'id',
+          'customer', se."eventData"->'object'->'customer',
+          'trial_start', se."eventData"->'object'->'trial_start'
+        )) AS "eventData"
+      FROM "subscription_events" se
+      LEFT JOIN "subscriptions" s ON s."id" = se."subscriptionId"
+      WHERE se."eventType" LIKE 'customer.subscription.%'
+        AND jsonb_typeof(se."eventData"->'object'->'trial_start') = 'number'
+    `,
     prisma.user.findMany({
       where: { stripeCustomerId: { not: null } },
       select: { id: true, stripeCustomerId: true },
     }),
     prisma.subscription.findMany({
-      select: { userId: true, stripeCustomerId: true, stripeSubscriptionId: true },
+      select: {
+        userId: true,
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
+        status: true,
+        createdAt: true,
+        currentPeriodStart: true,
+      },
     }),
   ]);
   const userByCustomer = new Map<string, string>();
@@ -98,69 +138,73 @@ async function loadFirstCharges(): Promise<Map<string, Date>> {
   for (const user of customers) {
     if (user.stripeCustomerId) userByCustomer.set(user.stripeCustomerId, user.id);
   }
-  return firstChargesFromEvents(events, userByCustomer, userBySubscription);
+  return {
+    trialStarts: addRunningTrials(trialStartsFromEvents(trialEvents, userByCustomer, userBySubscription), subscriptions),
+    firstCharges: firstChargesFromEvents(chargeEvents, userByCustomer, userBySubscription),
+  };
 }
 
-function toMember(user: UserRow, startedAt: Date, firstChargeAt: Date | null): CohortMember {
+function toMember(user: UserRow, startedAt: Date, milestones: StripeMilestones): CohortMember {
   return {
     userId: user.id,
     email: user.email,
     startedAt,
     signedUpAt: user.createdAt,
-    firstChargeAt,
+    trialStartedAt: milestones.trialStarts.get(user.id) ?? null,
+    firstChargeAt: milestones.firstCharges.get(user.id) ?? null,
     subscriptionStatus: user.subscriptionStatus,
     tier: user.tier,
     lastLoginAt: user.lastLoginAt,
   };
 }
 
+async function usersByIds(ids: string[]): Promise<UserRow[]> {
+  const prisma = getPrismaClient();
+  const users: UserRow[] = [];
+  for (const chunk of chunks(ids)) {
+    users.push(...await prisma.user.findMany({ where: { id: { in: chunk } }, select: USER_SELECT }));
+  }
+  return users;
+}
+
 async function loadMembers(window: CohortWindow, now: Date): Promise<{ members: CohortMember[]; excluded: CohortExclusions }> {
   const prisma = getPrismaClient();
   const start = windowStart(window, now);
-  const firstCharges = await loadFirstCharges();
+  const milestones = await loadStripeMilestones();
 
-  if (window.segment === 'trial') {
-    const users = await prisma.user.findMany({
+  // Signups start at account creation; trials and paid accounts at their Stripe milestone.
+  const starts = window.segment === 'trial' ? milestones.trialStarts
+    : window.segment === 'paid' ? milestones.firstCharges
+      : null;
+  const users = starts
+    ? await usersByIds([...starts.entries()]
+      .filter(([, at]) => at.getTime() >= start.getTime() && at.getTime() <= now.getTime())
+      .map(([userId]) => userId))
+    : await prisma.user.findMany({
       where: { createdAt: { gte: start, lte: now } },
       select: USER_SELECT,
     });
-    const operators = users.filter(user => isAdminOperatorEmail(user.email));
-    const members = users
-      .filter(user => !isAdminOperatorEmail(user.email))
-      .map(user => toMember(user, user.createdAt, firstCharges.get(user.id) ?? null));
-    return { members, excluded: { operatorAccounts: operators.length } };
-  }
 
-  const paidIds = [...firstCharges.entries()]
-    .filter(([, paidAt]) => paidAt.getTime() >= start.getTime() && paidAt.getTime() <= now.getTime())
-    .map(([userId]) => userId);
-  const users: UserRow[] = [];
-  for (const ids of chunks(paidIds)) {
-    users.push(...await prisma.user.findMany({ where: { id: { in: ids } }, select: USER_SELECT }));
-  }
-  const paying = await prisma.user.findMany({
-    where: {
-      OR: [
-        { subscriptionStatus: { in: PAYING_STATUSES } },
-        { subscriptions: { some: { status: { in: PAYING_STATUSES } } } },
-      ],
-    },
-    select: { id: true, email: true },
-  });
-  const operators = users.filter(user => isAdminOperatorEmail(user.email));
   const members = users
     .filter(user => !isAdminOperatorEmail(user.email))
-    .map(user => {
-      const paidAt = firstCharges.get(user.id) as Date;
-      return toMember(user, paidAt, paidAt);
+    .map(user => toMember(user, starts?.get(user.id) ?? user.createdAt, milestones));
+  const excluded: CohortExclusions = { operatorAccounts: users.length - members.length };
+
+  if (window.segment === 'paid') {
+    const paying = await prisma.user.findMany({
+      where: {
+        OR: [
+          { subscriptionStatus: { in: PAYING_STATUSES } },
+          { subscriptions: { some: { status: { in: PAYING_STATUSES } } } },
+        ],
+      },
+      select: { id: true, email: true },
     });
-  return {
-    members,
-    excluded: {
-      operatorAccounts: operators.length,
-      payingWithoutRecordedCharge: paying.filter(user => !firstCharges.has(user.id) && !isAdminOperatorEmail(user.email)).length,
-    },
-  };
+    excluded.payingWithoutRecordedCharge = paying
+      .filter(user => !milestones.firstCharges.has(user.id) && !isAdminOperatorEmail(user.email))
+      .length;
+  }
+  return { members, excluded };
 }
 
 async function loadQuestionTimes(members: CohortMember[], window: CohortWindow, now: Date): Promise<Map<string, number[]>> {
@@ -215,7 +259,7 @@ async function loadFirstLinks(userIds: string[]): Promise<Map<string, FirstLink>
   };
 
   for (const ids of chunks(userIds)) {
-    const [tokens, history, snapTradeUsers, renamedAccounts, publicCredentials] = await Promise.all([
+    const [tokens, history, snapTradeUsers, storedAccounts, publicCredentials] = await Promise.all([
       prisma.accessToken.groupBy({
         by: ['userId'],
         where: { userId: { in: ids } },
@@ -259,7 +303,7 @@ async function loadFirstLinks(userIds: string[]): Promise<Map<string, FirstLink>
       if (SNAPTRADE_REMOVAL_REASONS.includes(reason)) entry.snapTradeEvidenceAt = earlier(entry.snapTradeEvidenceAt, at);
       if (PUBLIC_HISTORY_REASONS.includes(reason)) entry.publicEvidenceAt = earlier(entry.publicEvidenceAt, at);
     }
-    for (const account of renamedAccounts) {
+    for (const account of storedAccounts) {
       if (!account.userId) continue;
       const entry = evidenceFor(account.userId);
       if (account.plaidAccountId.startsWith('snaptrade-')) entry.snapTradeEvidenceAt = earlier(entry.snapTradeEvidenceAt, account.createdAt);
@@ -300,7 +344,7 @@ export async function getEngagementReport(window: CohortWindow, rule: Engagement
     rule,
     now,
     excluded,
-    notes: [window.segment === 'trial' ? TRIAL_NOTE : PAID_NOTE, QUESTION_NOTE, OPERATOR_NOTE],
+    notes: [SEGMENT_NOTES[window.segment], QUESTION_NOTE, OPERATOR_NOTE],
   });
 }
 
@@ -313,6 +357,6 @@ export async function getActivationReport(window: CohortWindow, now = new Date()
     window,
     now,
     excluded,
-    notes: [window.segment === 'trial' ? TRIAL_NOTE : PAID_NOTE, LINK_NOTE, OPERATOR_NOTE],
+    notes: [SEGMENT_NOTES[window.segment], LINK_NOTE, OPERATOR_NOTE],
   });
 }

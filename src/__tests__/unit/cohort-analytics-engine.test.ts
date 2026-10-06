@@ -19,6 +19,7 @@ function member(userId: string, startedAt: string, overrides: Partial<CohortMemb
     email: `${userId}@example.com`,
     startedAt: at(startedAt),
     signedUpAt: at(startedAt),
+    trialStartedAt: null,
     firstChargeAt: null,
     subscriptionStatus: 'inactive',
     tier: 'premium',
@@ -196,6 +197,14 @@ describe('resolveFirstLink', () => {
   it('dates a visible brokerage from registration', () => {
     expect(resolveFirstLink({ ...none, snapTradeRegisteredAt: at('2026-10-01T00:00:00Z'), snapTradeConnectedNow: true }))
       .toEqual({ at: at('2026-10-01T00:00:00Z'), sources: ['snaptrade'] });
+  });
+
+  it('dates a brokerage from registration when a direct Public key replaced it in the snapshot', () => {
+    expect(resolveFirstLink({
+      ...none,
+      snapTradeRegisteredAt: at('2026-09-01T00:00:00Z'),
+      publicVerifiedCredentialAt: at('2026-09-20T00:00:00Z'),
+    })).toEqual({ at: at('2026-09-01T00:00:00Z'), sources: ['snaptrade', 'public'] });
   });
 
   it('keeps a link whose rows were deleted when history recorded the removal', () => {

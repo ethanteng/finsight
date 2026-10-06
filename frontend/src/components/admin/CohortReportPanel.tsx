@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 
 type Grain = 'day' | 'week' | 'month';
-type Segment = 'trial' | 'paid';
+type Segment = 'signup' | 'trial' | 'paid';
 type Kind = 'engagement' | 'activation';
 type LinkSource = 'plaid' | 'snaptrade' | 'public';
 
@@ -18,6 +18,7 @@ interface MemberSummary {
   email: string;
   startedAt: string;
   signedUpAt: string;
+  trialStartedAt: string | null;
   firstChargeAt: string | null;
   subscriptionStatus: string;
   tier: string;
@@ -168,6 +169,20 @@ function GrainSelect({ label, value, onChange, plural = false }: {
   );
 }
 
+const SEGMENT_LABEL: Record<Segment, string> = { signup: 'Signups', trial: 'Trials', paid: 'Paid' };
+
+/** Each segment's start, as a member date column. */
+const MILESTONES: Array<{ segment: Segment; label: string; field: 'signedUpAt' | 'trialStartedAt' | 'firstChargeAt' }> = [
+  { segment: 'signup', label: 'Signed up', field: 'signedUpAt' },
+  { segment: 'trial', label: 'Trial started', field: 'trialStartedAt' },
+  { segment: 'paid', label: 'First charge', field: 'firstChargeAt' },
+];
+
+/** The segment's own start first, then the other two in lifecycle order. */
+function milestoneColumns(segment: Segment) {
+  return [...MILESTONES].sort((a, b) => Number(b.segment === segment) - Number(a.segment === segment));
+}
+
 function EngagementMembers({ members, periodGrain, segment }: { members: EngagementMember[]; periodGrain: Grain; segment: Segment }) {
   const columns = members[0]?.periods.length ?? 0;
   return (
@@ -175,8 +190,9 @@ function EngagementMembers({ members, periodGrain, segment }: { members: Engagem
       <thead className="whitespace-nowrap text-xs uppercase tracking-wide text-[#5e6b63]">
         <tr>
           <th className="px-3 py-2">User</th>
-          <th className="px-3 py-2">{segment === 'paid' ? 'First charge' : 'Signed up'}</th>
-          {segment === 'paid' && <th className="px-3 py-2">Signed up</th>}
+          {milestoneColumns(segment).map((column) => (
+            <th key={column.field} className="px-3 py-2">{column.label}</th>
+          ))}
           <th className="px-3 py-2">Plan now</th>
           <th className="px-3 py-2 text-right">Questions</th>
           {Array.from({ length: columns }, (_, index) => (
@@ -188,8 +204,9 @@ function EngagementMembers({ members, periodGrain, segment }: { members: Engagem
         {members.map((member) => (
           <tr key={member.userId} className="border-t border-[#102319]/10">
             <td className="px-3 py-2 font-medium text-[#102319]">{member.email}</td>
-            <td className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{formatDate(member.startedAt)}</td>
-            {segment === 'paid' && <td className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{formatDate(member.signedUpAt)}</td>}
+            {milestoneColumns(segment).map((column) => (
+              <td key={column.field} className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{formatDate(member[column.field])}</td>
+            ))}
             <td className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{STATUS_LABEL[member.subscriptionStatus] ?? member.subscriptionStatus}</td>
             <td className="px-3 py-2 text-right tabular-nums text-[#102319]">{member.totalQuestions}</td>
             {member.periods.map((period, index) => (
@@ -216,11 +233,12 @@ function ActivationMembers({ members, periodGrain, segment }: { members: Activat
       <thead className="whitespace-nowrap text-xs uppercase tracking-wide text-[#5e6b63]">
         <tr>
           <th className="px-3 py-2">User</th>
-          <th className="px-3 py-2">{segment === 'paid' ? 'First charge' : 'Signed up'}</th>
-          {segment === 'paid' && <th className="px-3 py-2">Signed up</th>}
+          {milestoneColumns(segment).map((column) => (
+            <th key={column.field} className="px-3 py-2">{column.label}</th>
+          ))}
           <th className="px-3 py-2">Plan now</th>
           <th className="px-3 py-2">First linked</th>
-          <th className="px-3 py-2">Via</th>
+          <th className="px-3 py-2">Providers linked</th>
           <th className="px-3 py-2 text-right">Days to link</th>
           <th className="px-3 py-2">Linked in</th>
         </tr>
@@ -229,8 +247,9 @@ function ActivationMembers({ members, periodGrain, segment }: { members: Activat
         {members.map((member) => (
           <tr key={member.userId} className="border-t border-[#102319]/10">
             <td className="px-3 py-2 font-medium text-[#102319]">{member.email}</td>
-            <td className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{formatDate(member.startedAt)}</td>
-            {segment === 'paid' && <td className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{formatDate(member.signedUpAt)}</td>}
+            {milestoneColumns(segment).map((column) => (
+              <td key={column.field} className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{formatDate(member[column.field])}</td>
+            ))}
             <td className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{STATUS_LABEL[member.subscriptionStatus] ?? member.subscriptionStatus}</td>
             <td className="whitespace-nowrap px-3 py-2 text-[#5e6b63]">{member.firstLinkedAt ? formatDate(member.firstLinkedAt) : 'Not linked'}</td>
             <td className="px-3 py-2 text-[#5e6b63]">{member.linkSources.map((source) => SOURCE_LABEL[source]).join(', ') || '—'}</td>
@@ -350,7 +369,7 @@ export default function CohortReportPanel({
           <div className="flex flex-col gap-1 text-xs font-medium text-[#5e6b63]">
             Accounts
             <div className="flex h-10 rounded border border-[#102319]/15 bg-white p-0.5" role="group" aria-label="Accounts">
-              {(['trial', 'paid'] as Segment[]).map((value) => (
+              {(['signup', 'trial', 'paid'] as Segment[]).map((value) => (
                 <button
                   key={value}
                   type="button"
@@ -360,7 +379,7 @@ export default function CohortReportPanel({
                     segment === value ? 'bg-[#102319] text-white' : 'text-[#5e6b63] hover:text-[#102319]'
                   }`}
                 >
-                  {value === 'trial' ? 'Trials' : 'Paid'}
+                  {SEGMENT_LABEL[value]}
                 </button>
               ))}
             </div>
@@ -514,7 +533,7 @@ export default function CohortReportPanel({
               <p className="mt-3 text-xs text-[#5e6b63]">
                 Dates are UTC. {isEngagement
                   ? 'Each column shows the questions asked in that period; shaded means engaged, a dot means still in that period.'
-                  : 'Each account is clocked from its signup for trials, or its first charge for paid accounts.'}
+                  : 'Each account is clocked from the first date column: its signup, trial start or first charge.'}
               </p>
             </div>
           )}

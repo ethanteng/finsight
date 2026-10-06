@@ -19,11 +19,11 @@ export interface FirstLinkEvidence {
   snapTradeRegisteredAt: Date | null;
   /** A brokerage is visible now: a SnapTrade account in the snapshot, or synced activity. */
   snapTradeConnectedNow: boolean;
-  /** Earliest timestamped trace of a brokerage: a renamed account row or a removal in history. */
+  /** Earliest timestamped trace of a brokerage: a stored account row (written on sync) or a removal in history. */
   snapTradeEvidenceAt: Date | null;
   /** Creation time of a Public credential that has verified at least once. */
   publicVerifiedCredentialAt: Date | null;
-  /** Earliest timestamped trace of Public: a renamed account row, or a connect or removal in history. */
+  /** Earliest timestamped trace of Public: a stored account row, or a connect or removal in history. */
   publicEvidenceAt: Date | null;
 }
 
@@ -42,8 +42,14 @@ export function resolveFirstLink(evidence: FirstLinkEvidence): FirstLink | null 
       'snaptrade',
       // Registration alone is an attempt; it dates the link only once a
       // brokerage is seen. It precedes any connection, so it is the best date
-      // for one that has no timestamp of its own.
-      evidence.snapTradeConnectedNow || evidence.snapTradeEvidenceAt
+      // for one that has no timestamp of its own. A direct Public key counts as
+      // seeing one: it can only be added to an account already linked to Public
+      // through SnapTrade, and once added it replaces those accounts in the
+      // snapshot, so the snapshot no longer shows the brokerage.
+      evidence.snapTradeConnectedNow
+        || evidence.snapTradeEvidenceAt
+        || evidence.publicVerifiedCredentialAt
+        || evidence.publicEvidenceAt
         ? earliest(evidence.snapTradeRegisteredAt, evidence.snapTradeEvidenceAt)
         : null,
     ],
