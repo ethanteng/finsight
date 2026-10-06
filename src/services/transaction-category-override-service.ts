@@ -1,4 +1,6 @@
 import { getPrismaClient } from '../prisma-client';
+import { counterpartyKey } from '../cash-flow/ledger';
+import { cashFlowDirection, resolveCanonicalTransactionType } from './canonical-transaction-adapter';
 import { canonicalTypeForCategory } from './transaction-category-taxonomy';
 
 /**
@@ -139,15 +141,15 @@ export async function applyCategoryOverrides(userId: string, data: any): Promise
 }
 
 /**
- * Patches one transaction inside the stored snapshot so the next read reflects the
+ * Patches transactions inside the stored snapshot so the next read reflects the
  * change without waiting for a revision. Scoped by `computedAt` so a revision that
  * lands mid-write wins instead of being silently overwritten with stale rows.
  *
  * Returns true when the snapshot was updated.
  */
-export async function patchSnapshotTransactionCategory(
+export async function patchSnapshotTransactionCategories(
   userId: string,
-  transactionId: string,
+  transactionIds: ReadonlySet<string>,
   category: string[],
   source: 'user' | 'provider'
 ): Promise<boolean> {
@@ -160,7 +162,8 @@ export async function patchSnapshotTransactionCategory(
 
   let found = false;
   const transactions = (snapshot.transactions as any[]).map(transaction => {
-    if (resolveProviderTransactionId(transaction) !== transactionId) return transaction;
+    const id = resolveProviderTransactionId(transaction);
+    if (!id || !transactionIds.has(id)) return transaction;
     found = true;
     const patched = { ...transaction };
     stampCategoryFieldsOnTransaction(patched, category, source);
@@ -173,6 +176,15 @@ export async function patchSnapshotTransactionCategory(
     data: { transactions: transactions as any },
   });
   return update.count > 0;
+}
+
+export async function patchSnapshotTransactionCategory(
+  userId: string,
+  transactionId: string,
+  category: string[],
+  source: 'user' | 'provider'
+): Promise<boolean> {
+  return patchSnapshotTransactionCategories(userId, new Set([transactionId]), category, source);
 }
 
 export async function findSnapshotTransaction(
@@ -213,4 +225,69 @@ export async function findSnapshotTransactionCategory(
   const match = await findSnapshotTransaction(userId, transactionId);
   if (!match) return null;
   return providerCategoryFromTransaction(match);
+}
+
+/**
+ * Which way a transaction moves the user's cash, read from its cash-flow type
+ * rather than its amount: a card account stores purchases and refunds alike as
+ * positive, the opposite of a bank account, so the sign says nothing on its own.
+ * Null when the type has no direction or can't be told.
+ */
+export function moneyDirection(transaction: any): 'in' | 'out' | null {
+  const type = resolveCanonicalTransactionType(transaction);
+  return type ? cashFlowDirection(type) : null;
+}
+
+/** Investment activity, from any provider: SnapTrade rows carry a plain `transaction_id`. */
+function isInvestmentActivity(transaction: any): boolean {
+  return Boolean(
+    transaction?.investment_transaction_id
+      || transaction?.isInvestmentTransaction
+      || transaction?.snapTradeData
+      || transaction?.source === 'snaptrade'
+  );
+}
+
+/**
+ * The other transactions a category edit can be applied to along with this one:
+ * the same payee, keyed the way the cash-flow forecast groups a payee's
+ * transactions, with money moving the same way, and the same kind of activity
+ * (banking or investment). Direction matters because one payee can be both: an
+ * edit to outgoing Venmo payments should not recategorize money friends sent,
+ * and a merchant's refunds keep their own category. A transaction whose
+ * direction can't be told matches nothing, rather than risk mixing the two.
+ *
+ * Transactions without a provider id cannot carry an override and are skipped,
+ * as is everything when the payee has no name to match on.
+ */
+export function matchingTransactions(transactions: readonly any[], target: any): any[] {
+  const key = counterpartyKey(target?.merchant_name, target?.name);
+  const direction = moneyDirection(target);
+  if (!key || !direction) return [];
+  const targetId = resolveProviderTransactionId(target);
+  const investment = isInvestmentActivity(target);
+  return transactions.filter(transaction => {
+    const id = resolveProviderTransactionId(transaction);
+    return id !== null
+      && id !== targetId
+      && isInvestmentActivity(transaction) === investment
+      && moneyDirection(transaction) === direction
+      && counterpartyKey(transaction?.merchant_name, transaction?.name) === key;
+  });
+}
+
+/** A snapshot transaction and the others a category edit can be applied to with it. */
+export async function findMatchingSnapshotTransactions(
+  userId: string,
+  transactionId: string
+): Promise<{ target: any; matches: any[] } | null> {
+  const snapshot = await getPrismaClient().financialSummarySnapshot.findUnique({
+    where: { userId },
+    select: { transactions: true },
+  });
+  if (!snapshot || !Array.isArray(snapshot.transactions)) return null;
+  const transactions = snapshot.transactions as any[];
+  const target = transactions.find(transaction => resolveProviderTransactionId(transaction) === transactionId);
+  if (!target) return null;
+  return { target, matches: matchingTransactions(transactions, target) };
 }

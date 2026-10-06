@@ -2,9 +2,13 @@ import express from 'express';
 import { requireAuth, AuthenticatedRequest } from './middleware';
 import { getPrismaClient } from '../prisma-client';
 import {
+  findMatchingSnapshotTransactions,
   findSnapshotTransaction,
+  moneyDirection,
+  patchSnapshotTransactionCategories,
   patchSnapshotTransactionCategory,
   providerCategoryFromTransaction,
+  resolveProviderTransactionId,
 } from '../services/transaction-category-override-service';
 import {
   listTransactionCategoryOptions,
@@ -35,7 +39,69 @@ router.get('/options', requireAuth, async (_req: AuthenticatedRequest, res) => {
   res.json({ success: true, data: listTransactionCategoryOptions() });
 });
 
-// PUT /api/transaction-categories/:transactionId - Set the category for one transaction
+// GET /api/transaction-categories/:transactionId/matches - How many other transactions an edit can also apply to
+router.get('/:transactionId/matches', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const transactionId = transactionIdParam(req);
+    const found = transactionId ? await findMatchingSnapshotTransactions(req.user!.id, transactionId) : null;
+    if (!found) {
+      return res.status(404).json({ success: false, error: 'Transaction not found' });
+    }
+    // The direction lets the page say which way the matches go, which the
+    // amount's sign can't: card purchases are stored positive.
+    res.json({ success: true, data: { count: found.matches.length, direction: moneyDirection(found.target) } });
+  } catch (error) {
+    console.error('Failed to find matching transactions:', error);
+    res.status(500).json({ success: false, error: 'Failed to find matching transactions' });
+  }
+});
+
+/**
+ * Sets one category on a transaction and every transaction that matches it. Each
+ * gets its own override, so each keeps its own restore point and is restored on
+ * its own; one already set by the user keeps the provider category it had then.
+ */
+async function applyToMatching(
+  userId: string,
+  transactionId: string,
+  category: string[],
+  res: express.Response
+) {
+  const found = await findMatchingSnapshotTransactions(userId, transactionId);
+  if (!found) {
+    return res.status(404).json({ success: false, error: 'Transaction not found' });
+  }
+  const rows = [found.target, ...found.matches];
+  const prisma = getPrismaClient();
+  // Every override is written before the snapshot is patched, for the same reason
+  // as a single edit: no user category in the JSON blob without a row behind it.
+  await prisma.$transaction(rows.map(row => {
+    const id = resolveProviderTransactionId(row)!;
+    return prisma.transactionCategoryOverride.upsert({
+      where: { userId_transactionId: { userId, transactionId: id } },
+      create: { userId, transactionId: id, category, originalCategory: providerCategoryFromTransaction(row) },
+      update: { category },
+    });
+  }));
+  const ids = rows.map(row => resolveProviderTransactionId(row)!);
+  // A revision that lands in between wins the snapshot; the one scheduled below
+  // re-applies every override, so the edit still reaches it.
+  await patchSnapshotTransactionCategories(userId, new Set(ids), category, 'user');
+  scheduleCashFlowCatchUp(userId, 'transaction-category-updated');
+
+  return res.json({
+    success: true,
+    data: {
+      transactionId,
+      category,
+      canonicalTransactionType: canonicalTypeForCategory(category),
+      appliedTo: ids,
+    },
+  });
+}
+
+// PUT /api/transaction-categories/:transactionId - Set the category for one transaction,
+// or with `applyToMatching`, for it and every transaction that matches it
 router.put('/:transactionId', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user!.id;
@@ -50,6 +116,9 @@ router.put('/:transactionId', requireAuth, async (req: AuthenticatedRequest, res
     });
     if (!category) {
       return res.status(400).json({ success: false, error: 'Unknown category selection' });
+    }
+    if (req.body?.applyToMatching === true) {
+      return await applyToMatching(userId, transactionId, category, res);
     }
 
     // Only the first save records the provider category; re-editing must not turn an

@@ -55,6 +55,13 @@ export default function TransactionCategoryModal({
   const [detailed, setDetailed] = useState(transaction.category[1]?.toUpperCase() || '');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // How many other transactions the edit could also apply to; null until known,
+  // and left null if the count can't be had, which just hides the option.
+  const [matchCount, setMatchCount] = useState<number | null>(null);
+  // Which way the matches move money, from the server: the amount's sign can't
+  // say, since a card account stores purchases and refunds alike as positive.
+  const [matchDirection, setMatchDirection] = useState<'in' | 'out' | null>(null);
+  const [applyToMatching, setApplyToMatching] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const primaryRef = useRef<HTMLSelectElement>(null);
 
@@ -80,6 +87,30 @@ export default function TransactionCategoryModal({
     void loadOptions();
     return () => { cancelled = true; };
   }, [API_URL, options]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadMatches = async () => {
+      try {
+        const response = await fetch(
+          `${API_URL}/api/transaction-categories/${encodeURIComponent(transaction.id)}/matches`,
+          { headers: authHeaders() }
+        );
+        if (!response.ok) return;
+        const body = await response.json();
+        const count = Number(body?.data?.count);
+        const direction = body?.data?.direction;
+        if (!cancelled && Number.isInteger(count) && count > 0) {
+          setMatchCount(count);
+          setMatchDirection(direction === 'in' || direction === 'out' ? direction : null);
+        }
+      } catch {
+        // Without a count the option is simply not offered.
+      }
+    };
+    void loadMatches();
+    return () => { cancelled = true; };
+  }, [API_URL, transaction.id]);
 
   // Snapshot categories are not guaranteed to be taxonomy values — older rows can carry
   // free-text labels like "Food and Drink". Uppercasing one of those yields a value no
@@ -113,7 +144,7 @@ export default function TransactionCategoryModal({
       const panel = panelRef.current;
       if (!panel) return;
       const focusable = Array.from(
-        panel.querySelectorAll<HTMLElement>('button:not([disabled]), select:not([disabled]), a[href]')
+        panel.querySelectorAll<HTMLElement>('button:not([disabled]), select:not([disabled]), input:not([disabled]), a[href]')
       );
       if (focusable.length === 0) return;
 
@@ -166,7 +197,7 @@ export default function TransactionCategoryModal({
         {
           method: 'PUT',
           headers: authHeaders(),
-          body: JSON.stringify({ primary, detailed: detailed || null }),
+          body: JSON.stringify({ primary, detailed: detailed || null, applyToMatching: applyToMatching && matchCount !== null }),
         }
       );
       const body = await response.json().catch(() => ({}));
@@ -178,7 +209,8 @@ export default function TransactionCategoryModal({
         typeof body?.data?.canonicalTransactionType === 'string'
           ? body.data.canonicalTransactionType
           : undefined;
-      onSaved(transaction.id, saved, true, transactionType);
+      const appliedTo: string[] = Array.isArray(body?.data?.appliedTo) ? body.data.appliedTo : [transaction.id];
+      for (const id of appliedTo) onSaved(id, saved, true, transactionType);
       onClose();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Failed to save category');
@@ -322,6 +354,27 @@ export default function TransactionCategoryModal({
             </div>
           )}
 
+          {options && matchCount !== null && (
+            <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-700 p-3">
+              <input
+                type="checkbox"
+                checked={applyToMatching}
+                onChange={event => setApplyToMatching(event.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[#d9ff6f]"
+              />
+              <span>
+                <span className="block text-sm font-medium text-white">
+                  Also apply to {matchCount} other {matchCount === 1 ? 'transaction' : 'transactions'} with {transaction.name}
+                </span>
+                <span className="mt-0.5 block text-xs leading-5 text-gray-400">
+                  {matchDirection === 'out' && 'Only money going out. Refunds and other money coming in from them keep their own categories. '}
+                  {matchDirection === 'in' && 'Only money coming in. Payments to them keep their own categories. '}
+                  Each one can still be restored on its own.
+                </span>
+              </span>
+            </label>
+          )}
+
           {saveError && (
             <div className="mt-4 rounded border border-red-700/50 bg-red-900/30 p-3 text-sm text-red-300">
               {saveError}
@@ -351,7 +404,11 @@ export default function TransactionCategoryModal({
             disabled={saving || !options || !primary}
             className="rounded-full bg-[#d9ff6f] px-4 py-2 text-sm font-semibold text-[#102319] hover:bg-[#cdef64] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {saving ? 'Saving…' : 'Save category'}
+            {saving
+              ? 'Saving…'
+              : applyToMatching && matchCount !== null
+                ? `Save for ${matchCount + 1} transactions`
+                : 'Save category'}
           </button>
         </div>
       </div>
