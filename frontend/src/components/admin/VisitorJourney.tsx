@@ -139,7 +139,7 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
             <p className="mt-3 text-xs leading-5 text-[#66736b]">This identifies where to investigate, not why people left. Small samples can move sharply.</p>
             {dropInBreakdown && <p className="mt-3 text-xs leading-5 text-[#315d45]">See “Signup form breakdown” for this step.</p>}
           </> : <p className="mt-3 text-sm leading-6 text-[#66736b]">{!data.ratesAvailable ? 'Wait for verified tracking before judging the largest drop-off.' : first ? 'No step-to-step loss was observed in this path.' : 'There is not enough activity to identify a drop-off.'}</p>}
-          <p className="mt-5 border-t border-[#102319]/10 pt-4 text-xs leading-5 text-[#66736b]">“Continued to the app” is the signup handoff, not a confirmed app load. Verification can use an email link, a code, or be skipped.</p>
+          <p className="mt-5 border-t border-[#102319]/10 pt-4 text-xs leading-5 text-[#66736b]">“Completed calculation” can lead to a locked card. “App handoff started” does not confirm the answer loaded. The Activation and Engagement reports show confirmed in-app result views for newly measured signups.</p>
         </aside>
       </div>
       <div className="mt-7 overflow-x-auto">

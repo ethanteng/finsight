@@ -107,11 +107,11 @@ export function buildVisitorJourneys(
       const signup = aggregateSignupConversionFunnel(viewed);
       const calculatorSteps = steps([
         ['landed', 'Landed on the calculator', landed.length],
-        ['result', 'Got a result', calculated.length],
+        ['result', 'Completed calculation', calculated.length],
         ['continue', 'Saved results or chose to sign up', continued.length],
         ['signup', 'Reached signup', viewed.length],
         ['account', 'Created an account', signup[1].sessions!],
-        ['handoff', 'Continued to the app', signup[2].sessions!],
+        ['handoff', 'App handoff started', signup[2].sessions!],
       ]);
       // Keep the overview compact without attributing form abandonment to the
       // registration request. These use the SAME result/continuation cohort,
@@ -135,7 +135,7 @@ export function buildVisitorJourneys(
     for (const path of signupPaths) {
       const cohort = population.filter(session => (!path.origin || session.signupOrigin === path.origin)
         && (!path.entry || session.signupEntry === path.entry));
-      const labels = ['Reached signup', 'Created an account', 'Continued to the app'];
+      const labels = ['Reached signup', 'Created an account', 'App handoff started'];
       const funnel = aggregateSignupConversionFunnel(cohort);
       const signupSteps = steps(funnel.map((step, index) => [step.event, labels[index], step.sessions!]));
       attachFormDiagnostics(signupSteps[1], cohort);

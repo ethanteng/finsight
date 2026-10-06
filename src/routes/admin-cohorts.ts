@@ -35,7 +35,13 @@ function wholeNumber(value: unknown, fallback: number, max: number, name: string
 }
 
 function parseWindow(query: Request['query']): CohortWindow {
+  if (query.campaign !== undefined && (typeof query.campaign !== 'string' || query.campaign.length > 256)) {
+    throw new InvalidParameter('campaign must be at most 256 characters');
+  }
   return {
+    source: oneOf(query.source, ['all', 'coast_fire_calculator', 'retirement_calculator', 'direct_or_unknown'] as const, 'all', 'source'),
+    channel: oneOf(query.channel, ['all', 'google_ads'] as const, 'all', 'channel'),
+    campaign: typeof query.campaign === 'string' ? query.campaign.trim() : undefined,
     segment: oneOf<CohortSegment>(query.segment, COHORT_SEGMENTS, 'signup', 'segment'),
     cohortGrain: oneOf<CohortGrain>(query.cohort, COHORT_GRAINS, 'week', 'cohort'),
     periodGrain: oneOf<CohortGrain>(query.period, COHORT_GRAINS, 'week', 'period'),

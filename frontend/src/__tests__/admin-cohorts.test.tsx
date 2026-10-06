@@ -90,7 +90,7 @@ describe('CohortReportPanel', () => {
     const [url] = requestedUrls();
     expect(url.pathname).toBe('/admin/cohorts/engagement');
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      segment: 'signup', cohort: 'week', period: 'week', cohorts: '12', periods: '12', questions: '1', per: 'week',
+      segment: 'signup', cohort: 'week', period: 'week', cohorts: '12', periods: '12', source: 'all', channel: 'all', campaign: '', questions: '1', per: 'week',
     });
     expect((global.fetch as jest.Mock).mock.calls[0][1]).toMatchObject({ headers: { Authorization: 'Bearer token' } });
 
@@ -223,5 +223,25 @@ describe('CohortReportPanel', () => {
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
     expect(screen.getByText('paid-report-marker')).toBeInTheDocument();
     expect(screen.queryByText('trial-report-marker')).not.toBeInTheDocument();
+  });
+});
+
+
+it('joins source and campaign filters and distinguishes immature retention from zero', async () => {
+  mockFetch({ ...engagementReport, quality: {
+    measuredSignups: 3, unmeasuredSignups: 7, resultViewed: 2, meaningfulAnswer: 1,
+    accountLinked: 0, returnedEngaged: 0, returnEligible: 0, returnMaturedCount: 0,
+  } });
+  render(<CohortReportPanel kind="engagement" apiUrl="https://api.example.test" getAuthHeaders={headers} />);
+  expect(await screen.findByText(/Not yet measurable/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Signup source'), { target: { value: 'coast_fire_calculator' } });
+  fireEvent.change(screen.getByLabelText('Acquisition channel'), { target: { value: 'google_ads' } });
+  fireEvent.change(screen.getByLabelText('Campaign (utm_campaign)'), { target: { value: 'coast_fire' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  await waitFor(() => {
+    const latest = requestedUrls().at(-1)!;
+    expect(latest.searchParams.get('source')).toBe('coast_fire_calculator');
+    expect(latest.searchParams.get('channel')).toBe('google_ads');
+    expect(latest.searchParams.get('campaign')).toBe('coast_fire');
   });
 });

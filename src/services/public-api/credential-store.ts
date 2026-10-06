@@ -1,5 +1,6 @@
 import { DataEncryptionService } from '../../auth/encryption';
 import { getPrismaClient } from '../../prisma-client';
+import { recordFirstAccountLinked } from '../product-milestones';
 
 /**
  * Storage for a user's Public.com personal API secret.
@@ -118,10 +119,11 @@ export async function getStatus(userId: string): Promise<PublicCredentialStatus>
 
 export async function recordSuccess(userId: string): Promise<void> {
   const prisma = getPrismaClient();
-  await prisma.publicApiCredential.updateMany({
+  const verified = await prisma.publicApiCredential.updateMany({
     where: { userId },
     data: { lastVerifiedAt: new Date(), lastError: null },
   });
+  if (verified.count > 0) await recordFirstAccountLinked(userId, 'public');
 }
 
 /**

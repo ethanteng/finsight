@@ -1,5 +1,6 @@
 // SnapTrade integration using official SDK
 import { Snaptrade } from 'snaptrade-typescript-sdk';
+import { recordFirstAccountLinked } from './services/product-milestones';
 import { PrismaClient } from '@prisma/client';
 import {
   getProviderRequestTimeoutMs,
@@ -574,6 +575,11 @@ export class SnapTradeService {
         }];
       });
       
+      if (accounts.some((account: any) => account.brokerageAuthorizationId
+        && account.connectionDisabled === false && !account.connectionStatusUnavailable)) {
+        await recordFirstAccountLinked(userId, 'snaptrade');
+      }
+
       // Authorizations are the connect/disconnect unit. Returning them alongside
       // accounts lets callers list and remove a brokerage that has no accounts
       // yet (pending or incomplete link) instead of inferring connections only

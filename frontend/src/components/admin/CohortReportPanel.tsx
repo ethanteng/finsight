@@ -48,6 +48,11 @@ interface CohortRow<Member> {
 }
 
 interface CohortReport {
+  quality?: {
+    measuredSignups: number; unmeasuredSignups: number;
+    resultViewed: number; meaningfulAnswer: number; accountLinked: number;
+    returnedEngaged: number; returnEligible: number; returnMaturedCount: number;
+  };
   kind: Kind;
   segment: Segment;
   cohortGrain: Grain;
@@ -292,6 +297,10 @@ export default function CohortReportPanel({
   getAuthHeaders: () => Record<string, string>;
 }) {
   const [segment, setSegment] = useState<Segment>('signup');
+  const [source, setSource] = useState('all');
+  const [channel, setChannel] = useState('all');
+  const [campaign, setCampaign] = useState('');
+  const [campaignDraft, setCampaignDraft] = useState('');
   const [cohortGrain, setCohortGrain] = useState<Grain>('week');
   const [periodGrain, setPeriodGrain] = useState<Grain>('week');
   const [cohortCount, setCohortCount] = useState(12);
@@ -313,6 +322,7 @@ export default function CohortReportPanel({
     const controller = new AbortController();
     const params = new URLSearchParams({
       segment,
+      source, channel, campaign,
       cohort: cohortGrain,
       period: periodGrain,
       cohorts: String(cohortCount),
@@ -348,7 +358,7 @@ export default function CohortReportPanel({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [apiUrl, kind, segment, cohortGrain, periodGrain, cohortCount, periodCount, questions, per, reloadToken]);
+  }, [apiUrl, kind, segment, source, channel, campaign, cohortGrain, periodGrain, cohortCount, periodCount, questions, per, reloadToken]);
 
   const selected = report?.cohorts.find((row) => row.key === selectedKey) ?? null;
   const periodTitle = GRAIN_LABEL[report?.periodGrain ?? periodGrain].title;
@@ -380,6 +390,30 @@ export default function CohortReportPanel({
         </div>
 
         <div className="mt-5 flex flex-wrap items-end gap-4">
+          <label className="flex flex-col gap-1 text-xs font-medium text-[#5e6b63]">
+            Signup source
+            <select value={source} onChange={event => setSource(event.target.value)} className="h-10 rounded border border-[#102319]/15 bg-white px-3 text-sm">
+              <option value="all">All sources</option>
+              <option value="coast_fire_calculator">Coast FIRE calculator</option>
+              <option value="retirement_calculator">Retirement calculator</option>
+              <option value="direct_or_unknown">Other / unknown</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-[#5e6b63]">
+            Acquisition channel
+            <select value={channel} onChange={event => setChannel(event.target.value)} className="h-10 rounded border border-[#102319]/15 bg-white px-3 text-sm">
+              <option value="all">All channels</option>
+              <option value="google_ads">Google Ads</option>
+            </select>
+          </label>
+          <form onSubmit={event => { event.preventDefault(); setCampaign(campaignDraft.trim()); }} className="flex items-end gap-2">
+            <label className="flex flex-col gap-1 text-xs font-medium text-[#5e6b63]">
+              Campaign (utm_campaign)
+              <input value={campaignDraft} onChange={event => setCampaignDraft(event.target.value)}
+                maxLength={256} placeholder="All campaigns" className="h-10 w-44 rounded border border-[#102319]/15 bg-white px-3 text-sm" />
+            </label>
+            <button type="submit" className="h-10 rounded border border-[#102319]/15 px-3 text-sm">Apply</button>
+          </form>
           <div className="flex flex-col gap-1 text-xs font-medium text-[#5e6b63]">
             Accounts
             <div className="flex h-10 rounded border border-[#102319]/15 bg-white p-0.5" role="group" aria-label="Accounts">
@@ -446,6 +480,24 @@ export default function CohortReportPanel({
 
       {report && (
         <div className="rounded-lg bg-white/70 p-6">
+          {report.quality && (
+            <div className="mb-6 rounded-lg border border-[#102319]/10 p-4" aria-label="Quality milestones">
+              <h3 className="font-semibold text-[#102319]">First value and early engagement</h3>
+              <p className="mt-1 text-xs text-[#5e6b63]">Since signup, among {report.quality.measuredSignups} accounts with the new measurement.
+                {' '}{report.quality.unmeasuredSignups} older or unmeasured accounts are excluded from these totals.</p>
+              <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                {([
+                  ['Result viewed in app', report.quality.resultViewed],
+                  ['Meaningful answer viewed', report.quality.meaningfulAnswer],
+                  ['Account linked', report.quality.accountLinked],
+                  ['Returned and engaged in 7 days', report.quality.returnedEngaged],
+                ] as const).map(([label, value]) => <div key={label}><dt className="text-xs text-[#5e6b63]">{label}</dt><dd className="text-xl font-semibold tabular-nums">{value}</dd></div>)}
+              </dl>
+              <p className="mt-3 text-xs text-[#5e6b63]">Completed seven-day return rate: {report.quality.returnEligible
+                ? `${report.quality.returnMaturedCount}/${report.quality.returnEligible} (${percent(report.quality.returnMaturedCount / report.quality.returnEligible)})`
+                : 'Not yet measurable'}. Newer accounts are still being observed.</p>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="min-w-full border-separate border-spacing-0.5 text-sm">
               <thead className="whitespace-nowrap text-xs uppercase tracking-wide text-[#5e6b63]">

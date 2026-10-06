@@ -414,7 +414,7 @@ function LeadCapturePanel({
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Known-prospect branch</p>
           <h3 className="mt-1 text-base font-semibold tracking-[-.025em]">Save results → create an account</h3>
-          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">Saving now takes visitors straight to signup and emails a copy. Direct saves and email returns are separate routes, not consecutive steps. Counts are outcomes observed in this window, not a closed cohort. New direct-arrival tracking cannot recover missed historical events. See Signup paths below for desktop/mobile splits.</p>
+          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">Saving takes visitors to signup or sign-in and sends a result-ready email. The answer opens inside Ask Linc. Direct saves and email returns are separate routes, not consecutive steps. These are outcomes observed in this window, not a closed cohort. See the cohort reports for confirmed result views and meaningful follow-ups.</p>
         </div>
       </div>
     </div>

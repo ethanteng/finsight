@@ -32,6 +32,8 @@ function fakePrisma(overrides: Record<string, unknown> = {}) {
     subscription: { findMany: jest.fn().mockResolvedValue([]) },
     user: { findMany: jest.fn().mockResolvedValue([]) },
     conversation: { findMany: jest.fn().mockResolvedValue([]) },
+    userAcquisition: { findMany: jest.fn().mockResolvedValue([]) },
+    productMilestone: { findMany: jest.fn().mockResolvedValue([]) },
     accessToken: { groupBy: jest.fn().mockResolvedValue([]) },
     financialSummaryHistory: { groupBy: jest.fn().mockResolvedValue([]) },
     snapTradeUser: { findMany: jest.fn().mockResolvedValue([]) },
@@ -235,5 +237,30 @@ describe('getActivationReport', () => {
     const [first] = report.cohorts;
     expect(first.cells[0]).toEqual({ rate: 0.5, count: 2, eligible: 4 });
     expect(first.cells[1]).toEqual({ rate: 0.75, count: 3, eligible: 4 });
+  });
+});
+
+
+describe('prospective quality summary', () => {
+  it('excludes historical accounts and uses only mature accounts in the seven-day rate', async () => {
+    fakePrisma({
+      user: { findMany: jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([
+        user('mature', '2026-09-25T09:00:00Z'), user('young', '2026-10-06T09:00:00Z'),
+        user('historical', '2026-09-22T09:00:00Z'),
+      ]) },
+      userAcquisition: { findMany: jest.fn().mockResolvedValue([{ userId: 'mature' }, { userId: 'young' }]) },
+      productMilestone: { findMany: jest.fn().mockResolvedValue([
+        { userId: 'mature', kind: 'first_meaningful_answer' },
+        { userId: 'mature', kind: 'returned_engaged_7d' },
+        { userId: 'young', kind: 'first_result_viewed' },
+        { userId: 'young', kind: 'returned_engaged_7d' },
+        { userId: 'historical', kind: 'first_result_viewed' },
+      ]) },
+    });
+    const report = await getEngagementReport({ ...weekly, segment: 'signup' }, { questions: 1, per: 'week' }, now);
+    expect(report.quality).toEqual({
+      measuredSignups: 2, unmeasuredSignups: 1, resultViewed: 1, meaningfulAnswer: 1,
+      accountLinked: 0, returnedEngaged: 2, returnEligible: 1, returnMaturedCount: 1,
+    });
   });
 });

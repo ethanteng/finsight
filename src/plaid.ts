@@ -1,4 +1,5 @@
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from 'plaid';
+import { recordFirstAccountLinked } from './services/product-milestones';
 import { PrismaClient } from '@prisma/client';
 import { BalanceService } from './services/balance-service';
 import { FinancialDataService } from './services/financial-data-service';
@@ -665,6 +666,9 @@ export const setupPlaidRoutes = (app: any) => {
 
         const accounts = accountsResponse.data.accounts;
         console.log(`Found ${accounts.length} accounts to reconcile`);
+        if (req.user?.id && accounts.length > 0) {
+          await recordFirstAccountLinked(req.user.id, 'plaid');
+        }
 
         // RELINK RECONCILIATION: A fresh Link flow always mints a new Plaid Item, even when the
         // user is re-connecting an institution they already have. Without reconciliation the old
