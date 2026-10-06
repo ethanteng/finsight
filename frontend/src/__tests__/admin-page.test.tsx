@@ -79,6 +79,18 @@ describe('AdminPage', () => {
     expect(screen.getByText('Market News')).toBeInTheDocument();
   });
 
+  it('hides the Marketing and Calculator tabs', async () => {
+    render(<AdminPage />);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+
+    expect(await screen.findByText('Production')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Marketing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Calculator' })).not.toBeInTheDocument();
+  });
+
   it('should switch to Market News tab when clicked', async () => {
     render(<AdminPage />);
 
