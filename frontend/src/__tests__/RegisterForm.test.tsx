@@ -26,6 +26,7 @@ import {
   RETIREMENT_SIGNUP_SOURCE,
   storeRetirementSignupContext,
 } from '@/lib/retirement-signup-context';
+import { CASH_FLOW_SIGNUP_SOURCE } from '@/lib/cash-flow-signup';
 import {
   COAST_FIRE_REF_COOKIE,
   COAST_FIRE_SIGNUP_SOURCE,
@@ -972,7 +973,9 @@ describe('RegisterForm', () => {
     it.each([
       [RETIREMENT_SIGNUP_SOURCE, 'retirement_calculator'],
       [COAST_FIRE_SIGNUP_SOURCE, 'coast_fire_calculator'],
-    ])('reports %s as the calculator a click-through continued from', async (source, origin) => {
+      // Not a calculator, but its buttons are tagged the same way.
+      [CASH_FLOW_SIGNUP_SOURCE, 'cash_flow_forecast'],
+    ])('reports %s as the page a click-through continued from', async (source, origin) => {
       searchParams = new URLSearchParams(`source=${source}`);
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,

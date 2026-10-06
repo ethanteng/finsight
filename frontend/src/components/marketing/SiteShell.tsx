@@ -87,11 +87,14 @@ export function PageCta({
   copy,
   label = "Start free",
   csOverrideId,
+  href,
 }: {
   title?: string;
   copy?: string;
   label?: string;
   csOverrideId: string;
+  /** A tagged signup link, for a page whose signups carry a `source`. */
+  href?: string;
 }) {
   return (
     <section className="page-cta">
@@ -99,7 +102,7 @@ export function PageCta({
         <p className="section-kicker light">START WITH THE DECISION</p>
         <h2>{title}</h2>
         {copy ? <p className="page-cta-copy">{copy}</p> : null}
-        <MarketingGetStartedButton className="button button-primary" trackingLocation="page_cta" csOverrideId={csOverrideId} label={label} />
+        <MarketingGetStartedButton className="button button-primary" trackingLocation="page_cta" csOverrideId={csOverrideId} label={label} href={href} />
         <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
       </div>
     </section>

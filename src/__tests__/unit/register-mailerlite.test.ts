@@ -58,6 +58,7 @@ const GROUPS = {
   MAILER_LITE_TRIAL_GROUP_ID: 'trial-group',
   MAILER_LITE_RETIREMENT_GROUP_ID: 'retirement-group',
   MAILER_LITE_COAST_FIRE_GROUP_ID: 'coast-fire-group',
+  MAILER_LITE_CASH_FLOW_GROUP_ID: 'cash-flow-group',
 };
 
 function buildApp() {
@@ -128,6 +129,18 @@ describe('registration and the marketing list', () => {
     await settle();
 
     expect(subscribedGroups()).toEqual(['trial-group', 'coast-fire-group']);
+  });
+
+  /*
+   * Joining the cash-flow group alongside the trial one is what moves someone
+   * who asked for the sample forecast out of its no-trial sequence and into
+   * the trial one.
+   */
+  it('adds the cash-flow group for a signup continuing from the forecast page', async () => {
+    await register({ signupOrigin: 'cash_flow_forecast' });
+    await settle();
+
+    expect(subscribedGroups()).toEqual(['trial-group', 'cash-flow-group']);
   });
 
   /*

@@ -225,6 +225,25 @@ export function pushCoastFireResultsEmailed(status: CoastFireStatus): Promise<vo
 }
 
 /**
+ * A visitor on the cash-flow forecast page asked for a sample forecast by
+ * email — that page's only point where an anonymous visitor becomes a known
+ * prospect, and the entry to its no-trial email sequence.
+ *
+ * GTM needs a Custom Event trigger on `cash_flow_sample_requested` plus a GA4
+ * Event tag forwarding `source_page` and `content_type`; mark it a key event
+ * in GA4 Admin so it reports as a conversion. The address is never pushed.
+ */
+export function pushCashFlowSampleRequested(): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('cash_flow_sample_requested');
+  pushToDataLayer({
+    event: 'cash_flow_sample_requested',
+    source_page: window.location.pathname,
+    content_type: 'cash_flow_forecast',
+  });
+}
+
+/**
  * A visitor asked for their retirement model run by email — the point where an
  * anonymous calculator user becomes a known prospect, and the counterpart to
  * `coast_fire_results_emailed` on the other calculator.

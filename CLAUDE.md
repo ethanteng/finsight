@@ -123,7 +123,7 @@ Any resolved calculator lead skips the verification code when the signup page se
 
 ### Marketing list membership
 
-Three paths put an address in MailerLite, and they are not interchangeable.
+Four paths put an address in MailerLite, and they are not interchangeable.
 `mailerlite-sync` re-posts the entire user table into `MAILER_LITE_GROUP_ID`
 nightly. The two calculator `email-results` endpoints subscribe a visitor who
 asked for results by email, into that calculator's group, with the run's
@@ -133,11 +133,25 @@ attribution. Those links carry `entry=drip_email`, which `/getstarted` reports
 as its own entry rather than as a results-email open; they also carry the
 token, so MailerLite access means access to those runs until they expire. Registration
 subscribes a no-card signup immediately into `MAILER_LITE_TRIAL_GROUP_ID`,
-plus the calculator's group when the signup continued from one — a resolved
+plus the entry page's group when the signup continued from one — a resolved
 lead token names the calculator, and a click-through from the page declares it
 in `signupOrigin`, which the server allowlists and a resolved lead outranks.
-Paid checkouts are left to the nightly sync. Every one of these runs after the
-response and cannot fail or delay the request it follows.
+The cash-flow forecast page tags its buttons the same way
+(`source=cash-flow-forecast`, origin `cash_flow_forecast`) and has no run to
+hand over. Its "email me a sample forecast" form posts to
+`/api/cash-flow-forecast/sample-request`, which puts a visitor without an
+account into `MAILER_LITE_CASH_FLOW_GROUP_ID`; joining it starts that page's
+no-trial sequence, whose first email is the sample. Unlike the others it stores
+nothing of its own, so it waits for MailerLite and answers 503 when the address
+did not land. Paid checkouts are left to the nightly sync. Every other path
+runs after the response and cannot fail or delay the request it follows.
+
+Signup and calculator-lead attribution come from the visitor's landing, not the
+page the form is on: `frontend/src/lib/landing-attribution.ts` remembers the
+first campaign-tagged landing (or, failing one, the first outside referrer) in
+localStorage for 90 days, so a visitor who clicks an ad, reads three pages and
+signs up is still attributed to the ad, and a later click on one of our emails
+does not replace it.
 
 Registration deliberately does not wait for the verification code. The address
 joins the list before anyone proves they own it — the same set of addresses the

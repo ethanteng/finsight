@@ -112,6 +112,16 @@ export function trialGroupIds(): string[] {
 }
 
 /**
+ * The group a visitor joins when they ask the cash-flow forecast page for a
+ * sample forecast by email. Like the calculator groups, it is for people who
+ * have not registered: its no-trial sequence triggers on joining it, and
+ * starting a trial moves them to the trial sequence instead.
+ */
+export function cashFlowGroupIds(): string[] {
+  return groupIdsFrom('MAILER_LITE_CASH_FLOW_GROUP_ID');
+}
+
+/**
  * The signup `entry` a calculator lead's follow-up emails carry in their
  * continue links. The frontend reads the same value (`SIGNUP_ENTRY_DRIP_EMAIL`)
  * so those clicks report as their own entry rather than as opens of the
@@ -142,23 +152,29 @@ export const CALCULATOR_SIGNUP_ORIGINS = [
 export type CalculatorSignupOrigin = (typeof CALCULATOR_SIGNUP_ORIGINS)[number];
 
 /**
+ * Every entry page a signup can name: the two calculators, plus the cash-flow
+ * forecast page, which tags its signup buttons the same way but has no run to
+ * hand over.
+ */
+export const SIGNUP_ORIGINS = [...CALCULATOR_SIGNUP_ORIGINS, 'cash_flow_forecast'] as const;
+export type SignupOrigin = (typeof SIGNUP_ORIGINS)[number];
+
+/**
  * An allowlist, not a cast. The origin arrives in a request body, and it picks
  * which of our groups an address joins — so anything unrecognized becomes "no
- * calculator" rather than reaching MailerLite as a group name.
+ * entry page" rather than reaching MailerLite as a group name.
  */
-export function normalizeCalculatorSignupOrigin(
-  value: unknown,
-): CalculatorSignupOrigin | null {
-  return (CALCULATOR_SIGNUP_ORIGINS as readonly unknown[]).includes(value)
-    ? (value as CalculatorSignupOrigin)
+export function normalizeSignupOrigin(value: unknown): SignupOrigin | null {
+  return (SIGNUP_ORIGINS as readonly unknown[]).includes(value)
+    ? (value as SignupOrigin)
     : null;
 }
 
 /**
  * Every group a new no-card account joins, as one list.
  *
- * The trial group always, because that is what the account is. The calculator
- * group as well when the signup continued from one: someone who clicked
+ * The trial group always, because that is what the account is. The entry
+ * page's group as well when the signup continued from one: someone who clicked
  * through from the calculator page never gave that page an address, so they
  * are not on its list yet — the email-results endpoint is what normally puts
  * them there, and they skipped it. Whoever *did* arrive from a results email
@@ -168,10 +184,11 @@ export function normalizeCalculatorSignupOrigin(
  * Unset variables drop out, so an account with no trial group configured still
  * joins its calculator group, and vice versa.
  */
-export function signupGroupIds(origin: CalculatorSignupOrigin | null): string[] {
+export function signupGroupIds(origin: SignupOrigin | null): string[] {
   return [
     ...trialGroupIds(),
     ...(origin === 'retirement_calculator' ? retirementGroupIds() : []),
     ...(origin === 'coast_fire_calculator' ? coastFireGroupIds() : []),
+    ...(origin === 'cash_flow_forecast' ? cashFlowGroupIds() : []),
   ];
 }

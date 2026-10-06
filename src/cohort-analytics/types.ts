@@ -18,7 +18,7 @@ export const LINK_SOURCES = ['plaid', 'snaptrade', 'public'] as const;
 export type LinkSource = typeof LINK_SOURCES[number];
 
 export interface CohortWindow {
-  source?: 'all' | 'coast_fire_calculator' | 'retirement_calculator' | 'direct_or_unknown';
+  source?: 'all' | 'coast_fire_calculator' | 'retirement_calculator' | 'cash_flow_forecast' | 'direct_or_unknown';
   channel?: 'all' | 'google_ads';
   campaign?: string;
   segment: CohortSegment;

@@ -51,6 +51,18 @@ it('uses the resolved lead, preserves original acquisition, and drops unapproved
   });
 });
 
+it('records the cash-flow forecast page as a source, and nothing unrecognised', async () => {
+  await recordSignupAcquisition({ userId: 'u1', email: 'person@example.com', lead: null, signupOrigin: 'cash_flow_forecast' });
+  expect(db.userAcquisition.upsert).toHaveBeenLastCalledWith(expect.objectContaining({
+    create: expect.objectContaining({ source: 'cash_flow_forecast' }),
+  }));
+
+  await recordSignupAcquisition({ userId: 'u2', email: 'other@example.com', lead: null, signupOrigin: 'some_other_page' });
+  expect(db.userAcquisition.upsert).toHaveBeenLastCalledWith(expect.objectContaining({
+    create: expect.objectContaining({ source: 'direct_or_unknown' }),
+  }));
+});
+
 it('never fails signup when attribution storage is unavailable', async () => {
   db.userAcquisition.upsert.mockRejectedValue(new Error('unavailable'));
   await expect(recordSignupAcquisition({ userId: 'u1', email: 'person@example.com', lead: null })).resolves.toBeUndefined();

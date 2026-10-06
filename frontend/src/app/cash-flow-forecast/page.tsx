@@ -5,6 +5,8 @@ import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetSt
 import { TeaserVideo } from '@/components/marketing/TeaserVideo';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
 import { TRIAL_CTA_MICROCOPY } from '@/components/marketing/trial-copy';
+import CashFlowSampleCapture from '@/components/marketing/CashFlowSampleCapture';
+import { CASH_FLOW_SIGNUP_HREF } from '@/lib/cash-flow-signup';
 import { buildMarketingMetadata } from '@/lib/seo';
 
 const canonical = 'https://asklinc.com/cash-flow-forecast';
@@ -123,6 +125,7 @@ export default function CashFlowForecastPage() {
             trackingLocation="cash_flow_hero"
             csOverrideId="cta-start-free-trial-cash-flow-hero"
             label="Build my forecast"
+            href={CASH_FLOW_SIGNUP_HREF}
           />
         </div>
         <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
@@ -159,6 +162,10 @@ export default function CashFlowForecastPage() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="shell" aria-label="Get a sample forecast by email">
+        <CashFlowSampleCapture />
       </section>
 
       <section className="case-context dark-band">
@@ -220,6 +227,7 @@ export default function CashFlowForecastPage() {
         copy="See what you’ll have left before you decide."
         label="Build my forecast"
         csOverrideId="cta-start-free-trial-cash-flow-bottom"
+        href={CASH_FLOW_SIGNUP_HREF}
       />
       <SiteFooter />
     </main>

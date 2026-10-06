@@ -70,4 +70,16 @@ describe('free-trial signup attribution', () => {
       signupEntry: 'results_page',
     });
   });
+
+  it('keeps the cash-flow page as its own origin, with its own entry', () => {
+    beginFreeTrialSignupFlow(1000, {
+      signupOrigin: 'cash_flow_forecast',
+      signupEntry: 'page_cta',
+    });
+
+    expect(readTrialSignupAttribution(1001)).toEqual({
+      signupOrigin: 'cash_flow_forecast',
+      signupEntry: 'page_cta',
+    });
+  });
 });

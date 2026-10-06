@@ -39,7 +39,7 @@ function parseWindow(query: Request['query']): CohortWindow {
     throw new InvalidParameter('campaign must be at most 256 characters');
   }
   return {
-    source: oneOf(query.source, ['all', 'coast_fire_calculator', 'retirement_calculator', 'direct_or_unknown'] as const, 'all', 'source'),
+    source: oneOf(query.source, ['all', 'coast_fire_calculator', 'retirement_calculator', 'cash_flow_forecast', 'direct_or_unknown'] as const, 'all', 'source'),
     channel: oneOf(query.channel, ['all', 'google_ads'] as const, 'all', 'channel'),
     campaign: typeof query.campaign === 'string' ? query.campaign.trim() : undefined,
     segment: oneOf<CohortSegment>(query.segment, COHORT_SEGMENTS, 'signup', 'segment'),
