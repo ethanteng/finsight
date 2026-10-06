@@ -169,7 +169,6 @@ export default function AdminPage() {
   const [dataGaps, setDataGaps] = useState<{
     usersConsidered: number;
     usersWithAnyGap: number;
-    staleAnalyses: number;
     securities: Array<{
       label: string;
       /** Provider id the label was resolved from, when it was resolved. */
@@ -1008,15 +1007,6 @@ export default function AdminPage() {
                 {`$${Math.round(dataGaps.coverage.totalUnmodeledValue).toLocaleString()} excluded from simulation across these analyses.`}
               </p>
 
-              {dataGaps.staleAnalyses > 0 && (
-                <p className="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-900">
-                  {`${dataGaps.staleAnalyses} of ${dataGaps.usersConsidered} analyses were computed before the
-                  current engine and do not report coverage. Their gaps may already be resolved — a
-                  target-date fund analysed before the registry existed still shows here as
-                  unclassifiable. Re-run those analyses before sourcing data for anything they list.`}
-                </p>
-              )}
-
               {dataGaps.securities.length === 0 ? (
                 <p className="mt-5 text-sm text-[#5e6b63]">
                   No unclassifiable securities reported. Every holding in the analyses read reached the simulation.
@@ -1065,7 +1055,8 @@ export default function AdminPage() {
               )}
 
               <p className="mt-4 text-xs text-[#5e6b63]">
-                Built from stored retirement analyses, so users who have never run one do not appear.
+                Built from stored retirement analyses, so users who have never run one do not appear,
+                nor do users whose latest one predates the current engine until they re-run it.
                 Names are resolved from each analysis&apos;s portfolio snapshot and the user&apos;s
                 live financial snapshot; a row marked &ldquo;Unnamed security&rdquo; is one the
                 provider sent with no name, ticker or description, so its identifier is the only

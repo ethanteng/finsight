@@ -177,7 +177,7 @@ describe('data gap report', () => {
     ]);
 
     expect(report.securities.map(entry => entry.label)).toEqual(['Real Gap']);
-    expect(report.usersConsidered).toBe(3); // a, b, d — the undated and unnamed rows are dropped
+    expect(report.usersConsidered).toBe(1); // d — the rest are undated, unnamed or report no coverage
   });
 
 
@@ -350,27 +350,63 @@ describe('data gap report', () => {
     expect(forward).toBe(reversed);
   });
 
-  it('counts analyses written before the current data-quality contract', () => {
+  it('leaves out analyses written before the current data-quality contract', () => {
     // Analyses are cached, so the report reads whatever each user last computed
     // -- which can predate the target-date registry entirely. Those gaps may
-    // already be fixed, and treating them as live sends an operator hunting for
-    // data the engine can already place.
+    // already be fixed, and listing them sends an operator hunting for data the
+    // engine can already place.
     const report = aggregateDataGaps([
       row('a', '2026-08-20', {
-        dataQuality: { proxyUsage: { unmappedHoldings: ['State St Target Ret 2040'] } },
+        dataQuality: {
+          unmodeledValue: 40_000,
+          proxyUsage: { unmappedHoldings: ['State St Target Ret 2040'] },
+        },
       }),
-      row('b', '2026-08-20', analysis({ unmapped: ['Genuine Gap'], valueCoverage: 0.9 })),
+      row('b', '2026-08-20', analysis({ unmapped: ['Genuine Gap'], unmodeledValue: 10_000, valueCoverage: 0.9 })),
     ]);
 
-    expect(report.staleAnalyses).toBe(1);
-    expect(report.usersConsidered).toBe(2);
+    expect(report.securities.map(entry => entry.label)).toEqual(['Genuine Gap']);
+    expect(report.usersConsidered).toBe(1);
+    expect(report.usersWithAnyGap).toBe(1);
+    expect(report.coverage).toEqual({
+      totalUnmodeledValue: 10_000,
+      worstValueCoverage: 0.9,
+      medianValueCoverage: 0.9,
+    });
   });
 
-  it('does not call an analysis stale merely because coverage is zero', () => {
+  it('judges the latest analysis, not an older one that happens to be current', () => {
+    // The older analysis describes holdings the user may have since sold, so
+    // falling back to it would report a gap that no longer exists.
+    const report = aggregateDataGaps([
+      row('a', '2026-08-01', analysis({ unmapped: ['Sold Long Ago'], valueCoverage: 0.5 })),
+      row('a', '2026-08-20', { dataQuality: { proxyUsage: { unmappedHoldings: ['Pre-engine Gap'] } } }),
+    ]);
+
+    expect(report.usersConsidered).toBe(0);
+    expect(report.securities).toEqual([]);
+  });
+
+  it('still names a security from an analysis it leaves out', () => {
+    // A name is public metadata about the fund, so a left-out user's snapshot
+    // is as good a source for it as anyone's.
+    const report = aggregateDataGaps([
+      row('a', '2026-08-20', { dataQuality: {} }, { 'id-000000009': 'Named Elsewhere Fund' }),
+      row('b', '2026-08-20', analysis({ unmapped: ['id-000000009'] })),
+    ]);
+
+    expect(report.securities[0]).toMatchObject({
+      label: 'Named Elsewhere Fund',
+      identifier: 'id-000000009',
+    });
+  });
+
+  it('keeps an analysis whose coverage is zero', () => {
     const report = aggregateDataGaps([
       row('a', '2026-08-20', analysis({ unmapped: ['X'], valueCoverage: 0 })),
     ]);
-    expect(report.staleAnalyses).toBe(0);
+    expect(report.usersConsidered).toBe(1);
+    expect(report.coverage.worstValueCoverage).toBe(0);
   });
 
   it('returns an empty report rather than throwing when there is nothing to read', () => {
@@ -378,7 +414,6 @@ describe('data gap report', () => {
     expect(report).toEqual({
       usersConsidered: 0,
       usersWithAnyGap: 0,
-      staleAnalyses: 0,
       securities: [],
       coverage: { totalUnmodeledValue: 0, worstValueCoverage: null, medianValueCoverage: null },
     });

@@ -81,16 +81,6 @@ export interface DataGapReport {
   /** Distinct users contributing an analysis to this report. */
   usersConsidered: number;
   usersWithAnyGap: number;
-  /**
-   * Analyses computed before the current data-quality contract.
-   *
-   * Retirement analyses are cached, so the report reads whatever each user last
-   * computed -- which can be from an engine that predates the target-date
-   * registry and the canonical snapshot. Their gaps may already be fixed and
-   * simply not recomputed yet. Counting them separately stops an operator
-   * sourcing data for a security the engine can already place.
-   */
-  staleAnalyses: number;
   securities: DataGapSecurity[];
   coverage: {
     /** Sum of unmodeled value across the analyses considered. */
@@ -195,6 +185,13 @@ function median(values: number[]): number | null {
  * Only each user's most recent analysis counts. A user who re-ran an analysis
  * five times holds the same fund once, and counting the history would rank a
  * frequent user's holdings above a widely-held gap.
+ *
+ * And only if the current engine wrote it. Retirement analyses are cached, so
+ * a user's latest can predate the target-date registry and the canonical
+ * snapshot, and its gaps may already be fixed and simply not recomputed.
+ * Listing them sends an operator sourcing data for a security the engine can
+ * already place, so such a user is left out until they re-run -- the same as
+ * a user who has never run one.
  */
 export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
   // Keep the newest row per user.
@@ -228,15 +225,26 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
     }
   }
 
+  // Decided after choosing each user's latest, not before: an older analysis
+  // that happens to be current describes holdings the user may no longer have.
+  // And after the name index, since a name is good for every holder of the
+  // security whichever analysis it came from.
+  //
+  // `valueCoverage` is the marker for the current contract: every analysis the
+  // present engine writes reports it, zero included. Its absence dates the row
+  // rather than describing the portfolio.
+  for (const [userId, { row }] of latestByUser) {
+    const quality = (row.historicalImplications as any)?.dataQuality;
+    if (finite(quality?.valueCoverage) === null) latestByUser.delete(userId);
+  }
+
   const byKey = new Map<string, DataGapSecurity>();
   const coverages: number[] = [];
   let totalUnmodeledValue = 0;
   let usersWithAnyGap = 0;
-  let staleAnalyses = 0;
 
   for (const { at, row } of latestByUser.values()) {
-    const quality = (row.historicalImplications as any)?.dataQuality;
-    if (!quality) continue;
+    const quality = (row.historicalImplications as any).dataQuality;
     const proxyUsage = quality.proxyUsage ?? {};
 
     // The three reason lists are a partition of `unmappedHoldings`, so reading
@@ -316,12 +324,7 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
 
     const unmodeled = finite(quality.unmodeledValue);
     if (unmodeled !== null && unmodeled > 0) totalUnmodeledValue += unmodeled;
-    const coverage = finite(quality.valueCoverage);
-    if (coverage !== null) coverages.push(coverage);
-    // `valueCoverage` is the marker for the current contract: every analysis the
-    // present engine writes reports it. Its absence dates the row rather than
-    // describing the portfolio.
-    else staleAnalyses += 1;
+    coverages.push(quality.valueCoverage);
   }
 
   const securities = [...byKey.values()].sort((left, right) =>
@@ -331,7 +334,6 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
   return {
     usersConsidered: latestByUser.size,
     usersWithAnyGap,
-    staleAnalyses,
     securities,
     coverage: {
       totalUnmodeledValue,
