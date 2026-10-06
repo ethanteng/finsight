@@ -315,6 +315,8 @@ describe('CashFlowPageClient', () => {
       ]);
       // Four categories: nothing to fold.
       expect(within(section).queryByRole('button', { name: /^Show all/ })).not.toBeInTheDocument();
+      // No sources (or an older API that omitted them): the row stays a line, not a control.
+      expect(within(section).queryByRole('button', { name: /^Tv And Movies/ })).not.toBeInTheDocument();
     });
 
     it('folds a long tail into one line, and lists it on request', async () => {

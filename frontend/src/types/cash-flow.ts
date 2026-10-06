@@ -208,8 +208,11 @@ export type CashFlowSpendingCategorySource =
 export interface CashFlowSpendingCategory {
   label: string;
   monthly: number;
-  /** Largest first; their monthlies add up to the category's. */
-  sources: CashFlowSpendingCategorySource[];
+  /**
+   * Largest first; their monthlies add up to the category's. Omitted by older
+   * backends that only returned the category total — treat missing as none.
+   */
+  sources?: CashFlowSpendingCategorySource[];
 }
 
 export interface CashFlowReport {

@@ -142,18 +142,24 @@ function Source({ source, dollars }: { source: CashFlowSpendingCategorySource; d
 
 /** What a category's month is made of, each part with the transactions behind it. */
 function CategoryDetails({ id, category, dollars }: { id: string; category: CashFlowSpendingCategory; dollars: number }) {
+  const sources = category.sources ?? [];
   // The parts add up to the dollars the row shows.
-  const sourceDollars = roundToTotal(category.sources.map(source => source.monthly), dollars);
+  const sourceDollars = roundToTotal(sources.map(source => source.monthly), dollars);
   return (
     <div id={id} className="mt-2 mb-1 rounded-xl bg-[#f3f2e9] p-4">
       {/* Kept narrow so a wide screen doesn't pull the amounts away from what they are. */}
       <div className="max-w-3xl space-y-4">
-        {category.sources.map((source, index) => (
+        {sources.map((source, index) => (
           <Source key={source.kind === 'bill' ? source.streamId : source.kind} source={source} dollars={sourceDollars[index]} />
         ))}
       </div>
     </div>
   );
+}
+
+/** A category opens only when the report says what it is made of. */
+function isExpandable(category: CashFlowSpendingCategory | null): category is CashFlowSpendingCategory {
+  return category !== null && (category.sources?.length ?? 0) > 0;
 }
 
 function CategoryRow({ row, widest, open, onToggle, detailsId }: {
@@ -163,7 +169,7 @@ function CategoryRow({ row, widest, open, onToggle, detailsId }: {
   onToggle: () => void;
   detailsId: string;
 }) {
-  if (!row.category) {
+  if (!isExpandable(row.category)) {
     return (
       <li className={`${ROW_GRID} py-1`}>
         <RowCells row={row} widest={widest} open={null} />
@@ -247,7 +253,7 @@ export default function UsualSpendingBreakdown({ report }: { report: CashFlowRep
             key={row.label}
             row={row}
             widest={widest}
-            open={row.category !== null && openLabel === row.label}
+            open={isExpandable(row.category) && openLabel === row.label}
             onToggle={() => setOpenLabel(openLabel === row.label ? null : row.label)}
             detailsId={`usual-spending-category-${index}`}
           />
