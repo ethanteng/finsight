@@ -116,6 +116,17 @@ function removeStoredContext(): void {
   }
 }
 
+/**
+ * The calculator calls this when its CTA is clicked. A stored scenario lives
+ * for two hours, so a visitor who asked for results by email earlier and then
+ * clicked the page's own CTA would otherwise hand signup a run that click did
+ * not ask for — the same reason the Coast FIRE CTA clears its context.
+ */
+export function clearRetirementSignupContext(): void {
+  if (typeof window === 'undefined') return;
+  removeStoredContext();
+}
+
 interface RetirementSignupOptions {
   email?: string;
   sourceToken?: string;

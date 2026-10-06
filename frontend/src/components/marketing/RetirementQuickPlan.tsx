@@ -34,6 +34,7 @@ import {
   recordRun,
 } from "@/lib/calculator-run-limit";
 import { numericInput, withCommas } from "@/lib/number-input";
+import { RETIREMENT_SIGNUP_HREF, clearRetirementSignupContext } from "@/lib/retirement-signup-context";
 
 type AllocationId = "conservative" | "balanced" | "growth";
 
@@ -849,13 +850,18 @@ export function RetirementQuickPlan({
             analysis together. Keep exploring with your real holdings, income, and spending.
           </p>
           {/*
-            * Carries no run: the email form is the way into Ask Linc with one.
+            * Carries the source but no run: the email form is the way into
+            * Ask Linc with one. The source is what puts the signup in the
+            * Retirement marketing group, so its onboarding emails match the
+            * page it came from.
             */}
           <MarketingGetStartedButton
             className="button button-primary"
             trackingLocation="quickplan_cross_sell"
             csOverrideId="cta-start-free-trial-quickplan"
             label="Build my retirement plan"
+            href={RETIREMENT_SIGNUP_HREF}
+            onBeforeNavigate={clearRetirementSignupContext}
           />
           {/* The same promise every CTA on the site makes; kept in one place. */}
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>

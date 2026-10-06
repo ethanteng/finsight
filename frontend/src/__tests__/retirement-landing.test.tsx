@@ -8,7 +8,7 @@ import {
   readRetirementAge,
   retirementHeadline,
 } from '@/lib/retirement-landing';
-import { readRetirementSignupContext } from '@/lib/retirement-signup-context';
+import { readRetirementSignupContext, storeRetirementSignupContext } from '@/lib/retirement-signup-context';
 
 jest.mock('@/lib/contentsquare', () => ({ trackContentsquareEvent: jest.fn() }));
 
@@ -219,7 +219,19 @@ describe('retirement landing page', () => {
 
       const cta = screen.getByRole('link', { name: 'Build my retirement plan' });
       expect(cta).toHaveAttribute('data-cs-override-id', 'cta-start-free-trial-quickplan');
+      // The source routes the signup into the Retirement marketing group.
+      expect(cta).toHaveAttribute('href', '/getstarted?source=retirement-calculator');
       expect(container.querySelector('.calculator-result-grid')).toHaveAttribute('data-cs-mask');
+
+      // A run stored by an earlier email request in this tab must not ride
+      // along on a click that did not ask for it.
+      storeRetirementSignupContext({
+        currentAge: 50, retirementAge: 62, investableAssets: 300_000,
+        annualSpending: 60_000, annualContributions: 10_000,
+        socialSecurityAnnual: 20_000, socialSecurityStartAge: 67,
+        lifeExpectancy: 90, allocation: 'growth',
+      });
+      expect(readRetirementSignupContext()).not.toBeNull();
 
       // Isolate the CTA event from the model-run events that preceded it.
       analyticsWindow.dataLayer = [];
