@@ -1,0 +1,131 @@
+/*
+ * The cash-flow forecast page's "email me a sample forecast" card. The same
+ * paper-and-rule treatment as the calculators' email capture, so a visitor
+ * moving between those pages sees one kind of form.
+ */
+.cash-flow-sample {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
+  align-items: center;
+  gap: 16px 40px;
+  margin: 0 auto;
+  padding: 22px 28px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--cream);
+  box-shadow: 0 10px 30px rgba(16, 35, 25, 0.06);
+}
+
+.cash-flow-sample .cfs-copy,
+.cash-flow-sample .cfs-fields {
+  min-width: 0;
+}
+
+.cash-flow-sample .section-kicker {
+  margin: 0 0 8px;
+}
+
+.cash-flow-sample h3 {
+  margin: 0;
+  font-family: var(--font-display), sans-serif;
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.cash-flow-sample .cfs-lead {
+  margin: 8px 0 0;
+  color: #4f5e55;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.cash-flow-sample .cfs-label {
+  display: block;
+  margin: 0 0 7px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cash-flow-sample .cfs-row {
+  display: grid;
+  gap: 10px;
+}
+
+.cash-flow-sample .cfs-row input {
+  width: 100%;
+  min-height: 52px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.cash-flow-sample .cfs-row input:focus {
+  border-color: #2b8f5d;
+  box-shadow: 0 0 0 3px rgba(43, 143, 93, 0.15);
+  outline: 0;
+}
+
+.cash-flow-sample .cfs-row input::placeholder {
+  color: #97a39b;
+  font-weight: 500;
+}
+
+.cash-flow-sample .cfs-row button {
+  width: 100%;
+  border: 0;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.cash-flow-sample .cfs-row button[disabled] {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.cash-flow-sample .cfs-error {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border-left: 3px solid #b4352b;
+  border-radius: 4px 10px 10px 4px;
+  background: #fbe9e5;
+  color: #7e2d26;
+  font-size: 14px;
+}
+
+.cash-flow-sample.is-sent {
+  grid-template-columns: minmax(0, 1fr);
+  border-color: #9dbd6e;
+  background: #f4f9e8;
+}
+
+.cash-flow-sample.is-sent p:not(.section-kicker) {
+  margin: 10px 0 0;
+  color: #4f5e55;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.cash-flow-sample.is-sent strong {
+  color: var(--ink);
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .cash-flow-sample {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 24px 22px;
+  }
+
+  .cash-flow-sample .cfs-label {
+    margin-top: 20px;
+  }
+}

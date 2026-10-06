@@ -1492,10 +1492,18 @@ describe('CashFlowPageClient', () => {
     expect(screen.getByRole('rowheader', { name: 'Sep 2026' })).toBeInTheDocument();
   });
 
-  it('sends a signed-out visitor to log in', async () => {
+  it('sends a signed-out visitor to log in, and back here afterwards', async () => {
     localStorage.clear();
-    mockFetch(() => undefined);
-    render(<CashFlowPageClient />);
-    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/login'));
+    // The trial emails link here, often opened on a device that is not signed in.
+    window.history.pushState({}, '', '/cash-flow?utm_source=mailerlite');
+    try {
+      mockFetch(() => undefined);
+      render(<CashFlowPageClient />);
+      await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith(
+        `/login?returnTo=${encodeURIComponent('/cash-flow?utm_source=mailerlite')}`,
+      ));
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
   });
 });

@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import SiteFooter from './SiteFooter';
 import { isStripeBillingPortalUrl, replaceLocation } from '@/lib/external-navigation';
+import { loginUrlFor } from '@/lib/post-login-redirect';
+
+/** Signing in from here comes straight back, so the portal opens on return. */
+const BILLING_PATH = '/billing';
 
 /**
  * The landing page for the signed-in header's upgrade CTA when the account is
@@ -132,7 +136,7 @@ function BillingPortalRedirectInner() {
                 <div className="mt-6">
                   <Link
                     className="block w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-                    href="/login"
+                    href={loginUrlFor(BILLING_PATH)}
                   >
                     Sign in
                   </Link>

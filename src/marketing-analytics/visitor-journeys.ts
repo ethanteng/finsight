@@ -132,6 +132,8 @@ export function buildVisitorJourneys(
           ].map(([entry, label]) => ({ id: `signup_${calculator}_${entry}`, label: `${name} · ${label}`, origin: `${calculator}_calculator`, entry })),
         ];
       }),
+      // Not a calculator: one tagged button, so one row.
+      { id: 'signup_cash_flow_forecast', label: 'Cash flow forecast page · signup button', origin: 'cash_flow_forecast', entry: 'page_cta' },
     ];
     for (const path of signupPaths) {
       const cohort = population.filter(session => (!path.origin || session.signupOrigin === path.origin)

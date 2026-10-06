@@ -1,6 +1,7 @@
 import { getPrismaClient } from '../prisma-client';
 import { isAdminOperatorEmail } from '../auth/admin-emails';
 import { parseCalculatorLeadAttribution, hasPaidLeadAttribution } from './calculator-lead-attribution';
+import { normalizeSignupOrigin } from './mailerlite-subscribe';
 import type { CalculatorLead } from './calculator-first-decision';
 
 export const PRODUCT_MILESTONES = [
@@ -31,8 +32,7 @@ export async function recordSignupAcquisition(args: {
       : null;
     const source = args.lead
       ? (args.lead.kind === 'coast-fire' ? 'coast_fire_calculator' : 'retirement_calculator')
-      : ['coast_fire_calculator', 'retirement_calculator'].includes(args.signupOrigin ?? '')
-        ? args.signupOrigin! : 'direct_or_unknown';
+      : normalizeSignupOrigin(args.signupOrigin) ?? 'direct_or_unknown';
     // Never substitute signup/email-return metadata for a resolved lead's original attribution.
     const attribution = parseCalculatorLeadAttribution(args.lead ? lead : args.attribution);
     await db.userAcquisition.upsert({

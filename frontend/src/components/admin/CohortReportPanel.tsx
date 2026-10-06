@@ -397,6 +397,7 @@ export default function CohortReportPanel({
               <option value="all">All sources</option>
               <option value="coast_fire_calculator">Coast FIRE calculator</option>
               <option value="retirement_calculator">Retirement calculator</option>
+              <option value="cash_flow_forecast">Cash flow forecast page</option>
               <option value="direct_or_unknown">Other / unknown</option>
             </select>
           </label>

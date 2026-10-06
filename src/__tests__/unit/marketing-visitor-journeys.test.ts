@@ -47,6 +47,13 @@ describe('visitor journeys', () => {
     expect(path(drip, 'signup_retirement_results_email').steps[0].sessions).toBe(0);
   });
 
+  it('gives the cash-flow page its own signup row, apart from both calculators', () => {
+    const cashFlow = [session('cash-flow', signup, { signupOrigin: 'cash_flow_forecast', signupEntry: 'page_cta' })];
+    expect(path(cashFlow, 'signup_cash_flow_forecast').steps.map(step => step.sessions)).toEqual([1, 1, 1]);
+    expect(path(cashFlow, 'signup_retirement').steps[0].sessions).toBe(0);
+    expect(path(cashFlow, 'signup_coast_fire').steps[0].sessions).toBe(0);
+  });
+
   it('requires ordered main steps but retains conversions with missing form events', () => {
     const sessions = [
       session('before-result', { retirement_model_run: 3, quickplan_cross_sell_click: 2, ...signup }, { signupEntry: 'calculator_cta' }),

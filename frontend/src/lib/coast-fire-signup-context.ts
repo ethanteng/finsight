@@ -152,15 +152,18 @@ export function buildCoastFireSignupContext(
 /**
  * Forget a scenario this tab was carrying.
  *
- * The calculator calls this when its CTA is clicked with nothing on screen.
- * A stored scenario lives for two hours, so a visitor who ran one, came back
- * to the page, and clicked through without running another would otherwise
- * hand signup a run the page they just left was not showing — the same
- * "answer you did not ask for" the empty calculator exists to avoid.
+ * The calculator calls this when its CTA is clicked. That CTA carries the
+ * source but no run, so it drops both carriers a run could still be riding:
+ * the stored scenario, which lives for two hours, and the handover cookie,
+ * which signup keeps for a retry when a lookup fails transiently. Either would
+ * otherwise hand signup a run this click did not ask for — the same "answer
+ * you did not ask for" the empty calculator exists to avoid — and the cookie
+ * would count the click as a results-email return.
  */
 export function clearCoastFireSignupContext(): void {
   if (typeof window === 'undefined') return;
   removeStoredContext();
+  clearHandoverToken(COAST_FIRE_REF_COOKIE);
 }
 
 /**

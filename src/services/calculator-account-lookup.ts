@@ -14,6 +14,16 @@
  * recover from the other — a new visitor sent there has no account to open.
  */
 export async function accountExistsForEmail(email: string): Promise<boolean> {
+  return (await lookupAccountForEmail(email)) ?? false;
+}
+
+/**
+ * The same lookup, saying when it could not tell: `null` when the database did
+ * not answer. For a caller with no later step to recover from a wrong guess —
+ * the cash-flow sample request would otherwise enroll an existing customer in
+ * a sequence that asks them to start a trial.
+ */
+export async function lookupAccountForEmail(email: string): Promise<boolean | null> {
   try {
     const { getPrismaClient } = await import('../prisma-client');
     const user = await getPrismaClient().user.findUnique({
@@ -23,6 +33,6 @@ export async function accountExistsForEmail(email: string): Promise<boolean> {
     return user !== null;
   } catch (error) {
     console.error('❌ Calculator account lookup failed:', error);
-    return false;
+    return null;
   }
 }

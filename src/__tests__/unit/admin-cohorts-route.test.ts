@@ -56,7 +56,7 @@ describe('admin cohort routes', () => {
   });
 
   it.each([
-    ['source=other', 'source must be one of all, coast_fire_calculator, retirement_calculator, direct_or_unknown'],
+    ['source=other', 'source must be one of all, coast_fire_calculator, retirement_calculator, cash_flow_forecast, direct_or_unknown'],
     ['channel=facebook', 'channel must be one of all, google_ads'],
     ['segment=free', 'segment must be one of signup, trial, paid'],
     ['cohort=year', 'cohort must be one of day, week, month'],

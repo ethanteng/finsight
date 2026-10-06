@@ -6,12 +6,25 @@
  * attribute under test would never appear.
  */
 import {
+  clearCoastFireSignupContext,
   clearCoastFireSignupRef,
   COAST_FIRE_REF_COOKIE,
+  readCoastFireSignupContext,
   readCoastFireSignupRef,
+  storeCoastFireSignupContext,
 } from '@/lib/coast-fire-signup-context';
+import type { CoastFireInputs } from '@/lib/coast-fire';
 
 const TOKEN = 'a'.repeat(48);
+const INPUTS: CoastFireInputs = {
+  currentAge: 35,
+  retirementAge: 60,
+  currentSavings: 250_000,
+  annualRetirementSpending: 60_000,
+  annualRetirementIncome: 0,
+  realReturnRate: 5,
+  withdrawalRate: 4,
+};
 
 /**
  * jsdom's cookie jar applies the same delete semantics as a browser, but it
@@ -65,5 +78,21 @@ describe('the Coast FIRE handover cookie', () => {
     expect(write).toContain('Path=/getstarted');
     expect(write).toContain('Max-Age=0');
     expect(readCoastFireSignupRef()).toBeNull();
+  });
+
+  /*
+   * The calculator's own CTA carries no run. Signup keeps the handover cookie
+   * for a retry when a lookup fails, so a click inside its lifetime would
+   * otherwise spend the old token and count as a results-email return.
+   */
+  it('is dropped along with the stored run when the calculator CTA is clicked', () => {
+    document.cookie = `${COAST_FIRE_REF_COOKIE}=${TOKEN}; Path=/getstarted; Secure`;
+    storeCoastFireSignupContext(INPUTS);
+    expect(readCoastFireSignupRef()).toBe(TOKEN);
+
+    clearCoastFireSignupContext();
+
+    expect(readCoastFireSignupRef()).toBeNull();
+    expect(readCoastFireSignupContext()).toBeNull();
   });
 });

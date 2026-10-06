@@ -20,6 +20,15 @@ export const CALCULATOR_SIGNUP_ORIGINS = [
 export type CalculatorSignupOrigin = (typeof CALCULATOR_SIGNUP_ORIGINS)[number];
 
 /**
+ * Every entry page that tags its signup buttons: the two calculators, plus the
+ * cash-flow forecast page, which has no run to hand over. Kept apart from the
+ * calculator list because the calculator-only events (a restored run, the
+ * results email) must never be labelled with it.
+ */
+export const SIGNUP_ORIGINS = [...CALCULATOR_SIGNUP_ORIGINS, 'cash_flow_forecast'] as const;
+export type SignupOrigin = (typeof SIGNUP_ORIGINS)[number];
+
+/**
  * How a calculator visitor reached /getstarted.
  *
  * `results_page` is the one that does not cross an inbox: the capture form
@@ -31,17 +40,22 @@ export type CalculatorSignupOrigin = (typeof CALCULATOR_SIGNUP_ORIGINS)[number];
  * `drip_email` is a follow-up email's button: the same saved run as
  * `results_email`, but a different email, so it gets its own funnel rather
  * than inflating the results email's.
+ *
+ * `page_cta` is the signup button on the cash-flow forecast page, which has no
+ * calculator and so none of the entries above.
  */
 export const CALCULATOR_SIGNUP_ENTRIES = [
   'calculator_cta',
   'results_email',
   'results_page',
   'drip_email',
+  // A tagged signup button on a page that is not a calculator.
+  'page_cta',
 ] as const;
 export type CalculatorSignupEntry = (typeof CALCULATOR_SIGNUP_ENTRIES)[number];
 
 export interface TrialSignupAttribution {
-  signupOrigin: CalculatorSignupOrigin;
+  signupOrigin: SignupOrigin;
   signupEntry: CalculatorSignupEntry;
 }
 
@@ -49,7 +63,7 @@ interface StoredTrialSignupFlow {
   version: typeof FLOW_VERSION;
   signupFlow: typeof FREE_TRIAL_SIGNUP_FLOW;
   startedAt: number;
-  signupOrigin?: CalculatorSignupOrigin;
+  signupOrigin?: SignupOrigin;
   signupEntry?: CalculatorSignupEntry;
 }
 
@@ -85,7 +99,7 @@ function parseStoredFlow(raw: string, now: number): StoredTrialSignupFlow | null
   }
 
   const hasAttribution =
-    includes(CALCULATOR_SIGNUP_ORIGINS, value.signupOrigin) &&
+    includes(SIGNUP_ORIGINS, value.signupOrigin) &&
     includes(CALCULATOR_SIGNUP_ENTRIES, value.signupEntry);
   return {
     version: FLOW_VERSION,

@@ -1,6 +1,7 @@
 import {
   POST_LOGIN_REDIRECT_PARAM,
   loginUrlFor,
+  loginUrlForCurrentPage,
   sanitizePostLoginRedirect,
 } from '@/lib/post-login-redirect';
 
@@ -66,5 +67,29 @@ describe('loginUrlFor', () => {
   it('falls back to a plain sign-in URL when the destination is rejected', () => {
     expect(loginUrlFor('https://evil.example')).toBe('/login');
     expect(loginUrlFor('/login')).toBe('/login');
+  });
+});
+
+describe('loginUrlForCurrentPage', () => {
+  afterEach(() => window.history.pushState({}, '', '/'));
+
+  it('returns a signed-out visitor to the page they opened, query included', () => {
+    window.history.pushState({}, '', '/billing?utm_source=mailerlite');
+    expect(loginUrlForCurrentPage()).toBe(
+      `/login?${POST_LOGIN_REDIRECT_PARAM}=${encodeURIComponent('/billing?utm_source=mailerlite')}`
+    );
+  });
+
+  it('carries extra sign-in params beside the destination', () => {
+    window.history.pushState({}, '', '/app');
+    const url = new URL(loginUrlForCurrentPage({ message: 'Your session has expired.' }), 'https://asklinc.com');
+    expect(url.pathname).toBe('/login');
+    expect(url.searchParams.get(POST_LOGIN_REDIRECT_PARAM)).toBe('/app');
+    expect(url.searchParams.get('message')).toBe('Your session has expired.');
+  });
+
+  it('keeps the extra params even when the current page is not a safe destination', () => {
+    window.history.pushState({}, '', '/login');
+    expect(loginUrlForCurrentPage({ message: 'hi' })).toBe('/login?message=hi');
   });
 });

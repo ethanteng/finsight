@@ -9,6 +9,7 @@ import type { Metadata } from 'next'
 import VercelAnalytics from '../components/VercelAnalytics'
 import VercelSpeedInsights from '../components/VercelSpeedInsights'
 import ProductMilestoneReporter from '../components/ProductMilestoneReporter'
+import LandingAttributionRecorder from '../components/LandingAttributionRecorder'
 import { PricingProvider } from '../components/PricingProvider'
 import { getPricing } from '../lib/pricing'
 import {
@@ -131,6 +132,7 @@ export default async function RootLayout({
         <VercelAnalytics />
         <VercelSpeedInsights />
         <ProductMilestoneReporter />
+        <LandingAttributionRecorder />
       </body>
     </html>
   )

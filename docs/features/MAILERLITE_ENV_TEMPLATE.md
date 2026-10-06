@@ -23,11 +23,16 @@ MAILER_LITE_TRIAL_GROUP_ID=your_trial_group_id_here
 # list, just without a group.
 MAILER_LITE_COAST_FIRE_GROUP_ID=your_coast_fire_group_id_here
 MAILER_LITE_RETIREMENT_GROUP_ID=your_retirement_group_id_here
+
+# The group a visitor joins when they ask the cash-flow forecast page for a
+# sample forecast. Required for that form: with it unset the form answers 503,
+# since joining this group is the only thing the request does.
+MAILER_LITE_CASH_FLOW_GROUP_ID=your_cash_flow_group_id_here
 ```
 
-A signup that continued from a calculator joins **both** the trial group and
-that calculator's group. `/getstarted` reached any other way joins the trial
-group alone.
+A signup that continued from a calculator or the cash-flow forecast page joins
+**both** the trial group and that page's group. `/getstarted` reached any other
+way joins the trial group alone.
 
 ## How to Get These Values
 

@@ -1,5 +1,6 @@
 "use client";
 import { readCalculatorLeadAttribution, type CalculatorLeadAttribution } from '../lib/calculator-lead-attribution';
+import { hasCashFlowSignupSource } from '../lib/cash-flow-signup';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { getBrowserTimeZone, setStoredUserTimeZone } from '@/lib/browser-time-zone';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -49,6 +50,7 @@ import {
   beginFreeTrialSignupFlow,
   type CalculatorSignupEntry,
   type CalculatorSignupOrigin,
+  type SignupOrigin,
   completeFreeTrialSignupFlow,
   type TrialSignupAttribution,
   withFreeTrialSignupFlow,
@@ -289,6 +291,9 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
         signupOrigin: 'retirement_calculator',
         signupEntry: carriedEntry(fromSavedRun),
       };
+    } else if (hasCashFlowSignupSource(searchParams)) {
+      // No run to carry and no email return: its button is the only door.
+      attribution = { signupOrigin: 'cash_flow_forecast', signupEntry: 'page_cta' };
     }
     beginFreeTrialSignupFlow(Date.now(), attribution);
     pushTrialSignupViewed();
@@ -653,7 +658,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       timeZone: string;
       calculatorRef?: string;
       acceptsFirstDecisionHandoff?: boolean;
-      signupOrigin?: CalculatorSignupOrigin;
+      signupOrigin?: SignupOrigin;
       attribution?: CalculatorLeadAttribution;
     } = { email, password, timeZone: getBrowserTimeZone(), attribution: readCalculatorLeadAttribution() };
 
@@ -671,12 +676,14 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
      * alone. The server allowlists the value and prefers a lead it resolved
      * itself, so this only ever selects among groups we already own.
      */
-    const signupOrigin: CalculatorSignupOrigin | null =
+    const signupOrigin: SignupOrigin | null =
       hasCoastFireSignupSource(searchParams)
         ? 'coast_fire_calculator'
         : hasRetirementSignupSource(searchParams)
           ? 'retirement_calculator'
-          : null;
+          : hasCashFlowSignupSource(searchParams)
+            ? 'cash_flow_forecast'
+            : null;
     if (signupOrigin) {
       registrationData.signupOrigin = signupOrigin;
     }

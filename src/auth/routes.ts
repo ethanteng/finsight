@@ -27,10 +27,10 @@ import {
   seedFirstDecisionFromLead,
 } from '../services/calculator-first-decision';
 import {
-  normalizeCalculatorSignupOrigin,
+  normalizeSignupOrigin,
   signupGroupIds,
   subscribeToMailerLite,
-  type CalculatorSignupOrigin,
+  type SignupOrigin,
 } from '../services/mailerlite-subscribe';
 
 const router = Router();
@@ -46,7 +46,7 @@ function enqueueTrialSignupMailerLite(params: {
   email: string;
   tier: string;
   createdAt: Date;
-  origin: CalculatorSignupOrigin | null;
+  origin: SignupOrigin | null;
 }): void {
   const groups = signupGroupIds(params.origin);
   if (groups.length === 0) {
@@ -337,15 +337,15 @@ router.post('/register', registerRateLimit, async (req: Request, res: Response) 
      * query parameter that survived a page load. They agree in the ordinary
      * case; when they do not, the verified one is the true story.
      */
-    const calculatorOrigin = calculatorLead
+    const signupEntryOrigin = calculatorLead
       ? (calculatorLead.kind === 'retirement'
         ? 'retirement_calculator' as const
         : 'coast_fire_calculator' as const)
-      : normalizeCalculatorSignupOrigin(signupOrigin);
+      : normalizeSignupOrigin(signupOrigin);
 
     await recordSignupAcquisition({
       userId: user.id, email: user.email, lead: calculatorLead,
-      signupOrigin: calculatorOrigin ?? undefined, attribution: req.body.attribution,
+      signupOrigin: signupEntryOrigin ?? undefined, attribution: req.body.attribution,
     });
 
     // Generate token
@@ -454,7 +454,7 @@ router.post('/register', registerRateLimit, async (req: Request, res: Response) 
         email: user.email,
         tier: user.tier,
         createdAt: user.createdAt,
-        origin: calculatorOrigin,
+        origin: signupEntryOrigin,
       });
     }
   } catch (error) {

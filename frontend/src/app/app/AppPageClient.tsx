@@ -12,6 +12,7 @@ import { resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import { syncStoredUserTimeZoneFromAuthUser } from '../../lib/browser-time-zone';
 import { groupTurnsIntoDecisions } from '../../lib/decision-threads';
 import { takePendingFirstDecision } from '../../lib/pending-first-decision';
+import { loginUrlForCurrentPage } from '../../lib/post-login-redirect';
 import { relativeTurnTime } from '../../lib/relative-time';
 import UpgradeAccountButton, {
   parseUpgradeAction,
@@ -97,7 +98,7 @@ export default function AppPageClient() {
 
   const expireSession = useCallback(() => {
     localStorage.removeItem('auth_token');
-    router.push('/login?message=' + encodeURIComponent('Your session has expired. Please log in again.'));
+    router.push(loginUrlForCurrentPage({ message: 'Your session has expired. Please log in again.' }));
   }, [router]);
 
   const checkSubscriptionStatus = useCallback(async (token: string) => {
@@ -182,7 +183,7 @@ export default function AppPageClient() {
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('auth_token');
-      if (!token) return router.push('/login');
+      if (!token) return router.push(loginUrlForCurrentPage());
       try {
         const res = await fetch(`${API_URL}/auth/verify`, { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) return expireSession();

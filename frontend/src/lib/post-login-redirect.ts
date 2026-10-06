@@ -79,3 +79,21 @@ export function loginUrlFor(destination: string): string {
   const safe = sanitizePostLoginRedirect(destination);
   return safe ? `/login?${POST_LOGIN_REDIRECT_PARAM}=${encodeURIComponent(safe)}` : '/login';
 }
+
+/**
+ * The sign-in URL that brings a signed-out visitor back to the page they are
+ * on, with any extra sign-in params (such as `message`) alongside.
+ *
+ * Emails link straight into authenticated pages — `/billing` from a
+ * trial-ending note, `/app`, `/cash-flow` — and someone opening one on a
+ * device they have not signed in on should land back on that page, not on the
+ * workspace home.
+ */
+export function loginUrlForCurrentPage(params: Record<string, string> = {}): string {
+  if (typeof window === 'undefined') return '/login';
+  const { pathname, search, hash } = window.location;
+  const url = loginUrlFor(`${pathname}${search}${hash}`);
+  const extra = new URLSearchParams(params).toString();
+  if (!extra) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}${extra}`;
+}

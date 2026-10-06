@@ -36,6 +36,7 @@ export type ContentsquareEvent =
   | 'retirement_request_error'
   | 'coast_fire_calculated'
   | 'coast_fire_results_emailed'
+  | 'cash_flow_sample_requested'
   | 'retirement_results_emailed'
   | 'calculator_results_email_cta_opened'
   | 'calculator_results_page_cta_opened'
