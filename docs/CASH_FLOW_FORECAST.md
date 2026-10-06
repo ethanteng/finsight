@@ -170,6 +170,14 @@ A plan can match the usual pace, and the page says so rather than showing two id
 
 "Without planned events" figures use every card's usual pace. The plans' effect on a window therefore includes the interest they change.
 
+Each highlight card on the page breaks its headline into one sum. The parts are:
+
+- **So far:** what actually happened, shown only when the headline includes it.
+- **Usual income and spending:** the forecast before any plans.
+- **Planned events:** what the plans change.
+
+A total row repeats the headline. Each part is rounded to the dollar, and the forecast part absorbs the rounding remainder, so the shown parts always add up to the shown headline. A window that history only partly reaches has no "so far" part, because its headline is only what is still expected. The card states what was observed since history began in its note instead.
+
 ## Cash position
 
 `src/cash-flow/position.ts` simulates every day of the forecast window, starting from the balances the providers last reported.

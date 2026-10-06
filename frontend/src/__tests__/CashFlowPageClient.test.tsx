@@ -126,6 +126,18 @@ function mockFetch(handler: Handler) {
   return calls;
 }
 
+/** A highlight card's breakdown, row by row: label, its detail line if any, and amount. */
+function breakdown(card: HTMLElement): Array<[string, string | null, string]> {
+  return Array.from(card.querySelectorAll('dl > div')).map(row => {
+    const term = row.querySelector('dt')!;
+    const label = Array.from(term.childNodes)
+      .filter(node => node.nodeType === Node.TEXT_NODE)
+      .map(node => node.textContent)
+      .join('');
+    return [label, term.querySelector('span')?.textContent ?? null, row.querySelector('dd')!.textContent!];
+  });
+}
+
 describe('CashFlowPageClient', () => {
   beforeEach(() => {
     localStorage.setItem('auth_token', 'token');
@@ -143,15 +155,28 @@ describe('CashFlowPageClient', () => {
 
     const thisMonth = await screen.findByRole('heading', { name: 'This month' });
     const card = thisMonth.closest('article')!;
-    expect(within(card).getByText('+$1,600')).toBeInTheDocument();
-    expect(within(card).getByText('So far')).toBeInTheDocument();
-    expect(within(card).getByText('+$100')).toBeInTheDocument();
-    expect(within(card).getByText('Still expected')).toBeInTheDocument();
+    // One breakdown that adds up to the headline: +$100 so far, +$1,500 forecast.
+    expect(breakdown(card)).toEqual([
+      ['So far', 'Actual · Oct 1–14', '+$100'],
+      ['Usual income and spending', 'Forecast · Oct 15–31', '+$1,500'],
+      ['Expected to save', null, '+$1,600'],
+    ]);
 
     const quarter = screen.getByRole('heading', { name: 'This quarter' }).closest('article')!;
-    expect(within(quarter).getByText('From planned events')).toBeInTheDocument();
-    expect(within(quarter).getByText('+$10,000')).toBeInTheDocument();
-    expect(within(quarter).getByText('Without planned events')).toBeInTheDocument();
+    expect(breakdown(quarter)).toEqual([
+      ['So far', 'Actual · Oct 1–14', '+$100'],
+      ['Usual income and spending', 'Forecast · Oct 15 – Dec 31', '+$3,500'],
+      ['Planned events', null, '+$10,000'],
+      ['Expected to save', null, '+$13,600'],
+    ]);
+
+    // Nothing observed yet: the forecast covers the whole window, so it needs no dates.
+    const year = screen.getByRole('heading', { name: 'Next 12 months' }).closest('article')!;
+    expect(breakdown(year)).toEqual([
+      ['Usual income and spending', null, '+$9,000'],
+      ['Planned events', null, '+$10,000'],
+      ['Expected to save', null, '+$19,000'],
+    ]);
 
     expect(screen.getByRole('rowheader', { name: 'Oct 2026' })).toBeInTheDocument();
     expect(screen.getByText('Actual + forecast')).toBeInTheDocument();
@@ -162,6 +187,42 @@ describe('CashFlowPageClient', () => {
     expect(screen.getByText(/last Jul 5, 2026/)).toBeInTheDocument();
     expect(screen.getByText(/2 transactions couldn’t be classified/)).toBeInTheDocument();
     expect(screen.getAllByText('Beta').length).toBeGreaterThan(0);
+  });
+
+  it('breaks each highlight down into parts that add up to it exactly', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?') ? {
+      status: 200,
+      body: report({
+        highlights: [
+          // $1,000.60 + $499.60 rounds to $1,001 + $500, a dollar over the $1,500 headline.
+          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(1000.6, 0), actualCoverage: 'full', remaining: { ...totals(499.6, 0), components }, projected: totals(1500.2, 0), planned: totals(0, 0), projectedWithoutPlanned: totals(1500.2, 0) },
+          // History starts inside the quarter: the headline is only what is still expected.
+          { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(500, 0), actualCoverage: 'partial', remaining: { ...totals(9000, 5000), components }, projected: null, planned: totals(0, 2000), projectedWithoutPlanned: null },
+          { key: 'next_12_months', start: '2026-10-15', endExclusive: '2027-10-15', actualToDate: null, actualCoverage: null, remaining: { ...totals(65000, 46000), components }, projected: totals(65000, 46000), planned: totals(0, 0), projectedWithoutPlanned: totals(65000, 46000) },
+        ],
+      }),
+    } : undefined));
+    render(<CashFlowPageClient />);
+
+    const month = (await screen.findByRole('heading', { name: 'This month' })).closest('article')!;
+    expect(breakdown(month)).toEqual([
+      ['So far', 'Actual · Oct 1–14', '+$1,001'],
+      ['Usual income and spending', 'Forecast · Oct 15–31', '+$499'],
+      ['Expected to save', null, '+$1,500'],
+    ]);
+
+    const quarter = screen.getByRole('heading', { name: 'This quarter' }).closest('article')!;
+    expect(breakdown(quarter)).toEqual([
+      ['Usual income and spending', 'Forecast · Oct 15 – Dec 31', '+$6,000'],
+      ['Planned events', null, '−$2,000'],
+      ['Expected for the rest of it', null, '+$4,000'],
+    ]);
+    expect(within(quarter).getByText(/full period can’t be added up yet\. Since then: \+\$500\./)).toBeInTheDocument();
+
+    // A single part would only repeat the headline.
+    const year = screen.getByRole('heading', { name: 'Next 12 months' }).closest('article')!;
+    expect(within(year).getByText('+$19,000')).toBeInTheDocument();
+    expect(breakdown(year)).toEqual([]);
   });
 
   it('asks for the chosen grouping and forecast length', async () => {

@@ -44,6 +44,13 @@ function dateRange(start: string, endExclusive: string): string {
   return `${formatCalendarDate(start, !sameYear)} – ${formatCalendarDate(last)}`;
 }
 
+/** "Oct 1–5", "Oct 6 – Dec 31", or "Oct 6" for a single day; no year. Both ends are included. */
+export function formatShortRange(start: string, last: string): string {
+  if (start === last) return formatCalendarDate(start, false);
+  if (start.slice(0, 7) === last.slice(0, 7)) return `${formatCalendarDate(start, false)}–${dateParts(last)[2]}`;
+  return `${formatCalendarDate(start, false)} – ${formatCalendarDate(last, false)}`;
+}
+
 /** A period's full name: "Oct 2026", "Q4 2026", "2026", "Week of Sep 28, 2026", or its dates when clipped. */
 export function periodLabel(period: Pick<CashFlowPeriod, 'key' | 'start' | 'endExclusive' | 'clipped'>, granularity: CashFlowGranularity): string {
   if (period.clipped) return dateRange(period.start, period.endExclusive);
