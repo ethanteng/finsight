@@ -405,6 +405,22 @@ router.post('/register', async (req: Request, res: Response) => {
         createdAt: user.createdAt,
         origin: calculatorOrigin,
       });
+
+      /*
+       * Exactly what "Convert to trial" in the admin panel does, with the
+       * picker's default end date, so a new no-card account no longer waits
+       * for someone to click it. After the response and unawaited, like the
+       * two above. A failure leaves the account as it was before this
+       * existed — Admin Created, convertible by hand.
+       */
+      if (process.env.STRIPE_SECRET_KEY) {
+        void stripeService.grantAdminTrial({
+          userId: user.id,
+          trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        }).catch((error) => {
+          console.error(`Signup trial not started for user ${user.id}:`, error);
+        });
+      }
     }
   } catch (error) {
     console.error('Registration error:', error);
