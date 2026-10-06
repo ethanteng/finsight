@@ -164,7 +164,7 @@ export interface CashFlowModel {
    * refunds, keyed by `labelKey`. Before an account's rate is held at zero, so
    * they can add up to a little more than `typical.dailySpending`.
    */
-  typicalSpendingByCategory: Map<string, { label: string; daily: number }>;
+  typicalSpendingByCategory: Map<string, TypicalSpendingCategory>;
   /** How large a non-repeating amount must be to be left out as a one-off; null without a basis. */
   oneOffThresholds: Record<CashFlowDirection, number> | null;
   adjustments: readonly ForecastAdjustment[];
@@ -230,6 +230,15 @@ export interface CardModel {
    * position then takes them from the primary account.
    */
   paidFrom: string | null;
+}
+
+/** What one category adds to the typical spending rate. */
+export interface TypicalSpendingCategory {
+  label: string;
+  /** Per day, over the basis, net of refunds. */
+  daily: number;
+  /** Every transaction it is made of, in the basis. */
+  entryIds: string[];
 }
 
 /** What one payee adds to a typical rate. */
@@ -318,7 +327,7 @@ interface LearnedFlows {
   /** The named payees behind the typical rates, largest first. */
   typicalPayees: TypicalPayee[];
   /** Typical daily spending per category, one-offs left out, keyed by `labelKey`. */
-  spendingByCategory: Map<string, { label: string; daily: number }>;
+  spendingByCategory: Map<string, TypicalSpendingCategory>;
   /** How large a non-repeating amount must be to be left out as a one-off; null without a basis. */
   oneOffThresholds: Record<CashFlowDirection, number> | null;
 }
@@ -339,7 +348,7 @@ function learnFlows(
   const streams = detectRecurringStreams(entries, dataThrough);
   const dailyByAccount = new Map<string, Record<CashFlowDirection, number>>();
   const interestDailyByAccount = new Map<string, number>();
-  const spendingByCategory = new Map<string, { label: string; daily: number }>();
+  const spendingByCategory = new Map<string, TypicalSpendingCategory>();
   const empty = { streams, oneOffs: [], dailyByAccount, interestDailyByAccount, typicalPayees: [], spendingByCategory, oneOffThresholds: null };
   if (!basisStart) return empty;
   const basisDays = daysBetween(basisStart, basisEndExclusive);
@@ -413,8 +422,9 @@ function learnFlows(
     if (entry.flow === 'spending') {
       const label = spendingCategoryLabel(entry);
       const key = labelKey(label);
-      const category = spendingByCategory.get(key) ?? { label, daily: 0 };
+      const category = spendingByCategory.get(key) ?? { label, daily: 0, entryIds: [] };
       category.daily += entry.amount / basisDays;
+      category.entryIds.push(entry.id);
       spendingByCategory.set(key, category);
     }
     if (!entry.counterpartyKey) continue;
@@ -1018,10 +1028,62 @@ function spendingCategoryLabel(entry: Pick<CashFlowEntry, 'category' | 'interest
   return entry.interest ? CARD_INTEREST_CATEGORY : normalizeLabel(entry.category, 'Uncategorized');
 }
 
+/** One transaction behind a usual-spending category. */
+export interface SpendingCategoryTransaction {
+  id: string;
+  date: CalendarDate;
+  /** The payee or description the provider gave it. */
+  label: string;
+  /** Spending is positive, a refund negative. */
+  amount: number;
+}
+
+/**
+ * Where part of a category's month comes from: a regular bill at its monthly
+ * rate, the typical rate the basis spent in the category, or the card interest
+ * the usual pace runs up, which no transaction is behind yet.
+ */
+export type SpendingCategorySource =
+  | {
+    kind: 'bill';
+    streamId: string;
+    label: string;
+    cadence: RecurringCadence;
+    /** Each payment. */
+    amount: number;
+    monthly: number;
+    /** Latest first, at most ITEM_TRANSACTIONS_LISTED. */
+    transactions: SpendingCategoryTransaction[];
+    transactionCount: number;
+  }
+  | {
+    kind: 'typical';
+    monthly: number;
+    /** What its transactions add up to over the basis, refunds netted. */
+    total: number;
+    from: CalendarDate;
+    /** The basis's last day. */
+    through: CalendarDate;
+    /** Latest first, at most CATEGORY_TRANSACTIONS_LISTED. */
+    transactions: SpendingCategoryTransaction[];
+    transactionCount: number;
+  }
+  | { kind: 'projected_interest'; monthly: number };
+
 export interface SpendingCategory {
   label: string;
   monthly: number;
+  /** Largest first; their monthlies add up to the category's. */
+  sources: SpendingCategorySource[];
 }
+
+/**
+ * A typical-spending source lists at most this many transactions. The basis is
+ * at most TYPICAL_BASIS_DAYS long, so this only trims a category bought from
+ * more than once a day.
+ */
+const CATEGORY_TRANSACTIONS_LISTED = 100;
+
 
 /**
  * Whole cents for `values` that add up to `total` exactly. Each is floored to
@@ -1069,19 +1131,33 @@ export function expectedSpendingByCategory(model: CashFlowModel): SpendingCatego
   const spending = expectedMonthly(model).spending;
   if (spending === null) return null;
 
-  const byKey = new Map<string, SpendingCategory>();
-  const add = (label: string, monthly: number) => {
+  const byKey = new Map<string, { label: string; sources: SpendingCategorySource[] }>();
+  const add = (label: string, source: SpendingCategorySource) => {
     const key = labelKey(label);
-    const category = byKey.get(key) ?? { label, monthly: 0 };
-    category.monthly += monthly;
+    const category = byKey.get(key) ?? { label, sources: [] };
+    category.sources.push(source);
     byKey.set(key, category);
   };
-
   const entriesById = new Map(model.ledger.entries.map(entry => [entry.id, entry]));
+  const listed = (ids: readonly string[], limit: number): SpendingCategoryTransaction[] => ids
+    .flatMap(id => entriesById.get(id) ?? [])
+    .sort((left, right) => right.date.localeCompare(left.date) || left.id.localeCompare(right.id))
+    .slice(0, limit)
+    .map(entry => ({ id: entry.id, date: entry.date, label: entry.label, amount: roundCents(entry.amount) }));
+
   for (const stream of model.streams) {
     if (stream.flow !== 'spending' || stream.status !== 'active') continue;
     const interest = stream.entryIds.some(id => entriesById.get(id)?.interest);
-    add(spendingCategoryLabel({ category: stream.category, interest }), streamMonthlyAmount(stream));
+    add(spendingCategoryLabel({ category: stream.category, interest }), {
+      kind: 'bill',
+      streamId: stream.id,
+      label: stream.label,
+      cadence: stream.cadence,
+      amount: roundCents(stream.amount),
+      monthly: streamMonthlyAmount(stream),
+      transactions: listed(stream.entryIds, ITEM_TRANSACTIONS_LISTED),
+      transactionCount: stream.entryIds.length,
+    });
   }
 
   // An account's typical rate never goes below zero, and a category whose
@@ -1090,22 +1166,49 @@ export function expectedSpendingByCategory(model: CashFlowModel): SpendingCatego
   const typicalMonthly = model.typical.dailySpending * DAYS_PER_MONTH;
   const parts = [...model.typicalSpendingByCategory.values()].filter(part => part.daily > 0);
   const partsDaily = parts.reduce((sum, part) => sum + part.daily, 0);
+  const typical = (monthly: number, entryIds: readonly string[], daily: number): SpendingCategorySource => ({
+    kind: 'typical',
+    monthly,
+    total: roundCents(daily * model.typical.basisDays),
+    from: model.typical.basisStart ?? model.forecastStart,
+    through: addDays(model.forecastStart, -1),
+    transactions: listed(entryIds, CATEGORY_TRANSACTIONS_LISTED),
+    transactionCount: entryIds.length,
+  });
   if (partsDaily > 0) {
-    for (const part of parts) add(part.label, typicalMonthly * (part.daily / partsDaily));
-  } else {
-    add('Uncategorized', typicalMonthly);
+    for (const part of parts) add(part.label, typical(typicalMonthly * (part.daily / partsDaily), part.entryIds, part.daily));
+  } else if (typicalMonthly > 0) {
+    // Per-account floors can leave a positive typical rate when every category
+    // nets to a refund (purchase in one account, larger refund in another). Keep
+    // the residual transactions so the drill-down is not an empty box.
+    const residual = [...model.typicalSpendingByCategory.values()];
+    const entryIds = residual.flatMap(part => part.entryIds);
+    const daily = residual.reduce((sum, part) => sum + part.daily, 0);
+    add('Uncategorized', typical(typicalMonthly, entryIds, daily));
   }
 
-  add(CARD_INTEREST_CATEGORY, cardInterestTotal(model, model.forecastStart, addMonths(model.forecastStart, 12), false) / 12);
+  const interest = cardInterestTotal(model, model.forecastStart, addMonths(model.forecastStart, 12), false) / 12;
+  if (interest > 0) add(CARD_INTEREST_CATEGORY, { kind: 'projected_interest', monthly: interest });
 
   const raw = [...byKey.values()]
+    .map(category => ({ ...category, monthly: category.sources.reduce((sum, source) => sum + source.monthly, 0) }))
     .filter(category => category.monthly > 0)
     .sort((left, right) => right.monthly - left.monthly || left.label.localeCompare(right.label));
-  if (raw.length === 0) return spending > 0 ? [{ label: 'Uncategorized', monthly: spending }] : [];
+  if (raw.length === 0) return spending > 0 ? [{ label: 'Uncategorized', monthly: spending, sources: [] }] : [];
 
+  // Rounded to the cent together, the categories add up to the month and each
+  // category's sources add up to the category.
   const monthlies = roundCentsToTotal(raw.map(category => category.monthly), spending);
   return raw
-    .map((category, index) => ({ label: category.label, monthly: monthlies[index] }))
+    .map((category, index) => {
+      const sources = [...category.sources].sort((left, right) => right.monthly - left.monthly);
+      const sourceMonthlies = roundCentsToTotal(sources.map(source => source.monthly), monthlies[index]);
+      return {
+        label: category.label,
+        monthly: monthlies[index],
+        sources: sources.map((source, sourceIndex) => ({ ...source, monthly: sourceMonthlies[sourceIndex] })),
+      };
+    })
     .filter(category => category.monthly > 0);
 }
 

@@ -162,10 +162,57 @@ export interface ExpectedMonthlySummary {
   learned: { income: number | null; spending: number | null } | null;
 }
 
+/** One transaction behind a usual-spending category. */
+export interface CashFlowSpendingCategoryTransaction {
+  id: string;
+  date: string;
+  /** The payee or description the provider gave it. */
+  label: string;
+  /** Spending is positive, a refund negative. */
+  amount: number;
+}
+
+/**
+ * Where part of a category's month comes from: a regular bill at its monthly
+ * rate, the typical rate the basis spent in the category, or the card interest
+ * the usual pace runs up, which no transaction is behind yet.
+ */
+export type CashFlowSpendingCategorySource =
+  | {
+    kind: 'bill';
+    streamId: string;
+    label: string;
+    cadence: RecurringCadence;
+    /** Each payment. */
+    amount: number;
+    monthly: number;
+    /** Latest first, at most 12. */
+    transactions: CashFlowSpendingCategoryTransaction[];
+    transactionCount: number;
+  }
+  | {
+    kind: 'typical';
+    monthly: number;
+    /** What its transactions add up to over the basis, refunds netted. */
+    total: number;
+    from: string;
+    /** The basis's last day. */
+    through: string;
+    /** Latest first, at most 100. */
+    transactions: CashFlowSpendingCategoryTransaction[];
+    transactionCount: number;
+  }
+  | { kind: 'projected_interest'; monthly: number };
+
 /** One category of the expected month's spending. */
 export interface CashFlowSpendingCategory {
   label: string;
   monthly: number;
+  /**
+   * Largest first; their monthlies add up to the category's. Omitted by older
+   * backends that only returned the category total — treat missing as none.
+   */
+  sources?: CashFlowSpendingCategorySource[];
 }
 
 export interface CashFlowReport {

@@ -83,6 +83,14 @@ Together the categories add up to `expectedMonthly(model).spending` to the cent 
 
 The page lists the eight largest categories and folds the rest into one line, unless only one would be folded. It rounds the dollars and percentages of the lines it lists to the month's total and to 100% together, so they add up.
 
+Each category carries its `sources`, the parts its month is made of, which add up to it to the cent. Choosing a category on the page opens them, one category at a time:
+
+- **A regular bill:** the payee, each payment and how often it is made, its monthly rate, and its latest 12 payments with the total count.
+- **Typical spending:** the period the typical rate was learned over and what the category's transactions in that period add up to, refunds netted. It lists the transactions themselves, up to the latest 100, with the payee or description of each. The basis is at most 90 days, so the cap only trims a category bought from more than once a day. A one-off left out of the rate is behind no category.
+- **Projected card interest:** no transactions, because it hasn't been charged yet. The page says so instead of listing charges.
+
+The page rounds a category's parts to the dollars its line shows, so they add up there too.
+
 ## Adjusting what the forecast counts
 
 The page lays out what the forecast is built from in two columns, "Counted in the forecast" and "Left out", and every item moves to the other column with its button (`ForecastBoard`; the engine side is `src/cash-flow/adjustments.ts`). Each change is stored in `cash_flow_forecast_adjustments`:

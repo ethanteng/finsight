@@ -182,6 +182,88 @@ describe('expectedSpendingByCategory', () => {
     expect(report.usualSpending).toEqual({ monthly: expectedMonthly(built).spending, categories });
   });
 
+  it('says what each category is made of, with the transactions behind it', () => {
+    const built = model({ transactions: categorized });
+    const categories = expectedSpendingByCategory(built)!;
+    const cents = (value: number) => Math.round(value * 100);
+    for (const category of categories) {
+      expect(cents(category.sources.reduce((total, source) => total + source.monthly, 0))).toBe(cents(category.monthly));
+    }
+
+    // A regular bill: the payee, what each payment is, and its payments, latest first.
+    const rent = categories.find(category => category.label === 'Rent')!;
+    expect(rent.sources).toHaveLength(1);
+    const bill = rent.sources[0];
+    if (bill.kind !== 'bill') throw new Error(`expected a bill, got ${bill.kind}`);
+    expect(bill).toMatchObject({ label: 'Oak Street Apartments', cadence: 'monthly', amount: 2000, monthly: 2000 });
+    expect(bill.transactions[0]).toMatchObject({ date: '2026-09-01', label: 'Oak Street Apartments', amount: 2000 });
+    expect(bill.transactions.map(transaction => transaction.date)).toEqual(
+      [...bill.transactions.map(transaction => transaction.date)].sort().reverse()
+    );
+    // History starts Jun 3, so July, August and September.
+    expect(bill.transactionCount).toBe(3);
+    expect(bill.transactions).toHaveLength(3);
+
+    // The typical rate: every grocery transaction in the basis, and what they add up to.
+    const groceries = categories.find(category => category.label === 'Groceries')!;
+    expect(groceries.sources).toHaveLength(1);
+    const typical = groceries.sources[0];
+    if (typical.kind !== 'typical') throw new Error(`expected typical spending, got ${typical.kind}`);
+    expect(typical.from).toBe(built.typical.basisStart);
+    expect(typical.through).toBe('2026-09-30');
+    const groceryStores = new Set(['Trader Joes', 'Safeway', 'Whole Foods']);
+    const inBasis = built.ledger.entries.filter(entry => groceryStores.has(entry.label)
+      && entry.date >= built.typical.basisStart! && entry.date <= typical.through);
+    expect(typical.transactionCount).toBe(inBasis.length);
+    expect(typical.transactions.map(transaction => transaction.id).sort()).toEqual(inBasis.map(entry => entry.id).sort());
+    expect(typical.total).toBeCloseTo(inBasis.reduce((total, entry) => total + entry.amount, 0), 2);
+    // The flight was a one-off, so it is behind no category.
+    expect(categories.flatMap(category => category.sources)
+      .flatMap(source => ('transactions' in source ? source.transactions : []))
+      .map(transaction => transaction.label)).not.toContain('UNITED AIRLINES');
+  });
+
+  it('explains projected card interest, which no transaction is behind yet', () => {
+    const projected = model({ transactions: [...categorized, ...interestCharges(FROM, THROUGH)], accounts: accountsWithCardTerms() });
+    const interest = expectedSpendingByCategory(projected)!.find(category => category.label === CARD_INTEREST_CATEGORY)!;
+    expect(interest.sources).toEqual([{ kind: 'projected_interest', monthly: interest.monthly }]);
+  });
+
+  it('keeps the residual transactions when account floors leave only an Uncategorized typical rate', () => {
+    // A grocery purchase on checking and a larger grocery refund on the card:
+    // the category nets negative, but checking's floor keeps a positive typical
+    // rate that lands in Uncategorized.
+    const paychecks = ['2026-06-15', '2026-06-29', '2026-07-13', '2026-07-27', '2026-08-10', '2026-08-24', '2026-09-07', '2026-09-21']
+      .map(date => tx('checking', date, 'income', 2500, 'ACME CORP', { merchant_name: 'ACME CORP' }));
+    const rent = ['2026-07-01', '2026-08-01', '2026-09-01']
+      .map(date => tx('checking', date, 'expense', 2000, 'Oak Street Apartments', {
+        merchant_name: 'Oak Street Apartments',
+        personal_finance_category: { primary: 'RENT_AND_UTILITIES', detailed: 'RENT_AND_UTILITIES_RENT' },
+      }));
+    const groceries = [
+      tx('checking', '2026-08-10', 'expense', 100, 'Safeway', {
+        merchant_name: 'Safeway',
+        personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_GROCERIES' },
+      }),
+      tx('card', '2026-08-12', 'refund', 150, 'Safeway', {
+        merchant_name: 'Safeway',
+        personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_GROCERIES' },
+      }),
+    ];
+    const built = model({ transactions: [...paychecks, ...rent, ...groceries] });
+    expect(built.typical.dailySpending).toBeGreaterThan(0);
+    expect([...built.typicalSpendingByCategory.values()].every(part => part.daily <= 0)).toBe(true);
+
+    const uncategorized = expectedSpendingByCategory(built)!.find(category => category.label === 'Uncategorized')!;
+    expect(uncategorized.monthly).toBeGreaterThan(0);
+    expect(uncategorized.sources).toHaveLength(1);
+    const typical = uncategorized.sources[0];
+    if (typical.kind !== 'typical') throw new Error(`expected typical spending, got ${typical.kind}`);
+    expect(typical.transactionCount).toBe(2);
+    expect(typical.transactions.map(transaction => transaction.amount).sort((a, b) => a - b)).toEqual([-150, 100]);
+    expect(typical.total).toBe(-50);
+  });
+
   it('follows what the user left out and what they kept', () => {
     const rentLeftOut = expectedSpendingByCategory(model({
       transactions: categorized,
