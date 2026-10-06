@@ -955,6 +955,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .marketing-article-body h2 { font-size: 39px; }.marketing-article-body h3 { font-size: 28px; }
 .marketing-article-body a { color: #2f694c; text-decoration: underline; text-underline-offset: 3px; }
 .marketing-article-body img { width: 100%; height: auto; margin-block: 32px; border-radius: 16px; }
+.marketing-article-body video { display: block; width: 100%; height: auto; margin-block: 32px; border-radius: 16px; background: #e1eadf; }
 .marketing-article-body figure { margin: 35px 0; }.marketing-article-body figcaption { margin-top: -20px; color: #728078; font: 10px var(--font-body); text-align: center; }
 .marketing-article-body blockquote { margin: 42px 0; padding: 30px; border-left: 4px solid #557d65; background: #e1eadf; color: var(--ink); font-family: var(--font-display); font-size: 25px; font-weight: 750; line-height: 1.35; }
 .marketing-article-body pre { overflow-x: auto; padding: 22px; border-radius: 14px; background: var(--ink); color: white; font: 13px/1.6 monospace; }
