@@ -138,3 +138,15 @@ it('combines exact campaign and source filters with Google acquisition evidence'
     utmMedium: { in: expect.arrayContaining(['cpc', 'ppc', 'paid', 'display']) },
   });
 });
+
+
+it('includes Google display traffic without click IDs in the Google Ads cohort', () => {
+  const filter = acquisitionFilter({
+    segment: 'signup', cohortGrain: 'week', periodGrain: 'week', cohortCount: 4, periodCount: 4,
+    channel: 'google_ads',
+  });
+  expect(filter).toEqual({ acquisition: { is: { OR: expect.arrayContaining([
+    { utmSource: { equals: 'google', mode: 'insensitive' },
+      utmMedium: { in: ['cpc', 'ppc', 'paid', 'display'], mode: 'insensitive' } },
+  ]) } } });
+});
