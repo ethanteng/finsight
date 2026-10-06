@@ -163,6 +163,13 @@ export function writeHandoverToken(cookieName: string, token: string): void {
  */
 export const SIGNUP_ENTRY_PARAM = 'entry';
 export const SIGNUP_ENTRY_RESULTS_PAGE = 'results_page';
+/**
+ * A follow-up email's continue link: the same token as the results email, so
+ * the cookie cannot tell them apart either. The backend writes this marker
+ * into the link it stores on the MailerLite subscriber
+ * (`LIFECYCLE_EMAIL_SIGNUP_ENTRY`), and the continue route passes it on.
+ */
+export const SIGNUP_ENTRY_DRIP_EMAIL = 'drip_email';
 
 /** The calculator's own signup href, marked as the straight-from-the-page one. */
 export function resultsPageSignupHref(signupHref: string): string {

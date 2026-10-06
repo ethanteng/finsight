@@ -36,7 +36,11 @@ import {
   readCoastFireLead,
   recordCoastFireLead,
 } from '../services/coast-fire-leads';
-import { coastFireGroupIds, subscribeToMailerLite } from '../services/mailerlite-subscribe';
+import {
+  LIFECYCLE_EMAIL_SIGNUP_ENTRY,
+  coastFireGroupIds,
+  subscribeToMailerLite,
+} from '../services/mailerlite-subscribe';
 import { parseCalculatorLeadAttribution } from '../services/calculator-lead-attribution';
 import { accountExistsForEmail } from '../services/calculator-account-lookup';
 
@@ -99,6 +103,18 @@ function continueUrl(token: string, existingAccount: boolean): string {
   // An address that already has an account cannot register again, so its
   // link lands on sign-in, where the run is attached, instead of on signup.
   return existingAccount ? `${url}&to=sign-in` : url;
+}
+
+/**
+ * The same link, stored on the MailerLite subscriber for the follow-up emails
+ * a lead gets before starting a trial. Their buttons open the saved run, and
+ * the signup then records the lead's own attribution rather than the email's.
+ *
+ * `entry=drip_email` keeps those clicks out of the results-email funnel: the
+ * signup page counts them as their own entry, not as opens of this email.
+ */
+function lifecycleContinueUrl(token: string, existingAccount: boolean): string {
+  return `${continueUrl(token, existingAccount)}&entry=${LIFECYCLE_EMAIL_SIGNUP_ENTRY}`;
 }
 
 router.post('/email-results', emailRateLimit, async (req: Request, res: Response) => {
@@ -207,6 +223,7 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
         coast_fire_status: result.hasReachedCoastFire ? 'reached' : 'not_yet',
         coast_fire_number: Math.round(result.coastFireNumber),
         coast_fire_years_to_retirement: result.yearsToRetirement,
+        coast_fire_continue_url: lifecycleContinueUrl(token, existingAccount),
       },
     });
     if (stored) {

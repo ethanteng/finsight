@@ -117,7 +117,10 @@ they do not populate or substitute for the acquisition journey.
 
 Each calculator also has a separate **Save results → create an account** branch.
 After PR #264, saving emails a copy and immediately continues to signup;
-the `results_page` route is shown separately from later `results_email` returns.
+the `results_page` route is shown separately from later `results_email` returns,
+and both separately from `drip_email`: a click from a MailerLite follow-up
+email, which restores the same saved run but is not an open of the results
+email and never fires `calculator_results_email_cta_opened`.
 See `CALCULATOR_RESULTS_PAGE_TRACKING.md` for deployment, GTM, and run-limit semantics. It is
 not inserted into the linear result-to-product-CTA journey because a recipient
 can return from their inbox in another session or on another device. The branch

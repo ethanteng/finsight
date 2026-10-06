@@ -19,6 +19,7 @@ import {
   pushTrialSignupViewed,
 } from '@/lib/dataLayer';
 import {
+  SIGNUP_ENTRY_DRIP_EMAIL,
   SIGNUP_ENTRY_PARAM,
   SIGNUP_ENTRY_RESULTS_PAGE,
 } from '@/lib/calculator-handover';
@@ -265,7 +266,11 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
      * reporting only the handovers that worked.
      */
     const carriedEntry = (fromSavedRun: boolean): CalculatorSignupEntry => {
-      if (searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_RESULTS_PAGE) return 'results_page';
+      const marker = searchParams.get(SIGNUP_ENTRY_PARAM);
+      if (marker === SIGNUP_ENTRY_RESULTS_PAGE) return 'results_page';
+      // A follow-up email's button. Same token and cookie as the results
+      // email; the marker the continue route passed on is the only difference.
+      if (marker === SIGNUP_ENTRY_DRIP_EMAIL) return 'drip_email';
       return fromSavedRun ? 'results_email' : 'calculator_cta';
     };
     if (hasCoastFireSignupSource(searchParams)) {
@@ -371,8 +376,13 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
 
   const pushSignupEntryOpened = useCallback(
     (origin: CalculatorSignupOrigin) => {
-      if (searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_RESULTS_PAGE) {
+      const marker = searchParams.get(SIGNUP_ENTRY_PARAM);
+      if (marker === SIGNUP_ENTRY_RESULTS_PAGE) {
         pushCalculatorResultsPageCtaOpened(origin);
+      } else if (marker === SIGNUP_ENTRY_DRIP_EMAIL) {
+        // Not an open of the results email, whose GA4 key event counts only
+        // that email. The drip's funnel is read from `signup_entry` instead.
+        return;
       } else {
         pushCalculatorResultsEmailCtaOpened(origin);
       }

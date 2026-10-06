@@ -126,7 +126,12 @@ Any resolved calculator lead skips the verification code when the signup page se
 Three paths put an address in MailerLite, and they are not interchangeable.
 `mailerlite-sync` re-posts the entire user table into `MAILER_LITE_GROUP_ID`
 nightly. The two calculator `email-results` endpoints subscribe a visitor who
-asked for results by email, into that calculator's group. Registration
+asked for results by email, into that calculator's group, with the run's
+continue link as `coast_fire_continue_url` / `retirement_continue_url` so the
+follow-up emails open the saved run and the signup keeps the lead's own
+attribution. Those links carry `entry=drip_email`, which `/getstarted` reports
+as its own entry rather than as a results-email open; they also carry the
+token, so MailerLite access means access to those runs until they expire. Registration
 subscribes a no-card signup immediately into `MAILER_LITE_TRIAL_GROUP_ID`,
 plus the calculator's group when the signup continued from one — a resolved
 lead token names the calculator, and a click-through from the page declares it

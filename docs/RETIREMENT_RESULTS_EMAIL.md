@@ -29,7 +29,10 @@ shares its machinery. This page covers what differs.
    already signed in as that address skips both: the run is attached and the
    page opens `/app` directly.
 4. After the response, the address is added to MailerLite, in the retirement
-   group.
+   group, with `retirement_continue_url` for the follow-up emails' buttons.
+   See step 5 of `COAST_FIRE_EMAIL_CAPTURE.md`: same link plus
+   `entry=drip_email`, reported as its own signup entry, and readable by
+   anyone with access to the MailerLite account until the token expires.
 5. The email's call to action links to `/retirement/continue?ref=<token>`,
    which moves the token into a short-lived first-party cookie and redirects to
    a clean `/getstarted?source=retirement-calculator`.

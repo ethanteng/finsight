@@ -28,6 +28,7 @@ import {
   recordRetirementLead,
 } from '../services/retirement-leads';
 import {
+  LIFECYCLE_EMAIL_SIGNUP_ENTRY,
   retirementGroupIds,
   subscribeToMailerLite,
 } from '../services/mailerlite-subscribe';
@@ -123,6 +124,14 @@ function continueUrl(token: string, existingAccount: boolean): string {
   // An address that already has an account cannot register again, so its
   // link lands on sign-in, where the run is attached, instead of on signup.
   return existingAccount ? `${url}&to=sign-in` : url;
+}
+
+/**
+ * The same link, stored on the MailerLite subscriber for the follow-up emails
+ * a lead gets before starting a trial. See the Coast FIRE route.
+ */
+function lifecycleContinueUrl(token: string, existingAccount: boolean): string {
+  return `${continueUrl(token, existingAccount)}&entry=${LIFECYCLE_EMAIL_SIGNUP_ENTRY}`;
 }
 
 /** Everything the form needs to render without hardcoding the model's bounds. */
@@ -349,6 +358,7 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
         retirement_survival_rate: Math.round(primary.survivalRate * 100),
         retirement_age: result.inputs.retirementAge,
         retirement_years_to_go: Math.max(0, result.inputs.retirementAge - result.inputs.currentAge),
+        retirement_continue_url: lifecycleContinueUrl(token, existingAccount),
       },
     });
     if (stored) {

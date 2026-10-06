@@ -40,6 +40,11 @@ describe('visitor journeys', () => {
     expect(path(sessions).steps.map(step => step.sessions)).toEqual([2, 2, 2, 0, 0, 0]);
     expect(path(sessions, 'signup_retirement_results_email').steps.map(step => step.sessions)).toEqual([1, 1, 1]);
     expect(path(sessions, 'signup_retirement_results_page').steps[0].sessions).toBe(0);
+    // A follow-up email's click is its own route, not an email return.
+    expect(path(sessions, 'signup_retirement_drip_email').steps[0].sessions).toBe(0);
+    const drip = [session('drip', events, { signupEntry: 'drip_email' })];
+    expect(path(drip, 'signup_retirement_drip_email').steps.map(step => step.sessions)).toEqual([1, 1, 1]);
+    expect(path(drip, 'signup_retirement_results_email').steps[0].sessions).toBe(0);
   });
 
   it('requires ordered main steps but retains conversions with missing form events', () => {
