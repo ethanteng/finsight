@@ -23,7 +23,10 @@ beforeEach(() => {
     notify = callback;
     return { observe: jest.fn(), disconnect, unobserve: jest.fn(), takeRecords: jest.fn() };
   }) as unknown as typeof IntersectionObserver;
-  global.fetch = jest.fn().mockResolvedValue({ ok: true });
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ recorded: true }),
+  });
 });
 it('waits for the completed answer to enter a visible viewport and cleans up', async () => {
   const view = render(<Answer ready={false} />);

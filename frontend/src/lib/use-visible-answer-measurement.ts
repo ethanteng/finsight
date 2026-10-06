@@ -32,8 +32,14 @@ export function useVisibleAnswerMeasurement(conversationId: string | null, ready
           body: JSON.stringify({ conversationId }),
         });
         if (response.ok) {
+          // 200 with recorded:false is a definitive business rejection (unmeasured
+          // user, failed validation, etc.). Stop retrying, but only wake the ad
+          // dispatcher when a milestone may actually be pending.
+          const body = await response.json().catch(() => ({}));
           done = true;
-          window.dispatchEvent(new Event('asklinc:milestone-recorded'));
+          if (body?.recorded === true) {
+            window.dispatchEvent(new Event('asklinc:milestone-recorded'));
+          }
         }
       } catch { /* Best effort; no error UI for measurement. */ }
       finally {
