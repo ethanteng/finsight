@@ -108,10 +108,20 @@ export function roundToTotal(values: readonly number[], total: number): number[]
     if (left > 0) {
       result[byRemainder[step % byRemainder.length].index] += 1;
       left -= 1;
-    } else {
-      result[byRemainder[byRemainder.length - 1 - (step % byRemainder.length)].index] -= 1;
-      left += 1;
+      continue;
     }
+    // Never push a line below zero: a tiny part that floored to 0 must not
+    // absorb a take-back and render as a negative dollar.
+    let gave = false;
+    for (let probe = 0; probe < byRemainder.length; probe += 1) {
+      const index = byRemainder[byRemainder.length - 1 - ((step + probe) % byRemainder.length)].index;
+      if (result[index] <= 0) continue;
+      result[index] -= 1;
+      left += 1;
+      gave = true;
+      break;
+    }
+    if (!gave) break;
   }
   return result;
 }

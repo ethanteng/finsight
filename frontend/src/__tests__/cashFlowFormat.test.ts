@@ -12,6 +12,8 @@ describe('roundToTotal', () => {
     expect(roundToTotal([2.2, 2.6], 3)).toEqual([1, 2]);
     // On a tie, the earlier value keeps its unit.
     expect(roundToTotal([1.1, 1.1, 1.1], 1)).toEqual([1, 0, 0]);
+    // A part that floored to 0 does not go negative to fund the take-back.
+    expect(roundToTotal([50.02, 0.01, 0.01], 49)).toEqual([49, 0, 0]);
   });
 
   it('leaves whole values that already add up alone', () => {
