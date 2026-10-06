@@ -7,15 +7,18 @@
  *
  * Sends when a source has drifted, and separately when the check could not read
  * any source at all. A clean run is silent, so a message in the inbox always
- * means there is something to do. Re-transcribing weights from the new
- * publication stays a human judgment; this never edits the registry.
+ * means there is something to do. Applying a new publication is the operator's
+ * call, made with the admin panel's Update button; this never edits the registry.
  *
- *   RESEND_API_KEY=... REGISTRY_ALERT_EMAIL_TO=... npm run notify:registry-drift
+ *   RESEND_API_KEY=... REGISTRY_ALERT_EMAIL_TO=... DATABASE_URL=... npm run notify:registry-drift
  *   npm run notify:registry-drift -- --dry-run    # print, never send
  *
  * Environment:
  *   RESEND_API_KEY            Required unless --dry-run
  *   REGISTRY_ALERT_EMAIL_TO   Recipient, required unless --dry-run
+ *   DATABASE_URL              Required unless --dry-run: publications applied
+ *                             from the admin panel live there, and a check
+ *                             without them reports those funds as drifted
  *   REGISTRY_ALERT_EMAIL_FROM Optional, defaults to Ask Linc <noreply@asklinc.com>
  *
  * Exits 0 even when sources are unreadable. A provider behind a WAF is an
@@ -26,6 +29,8 @@
 import { createHash } from 'node:crypto';
 import { Resend } from 'resend';
 import { checkRegistrySources, hasDiverged, type RegistrySourceResult } from '../src/services/registry-source-check';
+import { refreshAppliedRegistryEntries } from '../src/services/target-date-registry-store';
+import { getPrismaClient } from '../src/prisma-client';
 
 const EMAIL_FROM = process.env.REGISTRY_ALERT_EMAIL_FROM || 'Ask Linc <noreply@asklinc.com>';
 
@@ -72,9 +77,12 @@ function driftHtml(drifted: RegistrySourceResult[], all: RegistrySourceResult[])
         <tbody>${rows}</tbody>
       </table>
       <p style="color:#444">
-        To resolve: re-transcribe the weights from the current publication, then re-baseline with
-        <code>npx ts-node scripts/verify-registry-sources.ts --emit</code>. Nothing is automated —
-        deciding that new published weights should replace transcribed ones is a human call.
+        To resolve: open <strong>Registry sources</strong> in the admin panel's Data Gaps tab, check
+        the sources, review the weights each moved State Street entry would get, and press
+        <strong>Update</strong>. Entries whose holdings are inside a PDF (BlackRock, UC) say so there and
+        still need re-transcribing by hand, then re-baselining with
+        <code>npx ts-node scripts/verify-registry-sources.ts --emit</code>. Nothing updates on its own —
+        deciding that new published weights should replace the recorded ones is a human call.
       </p>
       ${unreadableNote}
       <p style="${FOOTER_STYLE}">
@@ -143,8 +151,18 @@ function idempotencyKey(prefix: string, results: RegistrySourceResult[]): string
 (async () => {
   const dryRun = process.argv.includes('--dry-run');
   const recipient = process.env.REGISTRY_ALERT_EMAIL_TO;
-  if (!dryRun && (!process.env.RESEND_API_KEY || !recipient)) {
-    throw new Error('RESEND_API_KEY and REGISTRY_ALERT_EMAIL_TO must be set (or pass --dry-run)');
+  if (!dryRun && (!process.env.RESEND_API_KEY || !recipient || !process.env.DATABASE_URL)) {
+    throw new Error('RESEND_API_KEY, REGISTRY_ALERT_EMAIL_TO and DATABASE_URL must be set (or pass --dry-run)');
+  }
+
+  if (process.env.DATABASE_URL) {
+    try {
+      await refreshAppliedRegistryEntries();
+    } finally {
+      await getPrismaClient().$disconnect();
+    }
+  } else {
+    console.log('DATABASE_URL not set: checking the code registry only, without publications applied from the admin panel.\n');
   }
 
   const results = await checkRegistrySources();

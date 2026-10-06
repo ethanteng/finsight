@@ -116,7 +116,7 @@ The unified file has 1,200 monthly rows. The [current engine](src/retirement-ana
 
 [Portfolio mapping](src/retirement-analytics/engine/portfolio-mapper.ts) records supported exposures, inference/proxy provenance, modeled and unmodeled value, and coverage. Credit, international bonds, real assets, and unresolved exposures can remain outside simulation. Missing itemized holdings are not assigned invented returns.
 
-The dated [target-date fund registry](src/services/target-date-fund-registry.ts) supplies reviewed allocations for specific State Street Target Retirement vintages, BlackRock LifePath Index 2040, and UC Pathway 2040. Entries distinguish allocation dates from verified availability dates, identify exact versus proxy share classes, and retain source fingerprints and unsupported residuals. Recognition of a fund name alone does not authorize an allocation.
+The dated [target-date fund registry](src/services/target-date-fund-registry.ts) supplies reviewed allocations for specific State Street Target Retirement vintages, BlackRock LifePath Index 2040, and UC Pathway 2040. Entries distinguish allocation dates from verified availability dates, identify exact versus proxy share classes, and retain source fingerprints and unsupported residuals. A newer State Street publication can be applied from the admin panel, which appends it as a dated row in Postgres ([registry sources](docs/features/TARGET_DATE_REGISTRY_SOURCES.md#updating-from-the-admin-panel)). Recognition of a fund name alone does not authorize an allocation.
 
 ```bash
 npm run build:market-dataset     # Rebuild from checked-in source snapshots
