@@ -1000,9 +1000,13 @@ export default function AdminPage() {
       if (response.status === 401 || response.status === 403) {
         throw new Error('Authentication required for admin access');
       }
-      if (!response.ok) throw new Error(`Update failed (${response.status})`);
-      const { outcomes } = await response.json();
-      setRegistryUpdateOutcomes(outcomes);
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(
+          typeof payload?.error === 'string' ? payload.error : `Update failed (${response.status})`
+        );
+      }
+      setRegistryUpdateOutcomes(payload.outcomes);
       // Re-check so the table shows what the registry holds now.
       await loadRegistrySources({ keepOutcomes: true });
     } catch (error) {
