@@ -21,7 +21,7 @@ import {
   type SourceFingerprint,
 } from './target-date-fund-registry';
 import { checkRegistrySources, registryEntryKey } from './registry-source-check';
-import { proposeRegistryUpdate } from './registry-source-update';
+import { deriveStateStreetWeights, proposeRegistryUpdate } from './registry-source-update';
 
 const CACHE_TTL_MS = 60_000;
 let loadedAt = 0;
@@ -89,9 +89,26 @@ export function publicationToEntry(row: PublicationRow): RegistryEntry | string 
   if (typeof sourceAsOf !== 'string' || typeof observed !== 'string') return 'fingerprint is incomplete';
   // The same invariants the provenance tests hold the code rows to.
   if (observedAt < row.allocationAsOf) return 'observed before the holdings date it attests to';
+  // Update always sets availableFrom to the observation day; anything else
+  // would let an earlier snapshot see weights before they existed.
+  if (row.availableFrom !== observedAt) {
+    return 'availableFrom is not the day the publication was observed';
+  }
   if (kind === 'published-values') {
     if (createHash('sha256').update(observed).digest('hex') !== value) return 'value !== sha256(observed)';
     if (sourceAsOf !== row.allocationAsOf) return 'fingerprint attests to a different publication than the weights';
+    // Weights must be a pure function of the fingerprint. A hand-edited row
+    // that keeps a valid hash but redistributes sleeves would otherwise feed
+    // projections with figures nothing derived.
+    if (row.provider === 'state-street') {
+      const derived = deriveStateStreetWeights(observed);
+      if (!derived.ok) return derived.reason;
+      for (const sleeve of sleeves) {
+        if (weights[sleeve] !== derived.weights[sleeve]) {
+          return 'weights do not match the fingerprint they cite';
+        }
+      }
+    }
   }
 
   return {

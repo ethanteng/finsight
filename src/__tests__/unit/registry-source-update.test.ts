@@ -234,6 +234,20 @@ describe('stored publications', () => {
     expect(publicationToEntry(row)).toBe('weights total more than 1');
   });
 
+  it('rejects a row whose sleeve weights were redistributed without changing the fingerprint', () => {
+    const row = validRow();
+    const weights = row.weights as { usEquity: number; cash: number };
+    // Keep the total ≤ 1 so the sum check alone would not catch this.
+    row.weights = { ...(row.weights as object), usEquity: weights.usEquity - 0.01, cash: weights.cash + 0.01 };
+    expect(publicationToEntry(row)).toMatch(/weights do not match/);
+  });
+
+  it('rejects a row that backdates when the new weights become available', () => {
+    const row = validRow();
+    row.availableFrom = '2026-01-01';
+    expect(publicationToEntry(row)).toMatch(/availableFrom/);
+  });
+
   it('rejects a row whose weights no longer come from the publication it cites', () => {
     const row = validRow();
     row.allocationAsOf = '2026-07-31';
