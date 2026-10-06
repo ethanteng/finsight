@@ -289,6 +289,9 @@ export default function CohortReportPanel({
       params.set('questions', String(questions));
       params.set('per', per);
     }
+    // Drop the open drill-down when the query changes so a prior cohort's users
+    // are not shown against a report that has not arrived yet.
+    setSelectedKey(null);
     setLoading(true);
     setError(null);
     fetch(`${apiUrl}/admin/cohorts/${kind}?${params.toString()}`, {
@@ -297,6 +300,9 @@ export default function CohortReportPanel({
     })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}));
+        // AbortController rejects in-flight fetch, but a response that already
+        // arrived can still land after a newer request started. Ignore those.
+        if (controller.signal.aborted) return;
         if (!response.ok) throw new Error(body?.error || `Failed to load the ${kind} report`);
         if (!Array.isArray(body?.cohorts)) throw new Error(`The ${kind} report came back in an unexpected shape`);
         setReport(body as CohortReport);

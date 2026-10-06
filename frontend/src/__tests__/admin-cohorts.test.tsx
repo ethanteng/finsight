@@ -178,4 +178,37 @@ describe('CohortReportPanel', () => {
 
     expect(await screen.findByText('periods must be a whole number from 1 to 90')).toBeInTheDocument();
   });
+
+  it('ignores a slower response from a superseded query', async () => {
+    let finishFirst!: (body: unknown) => void;
+    const firstBody = new Promise((resolve) => { finishFirst = resolve; });
+    const trialReport = { ...engagementReport, notes: ['trial-report-marker'] };
+    const paidReport = {
+      ...engagementReport,
+      segment: 'paid' as const,
+      notes: ['paid-report-marker'],
+      excluded: { operatorAccounts: 0 },
+    };
+    global.fetch = jest.fn()
+      .mockImplementationOnce(() => Promise.resolve({
+        ok: true,
+        json: () => firstBody,
+      }))
+      .mockImplementationOnce(() => Promise.resolve({
+        ok: true,
+        json: async () => paidReport,
+      })) as jest.Mock;
+
+    render(<CohortReportPanel kind="engagement" apiUrl="https://api.example.test" getAuthHeaders={headers} />);
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Paid' }));
+    expect(await screen.findByText('paid-report-marker')).toBeInTheDocument();
+
+    finishFirst(trialReport);
+    // Give the superseded response a turn to apply if the race guard is missing.
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('paid-report-marker')).toBeInTheDocument();
+    expect(screen.queryByText('trial-report-marker')).not.toBeInTheDocument();
+  });
 });
