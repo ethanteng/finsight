@@ -3,7 +3,9 @@ import { addMonths, daysBetween } from '../../cash-flow/calendar';
 import {
   buildCashFlowModel,
   buildCashFlowReport,
+  CARD_INTEREST_CATEGORY,
   expectedMonthly,
+  expectedSpendingByCategory,
   forecastTotals,
   type CashFlowModelInput,
 } from '../../cash-flow/forecast';
@@ -142,5 +144,92 @@ describe('expectedMonthly', () => {
 
     const withIncome = model({ transactions: householdTransactions('2026-09-20', THROUGH), overrides: { monthlyIncome: 7000 } });
     expect(expectedMonthly(withIncome)).toMatchObject({ income: 7000, spending: null, incomeSource: 'override' });
+  });
+});
+
+describe('expectedSpendingByCategory', () => {
+  /** The household's history with the categories a bank would give it. */
+  const CATEGORIES: Record<string, { primary: string; detailed: string }> = {
+    'Oak Street Apartments': { primary: 'RENT_AND_UTILITIES', detailed: 'RENT_AND_UTILITIES_RENT' },
+    'NETFLIX.COM': { primary: 'ENTERTAINMENT', detailed: 'ENTERTAINMENT_TV_AND_MOVIES' },
+    'UNITED AIRLINES': { primary: 'TRAVEL', detailed: 'TRAVEL_FLIGHTS' },
+    'Trader Joes': { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_GROCERIES' },
+    Safeway: { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_GROCERIES' },
+    'Whole Foods': { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_GROCERIES' },
+    // A corner market sells coffee as well as groceries.
+    'Corner Market': { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_COFFEE' },
+  };
+  const categorized = history.map(transaction => {
+    const category = CATEGORIES[String(transaction.name)];
+    return category ? { ...transaction, personal_finance_category: category } : transaction;
+  });
+  const sum = (categories: ReadonlyArray<{ monthly: number }>) => categories.reduce((total, category) => total + category.monthly, 0);
+
+  it('splits the expected month by category, largest first, and adds up to it', () => {
+    const built = model({ transactions: categorized });
+    const categories = expectedSpendingByCategory(built)!;
+    const report = buildCashFlowReport(built, { granularity: 'month', horizonMonths: 6 });
+
+    expect(categories.map(category => category.label)).toEqual(['Rent', 'Groceries', 'Coffee', 'Tv And Movies']);
+    expect(categories.find(category => category.label === 'Rent')!.monthly).toBe(2000);
+    expect(categories.find(category => category.label === 'Tv And Movies')!.monthly).toBe(15.49);
+    // Groceries and coffee are the typical rate between them; the one-off flight
+    // and the stopped gym are not part of a usual month.
+    expect(categories.find(category => category.label === 'Groceries')!.monthly
+      + categories.find(category => category.label === 'Coffee')!.monthly).toBeCloseTo(report.baseline.typicalMonthlySpending, 1);
+    // Each category is rounded to the cent on its own.
+    expect(Math.abs(sum(categories) - expectedMonthly(built).spending!)).toBeLessThan(0.05);
+    expect(report.usualSpending).toEqual({ monthly: expectedMonthly(built).spending, categories });
+  });
+
+  it('follows what the user left out and what they kept', () => {
+    const rentLeftOut = expectedSpendingByCategory(model({
+      transactions: categorized,
+      adjustments: [adjustment({ key: 'oak street apartments', label: 'Oak Street Apartments' })],
+    }))!;
+    expect(rentLeftOut.map(category => category.label)).not.toContain('Rent');
+
+    const gym = model().streams.find(stream => stream.label === 'Harbor Bay Club')!;
+    const gymKept = expectedSpendingByCategory(model({
+      transactions: categorized,
+      adjustments: [adjustment({ kind: 'continue_stream', key: gym.counterpartyKey, label: 'Harbor Bay Club' })],
+    }))!;
+    // The gym has no category from the bank.
+    expect(gymKept.find(category => category.label === 'Uncategorized')!.monthly).toBe(40);
+  });
+
+  it('puts every card’s interest in one category, projected or carried forward', () => {
+    const charges = interestCharges(FROM, THROUGH);
+
+    // A card with known terms posts interest from its APR at the usual pace.
+    const projected = model({ transactions: [...categorized, ...charges], accounts: accountsWithCardTerms() });
+    expect(projected.cards[0].modelsInterest).toBe(true);
+    const projectedCategories = expectedSpendingByCategory(projected)!;
+    const end = addMonths(projected.forecastStart, 12);
+    const interest = projected.cards[0].currentPace!.interestPostings
+      .filter(posting => posting.date < end)
+      .reduce((total, posting) => total + posting.amount, 0);
+    expect(projectedCategories.find(category => category.label === CARD_INTEREST_CATEGORY)!.monthly).toBeCloseTo(interest / 12, 2);
+    expect(Math.abs(sum(projectedCategories) - expectedMonthly(projected).spending!)).toBeLessThan(0.05);
+
+    // Without terms, the charges themselves carry forward, under the same name
+    // rather than the bank's category for them.
+    const carried = model({ transactions: [...categorized, ...charges] });
+    expect(carried.cards[0]?.modelsInterest ?? false).toBe(false);
+    const carriedCategories = expectedSpendingByCategory(carried)!;
+    expect(carriedCategories.find(category => category.label === CARD_INTEREST_CATEGORY)!.monthly).toBeCloseTo(60, 0);
+    expect(carriedCategories.map(category => category.label)).not.toContain('Interest Charge');
+  });
+
+  it('has no breakdown when an override sets spending, or while the forecast is unavailable', () => {
+    const overridden = model({ transactions: categorized, overrides: { monthlyExpense: 5000 } });
+    expect(expectedSpendingByCategory(overridden)).toBeNull();
+    expect(buildCashFlowReport(overridden, { granularity: 'month', horizonMonths: 6 }).usualSpending).toBeNull();
+    // An income override leaves spending learned from transactions.
+    expect(expectedSpendingByCategory(model({ transactions: categorized, overrides: { monthlyIncome: 9000 } }))).toEqual(
+      expectedSpendingByCategory(model({ transactions: categorized }))
+    );
+
+    expect(expectedSpendingByCategory(model({ transactions: householdTransactions('2026-09-20', THROUGH) }))).toBeNull();
   });
 });

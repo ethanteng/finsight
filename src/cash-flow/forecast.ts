@@ -1,3 +1,4 @@
+import { labelKey, normalizeLabel } from '../services/label-normalization';
 import {
   addDays,
   addMonths,
@@ -158,6 +159,12 @@ export interface CashFlowModel {
   oneOffs: CashFlowEntry[];
   /** The payees behind the typical rates, for the sides read from transactions. */
   typicalPayees: TypicalPayee[];
+  /**
+   * The typical spending rate's categories as the basis spent them, net of
+   * refunds, keyed by `labelKey`. Before an account's rate is held at zero, so
+   * they can add up to a little more than `typical.dailySpending`.
+   */
+  typicalSpendingByCategory: Map<string, { label: string; daily: number }>;
   /** How large a non-repeating amount must be to be left out as a one-off; null without a basis. */
   oneOffThresholds: Record<CashFlowDirection, number> | null;
   adjustments: readonly ForecastAdjustment[];
@@ -310,6 +317,8 @@ interface LearnedFlows {
   interestDailyByAccount: Map<string, number>;
   /** The named payees behind the typical rates, largest first. */
   typicalPayees: TypicalPayee[];
+  /** Typical daily spending per category, one-offs left out, keyed by `labelKey`. */
+  spendingByCategory: Map<string, { label: string; daily: number }>;
   /** How large a non-repeating amount must be to be left out as a one-off; null without a basis. */
   oneOffThresholds: Record<CashFlowDirection, number> | null;
 }
@@ -330,7 +339,8 @@ function learnFlows(
   const streams = detectRecurringStreams(entries, dataThrough);
   const dailyByAccount = new Map<string, Record<CashFlowDirection, number>>();
   const interestDailyByAccount = new Map<string, number>();
-  const empty = { streams, oneOffs: [], dailyByAccount, interestDailyByAccount, typicalPayees: [], oneOffThresholds: null };
+  const spendingByCategory = new Map<string, { label: string; daily: number }>();
+  const empty = { streams, oneOffs: [], dailyByAccount, interestDailyByAccount, typicalPayees: [], spendingByCategory, oneOffThresholds: null };
   if (!basisStart) return empty;
   const basisDays = daysBetween(basisStart, basisEndExclusive);
   if (basisDays <= 0) return empty;
@@ -400,6 +410,13 @@ function learnFlows(
     if (entry.interest && entry.flow === 'spending') {
       interestDailyByAccount.set(entry.accountId, (interestDailyByAccount.get(entry.accountId) ?? 0) + entry.amount / basisDays);
     }
+    if (entry.flow === 'spending') {
+      const label = spendingCategoryLabel(entry);
+      const key = labelKey(label);
+      const category = spendingByCategory.get(key) ?? { label, daily: 0 };
+      category.daily += entry.amount / basisDays;
+      spendingByCategory.set(key, category);
+    }
     if (!entry.counterpartyKey) continue;
     const key = payeeKey(entry.flow, entry.counterpartyKey);
     const payee = byPayee.get(key) ?? {
@@ -427,7 +444,7 @@ function learnFlows(
       flow: payee.flow, counterpartyKey: payee.counterpartyKey, label: payee.label, daily: payee.daily, countedOneOffIds: payee.countedOneOffIds,
       entryIds: payee.entryIds,
     }));
-  return { streams, oneOffs, dailyByAccount, interestDailyByAccount, typicalPayees, oneOffThresholds };
+  return { streams, oneOffs, dailyByAccount, interestDailyByAccount, typicalPayees, spendingByCategory, oneOffThresholds };
 }
 
 function sumDaily(dailyByAccount: ReadonlyMap<string, Record<CashFlowDirection, number>>, flow: CashFlowDirection): number {
@@ -826,6 +843,7 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
     },
     oneOffs: learned.oneOffs.sort((left, right) => Math.abs(right.amount) - Math.abs(left.amount)),
     typicalPayees: learned.typicalPayees.filter(payee => (payee.flow === 'income' ? incomeSource : spendingSource) === 'transactions'),
+    typicalSpendingByCategory: learned.spendingByCategory,
     oneOffThresholds: learned.oneOffThresholds,
     adjustments,
     continuedStreams,
@@ -991,6 +1009,63 @@ export function expectedMonthly(model: CashFlowModel): ExpectedMonthly {
     incomeSource: typical.incomeSource,
     spendingSource: typical.spendingSource,
   };
+}
+
+/** Where every card's interest is grouped, whatever category the bank gave the charge. */
+export const CARD_INTEREST_CATEGORY = 'Credit card interest';
+
+function spendingCategoryLabel(entry: Pick<CashFlowEntry, 'category' | 'interest'>): string {
+  return entry.interest ? CARD_INTEREST_CATEGORY : normalizeLabel(entry.category, 'Uncategorized');
+}
+
+export interface SpendingCategory {
+  label: string;
+  monthly: number;
+}
+
+/**
+ * The expected month's spending by category, largest first: each running
+ * regular bill at its monthly rate in its own category, the typical rate split
+ * the way the basis spent it, and the interest the usual pace runs up. Together
+ * they are `expectedMonthly(model).spending`. Null while that has no figure
+ * read from transactions: the forecast is unavailable, or a Finances override
+ * says how much is spent but not on what.
+ */
+export function expectedSpendingByCategory(model: CashFlowModel): SpendingCategory[] | null {
+  if (!model.forecast.available || model.typical.spendingSource === 'override') return null;
+  const byKey = new Map<string, SpendingCategory>();
+  const add = (label: string, monthly: number) => {
+    const key = labelKey(label);
+    const category = byKey.get(key) ?? { label, monthly: 0 };
+    category.monthly += monthly;
+    byKey.set(key, category);
+  };
+
+  const entriesById = new Map(model.ledger.entries.map(entry => [entry.id, entry]));
+  for (const stream of model.streams) {
+    if (stream.flow !== 'spending' || stream.status !== 'active') continue;
+    const interest = stream.entryIds.some(id => entriesById.get(id)?.interest);
+    add(spendingCategoryLabel({ category: stream.category, interest }), streamMonthlyAmount(stream));
+  }
+
+  // An account's typical rate never goes below zero, and a category whose
+  // refunds outweighed its purchases has nothing to show, so the categories are
+  // scaled to the rate itself rather than summed.
+  const typicalMonthly = model.typical.dailySpending * DAYS_PER_MONTH;
+  const parts = [...model.typicalSpendingByCategory.values()].filter(part => part.daily > 0);
+  const partsDaily = parts.reduce((sum, part) => sum + part.daily, 0);
+  if (partsDaily > 0) {
+    for (const part of parts) add(part.label, typicalMonthly * (part.daily / partsDaily));
+  } else {
+    add('Uncategorized', typicalMonthly);
+  }
+
+  add(CARD_INTEREST_CATEGORY, cardInterestTotal(model, model.forecastStart, addMonths(model.forecastStart, 12), false) / 12);
+
+  return [...byKey.values()]
+    .map(category => ({ label: category.label, monthly: roundCents(category.monthly) }))
+    .filter(category => category.monthly > 0)
+    .sort((left, right) => right.monthly - left.monthly || left.label.localeCompare(right.label));
 }
 
 
@@ -1229,6 +1304,12 @@ export interface CashFlowReport {
     total: CashFlowTotals | null;
   };
   highlights: CashFlowHighlight[];
+  /**
+   * The expected month's spending and what it is spent on, largest first; the
+   * categories add up to `monthly`. Null when the forecast is unavailable or a
+   * Finances override replaces spending.
+   */
+  usualSpending: { monthly: number; categories: SpendingCategory[] } | null;
   baseline: {
     typicalBasisStart: CalendarDate | null;
     typicalBasisDays: number;
@@ -1653,6 +1734,12 @@ export function forecastAdjustmentTarget(model: CashFlowModel, input: ForecastAd
   }
 }
 
+function usualSpendingSummary(model: CashFlowModel): CashFlowReport['usualSpending'] {
+  const categories = expectedSpendingByCategory(model);
+  const { spending } = expectedMonthly(model);
+  return categories && spending !== null ? { monthly: spending, categories } : null;
+}
+
 export function buildCashFlowReport(model: CashFlowModel, request: CashFlowReportRequest): CashFlowReport {
   const range = request.from && request.to
     ? customReportRange(model, request.from, request.to)
@@ -1690,6 +1777,7 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
       total: coverage === 'partial' ? null : combine(actual, forecast),
     },
     highlights: buildCashFlowHighlights(model),
+    usualSpending: usualSpendingSummary(model),
     baseline: {
       typicalBasisStart: model.typical.basisStart,
       typicalBasisDays: model.typical.basisDays,

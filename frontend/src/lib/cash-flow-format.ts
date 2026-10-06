@@ -92,6 +92,30 @@ export function formatSignedMoney(value: number): string {
   return rounded > 0 ? `+${formatMoney(value)}` : formatMoney(value);
 }
 
+/**
+ * Whole numbers for `values` that add up to `total` exactly. Each is rounded
+ * down, then the ones that lost the most take the rest a unit at a time (or,
+ * when the values add up to more than `total`, the ones that lost least give a
+ * unit back).
+ */
+export function roundToTotal(values: readonly number[], total: number): number[] {
+  const result = values.map(value => Math.floor(value));
+  const byRemainder = values
+    .map((value, index) => ({ index, remainder: value - result[index] }))
+    .sort((left, right) => right.remainder - left.remainder || left.index - right.index);
+  let left = Math.round(total) - result.reduce((sum, value) => sum + value, 0);
+  for (let step = 0; left !== 0 && byRemainder.length > 0; step += 1) {
+    if (left > 0) {
+      result[byRemainder[step % byRemainder.length].index] += 1;
+      left -= 1;
+    } else {
+      result[byRemainder[byRemainder.length - 1 - (step % byRemainder.length)].index] -= 1;
+      left += 1;
+    }
+  }
+  return result;
+}
+
 /** "$1.2K", "$15K", "$1.1M" for chart axes. */
 export function formatCompactMoney(value: number): string {
   const magnitude = Math.abs(value);

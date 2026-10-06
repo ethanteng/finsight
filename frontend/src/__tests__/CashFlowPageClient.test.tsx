@@ -56,6 +56,16 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
       { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: { ...totals(22500, 9000), components }, projected: totals(25000, 11400), planned: totals(10000, 0), projectedWithoutPlanned: totals(15000, 11400) },
       { key: 'next_12_months', start: '2026-10-15', endExclusive: '2027-10-15', actualToDate: null, actualCoverage: null, remaining: { ...totals(65000, 46000), components }, projected: totals(65000, 46000), planned: totals(10000, 0), projectedWithoutPlanned: totals(55000, 46000) },
     ],
+    // Rounded on its own, each category would add up to $3,114 and 99%.
+    usualSpending: {
+      monthly: 3115.49,
+      categories: [
+        { label: 'Rent', monthly: 2000 },
+        { label: 'Groceries', monthly: 1090.2 },
+        { label: 'Tv And Movies', monthly: 15.49 },
+        { label: 'Credit card interest', monthly: 9.8 },
+      ],
+    },
     baseline: {
       typicalBasisStart: '2026-07-17', typicalBasisDays: 90, typicalMonthlyIncome: 0, typicalMonthlySpending: 1825,
       incomeSource: 'transactions', spendingSource: 'transactions', monthlyIncomeOverride: null, monthlyExpenseOverride: null,
@@ -124,6 +134,14 @@ function mockFetch(handler: Handler) {
     });
   }) as jest.Mock;
   return calls;
+}
+
+/** The usual spending chart, row by row: category, amount and share. */
+function spendingRows(): string[][] {
+  const list = screen.getByRole('list', { name: 'Usual spending by category, largest first' });
+  return within(list).getAllByRole('listitem').map(item => Array.from(item.children)
+    .filter(cell => cell.getAttribute('aria-hidden') !== 'true')
+    .map(cell => cell.textContent!));
 }
 
 /** A highlight card's breakdown, row by row: label, its detail line if any, and amount. */
@@ -257,6 +275,61 @@ describe('CashFlowPageClient', () => {
       ['Planned events', null, '+$1,000'],
       ['Expected to save', null, '+$2,001'],
     ]);
+  });
+
+  describe('where usual spending goes', () => {
+    it('lists each category with an amount and share that add up to the month', async () => {
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+      render(<CashFlowPageClient />);
+
+      const section = (await screen.findByRole('heading', { name: 'Where your usual spending goes' })).closest('section')!;
+      expect(within(section).getByText(/A typical month before planned events: \$3,115\./)).toBeInTheDocument();
+      expect(spendingRows()).toEqual([
+        ['Rent', '$2,000', '64%'],
+        ['Groceries', '$1,090', '35%'],
+        ['Tv And Movies', '$15', '1%'],
+        // Rounded on its own it would be $9; it takes the dollar the total needs.
+        ['Credit card interest', '$10', '<1%'],
+      ]);
+      expect(within(section).queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('folds a long tail into one line, and lists it on request', async () => {
+      const categories = ['Rent', 'Groceries', 'Restaurants', 'Gas', 'Utilities', 'Insurance', 'Coffee', 'Gym', 'Books', 'Parking', 'Gifts']
+        .map((label, index) => ({ label, monthly: 1100 - index * 100 }));
+      mockFetch(url => (url.includes('/api/cash-flow?') ? {
+        status: 200,
+        body: report({ usualSpending: { monthly: 6600, categories } }),
+      } : undefined));
+      render(<CashFlowPageClient />);
+
+      await screen.findByRole('heading', { name: 'Where your usual spending goes' });
+      const folded = spendingRows();
+      expect(folded).toHaveLength(9);
+      // Books, Parking and Gifts: $300 + $200 + $100 of $6,600.
+      expect(folded[8]).toEqual(['3 other categories', '$600', '9%']);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show all 11 categories' }));
+      expect(spendingRows().map(row => row[0])).toEqual(categories.map(category => category.label));
+      fireEvent.click(screen.getByRole('button', { name: 'Show the top 8' }));
+      expect(spendingRows()).toHaveLength(9);
+    });
+
+    it('says why there is no breakdown when the Finances page sets spending', async () => {
+      const fixture = report();
+      mockFetch(url => (url.includes('/api/cash-flow?') ? {
+        status: 200,
+        body: report({
+          usualSpending: null,
+          baseline: { ...fixture.baseline, spendingSource: 'override', monthlyExpenseOverride: 4000 },
+        }),
+      } : undefined));
+      render(<CashFlowPageClient />);
+
+      const section = (await screen.findByRole('heading', { name: 'Where your usual spending goes' })).closest('section')!;
+      expect(within(section).getByText(/set to \$4,000 a month on the Finances page/)).toBeInTheDocument();
+      expect(screen.queryByRole('list', { name: 'Usual spending by category, largest first' })).not.toBeInTheDocument();
+    });
   });
 
   it('asks for the chosen grouping and forecast length', async () => {

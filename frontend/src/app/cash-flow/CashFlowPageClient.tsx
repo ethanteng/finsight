@@ -8,6 +8,7 @@ import AuthenticatedPageHeader from '../../components/authenticated/Authenticate
 import BetaBadge from '../../components/authenticated/BetaBadge';
 import CashFlowChart, { CashFlowChartLegend } from '../../components/cash-flow/CashFlowChart';
 import CashFlowHighlights from '../../components/cash-flow/CashFlowHighlights';
+import UsualSpendingBreakdown from '../../components/cash-flow/UsualSpendingBreakdown';
 import CashFlowPeriodTable, { CashPositionPeriodTable } from '../../components/cash-flow/CashFlowPeriodTable';
 import CashPositionChart, { CashPositionLegend } from '../../components/cash-flow/CashPositionChart';
 import { PositionAccountPicker, UpcomingItems } from '../../components/cash-flow/CashPositionAccounts';
@@ -261,6 +262,7 @@ export default function CashFlowPageClient() {
             )}
 
             {report.forecast.available && <CashFlowHighlights report={report} />}
+            <UsualSpendingBreakdown report={report} />
 
             <section className="rounded-[1.6rem] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-sm sm:p-7" aria-labelledby="cash-flow-chart-heading">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
