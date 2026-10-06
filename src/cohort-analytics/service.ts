@@ -164,9 +164,11 @@ export function acquisitionFilter(window: CohortWindow): Prisma.UserWhereInput {
   if (window.source && window.source !== 'all') filter.source = window.source;
   if (window.campaign) filter.utmCampaign = window.campaign;
   if (window.channel === 'google_ads') {
+    // Keep mediums aligned with hasPaidLeadAttribution so display traffic that
+    // can earn an ad dispatch is also visible under the Google Ads filter.
     filter.OR = [
       { gclid: { not: null } }, { gbraid: { not: null } }, { wbraid: { not: null } },
-      { utmSource: { equals: 'google', mode: 'insensitive' }, utmMedium: { in: ['cpc', 'ppc', 'paid'], mode: 'insensitive' } },
+      { utmSource: { equals: 'google', mode: 'insensitive' }, utmMedium: { in: ['cpc', 'ppc', 'paid', 'display'], mode: 'insensitive' } },
     ];
   }
   return Object.keys(filter).length ? { acquisition: { is: filter } } : {};

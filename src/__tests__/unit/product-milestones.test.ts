@@ -125,10 +125,16 @@ it('limits pending tags to recent, unattempted milestones and returns no acquisi
 });
 
 it('combines exact campaign and source filters with Google acquisition evidence', () => {
-  expect(acquisitionFilter({
+  const filter = acquisitionFilter({
     segment: 'signup', cohortGrain: 'week', periodGrain: 'week', cohortCount: 4, periodCount: 2,
     source: 'coast_fire_calculator', channel: 'google_ads', campaign: 'coast_fire',
-  })).toMatchObject({
+  });
+  expect(filter).toMatchObject({
     acquisition: { is: { source: 'coast_fire_calculator', utmCampaign: 'coast_fire', OR: expect.any(Array) } },
+  });
+  const acquisition = filter.acquisition as { is?: { OR?: Array<Record<string, unknown>> } } | undefined;
+  const googleMedium = acquisition?.is?.OR?.find((clause) => clause.utmSource);
+  expect(googleMedium).toMatchObject({
+    utmMedium: { in: expect.arrayContaining(['cpc', 'ppc', 'paid', 'display']) },
   });
 });
