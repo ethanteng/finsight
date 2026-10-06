@@ -34,12 +34,12 @@ describe('admin cohort routes', () => {
     expect((await request(app).get('/admin/cohorts/activation')).status).toBe(401);
   });
 
-  it('defaults to weekly trial cohorts with a rule in the column grain', async () => {
+  it('defaults to weekly signup cohorts with a rule in the column grain', async () => {
     const response = await request(adminApp()).get('/admin/cohorts/engagement?period=month');
 
     expect(response.status).toBe(200);
     expect(getEngagementReport).toHaveBeenCalledWith(
-      { segment: 'trial', cohortGrain: 'week', periodGrain: 'month', cohortCount: 12, periodCount: 12 },
+      { segment: 'signup', cohortGrain: 'week', periodGrain: 'month', cohortCount: 12, periodCount: 12 },
       { questions: 1, per: 'month' },
     );
   });

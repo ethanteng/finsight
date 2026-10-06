@@ -82,7 +82,7 @@ function requestedUrls(): URL[] {
 const headers = () => ({ Authorization: 'Bearer token' });
 
 describe('CohortReportPanel', () => {
-  it('loads weekly trial cohorts and shades each period', async () => {
+  it('loads weekly signup cohorts and shades each period', async () => {
     mockFetch(engagementReport);
     render(<CohortReportPanel kind="engagement" apiUrl="https://api.example.test" getAuthHeaders={headers} />);
 
@@ -90,12 +90,14 @@ describe('CohortReportPanel', () => {
     const [url] = requestedUrls();
     expect(url.pathname).toBe('/admin/cohorts/engagement');
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      segment: 'trial', cohort: 'week', period: 'week', cohorts: '12', periods: '12', questions: '1', per: 'week',
+      segment: 'signup', cohort: 'week', period: 'week', cohorts: '12', periods: '12', questions: '1', per: 'week',
     });
     expect((global.fetch as jest.Mock).mock.calls[0][1]).toMatchObject({ headers: { Authorization: 'Bearer token' } });
 
     const row = screen.getByRole('button', { name: 'Week of Sep 21, 2026' }).closest('tr')!;
-    expect(within(row).getByText('50%')).toBeInTheDocument();
+    // Text color is paired with each shade so the value stays readable.
+    expect(within(row).getByText('50%')).toHaveStyle({ backgroundColor: '#3f7a55', color: '#ffffff' });
+    expect(within(row).getByText('0%*')).toHaveStyle({ backgroundColor: '#94bf9d', color: '#102319' });
     // Week 2 has only one of two members finished, so it is marked partial.
     expect(within(row).getByText('0%*')).toHaveAttribute('title', '0 of 1 engaged (1 still in this period)');
     expect(screen.getByText(/Counts as engaged in a week column with 2 or more questions/)).toBeInTheDocument();
@@ -110,14 +112,16 @@ describe('CohortReportPanel', () => {
 
     const detail = screen.getByLabelText('Week of Sep 21, 2026 users');
     expect(within(detail).getByText('Week of Sep 21, 2026: 2 users')).toBeInTheDocument();
-    // A trial cohort leads with the trial start, then the other milestones.
+    // Dates read in the order an account reaches them, whatever the view.
     expect(within(detail).getAllByRole('columnheader').slice(0, 5).map(cell => cell.textContent))
-      .toEqual(['User', 'Trial started', 'Signed up', 'First charge', 'Plan now']);
+      .toEqual(['User', 'Signed up', 'Trial started', 'First charge', 'Plan now']);
     const alice = within(detail).getByText('alice@example.com').closest('tr')!;
     expect(within(alice).getByText('Sep 21, 2026')).toBeInTheDocument();
     expect(within(alice).getByText('Aug 2, 2026')).toBeInTheDocument();
     expect(within(alice).getByText('3')).toBeInTheDocument();
-    expect(within(alice).getByTitle('2 asked, 2 needed')).toHaveClass('bg-[#397052]');
+    // Colors are inline because the signed-in theme re-inks `.text-white` dark.
+    expect(within(alice).getByTitle('2 asked, 2 needed')).toHaveStyle({ backgroundColor: '#397052', color: '#ffffff' });
+    expect(within(alice).getByTitle('2 asked, 2 needed')).not.toHaveClass('text-white');
     const bob = within(detail).getByText('bob@example.com').closest('tr')!;
     expect(within(bob).getByTitle('Still in this period')).toHaveTextContent('·');
     expect(within(bob).getByText('No subscription')).toBeInTheDocument();
@@ -131,9 +135,9 @@ describe('CohortReportPanel', () => {
     render(<CohortReportPanel kind="engagement" apiUrl="https://api.example.test" getAuthHeaders={headers} />);
     await screen.findByRole('button', { name: 'Week of Sep 21, 2026' });
 
-    expect(screen.getByRole('button', { name: 'Trials' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'Signups' }));
-    await waitFor(() => expect(requestedUrls().at(-1)!.searchParams.get('segment')).toBe('signup'));
+    expect(screen.getByRole('button', { name: 'Signups' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Trials' }));
+    await waitFor(() => expect(requestedUrls().at(-1)!.searchParams.get('segment')).toBe('trial'));
     fireEvent.click(screen.getByRole('button', { name: 'Paid' }));
     await waitFor(() => expect(requestedUrls().at(-1)!.searchParams.get('segment')).toBe('paid'));
 

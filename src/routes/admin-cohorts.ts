@@ -36,7 +36,7 @@ function wholeNumber(value: unknown, fallback: number, max: number, name: string
 
 function parseWindow(query: Request['query']): CohortWindow {
   return {
-    segment: oneOf<CohortSegment>(query.segment, COHORT_SEGMENTS, 'trial', 'segment'),
+    segment: oneOf<CohortSegment>(query.segment, COHORT_SEGMENTS, 'signup', 'segment'),
     cohortGrain: oneOf<CohortGrain>(query.cohort, COHORT_GRAINS, 'week', 'cohort'),
     periodGrain: oneOf<CohortGrain>(query.period, COHORT_GRAINS, 'week', 'period'),
     cohortCount: wholeNumber(query.cohorts, 12, MAX_COHORTS, 'cohorts'),
