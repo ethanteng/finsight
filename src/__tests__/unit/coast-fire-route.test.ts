@@ -247,6 +247,35 @@ describe('POST /api/coast-fire/email-results', () => {
     }));
   });
 
+  /*
+   * The follow-up emails open the same saved run as the results email, through
+   * the same token-stripping redirect, marked so the signup page reports them
+   * as their own entry rather than as opens of the results email.
+   */
+  it('gives the follow-up emails the continue link, marked as a drip entry', async () => {
+    await request(buildApp()).post('/api/coast-fire/email-results').send({ ...SCENARIO, email: 'reader@example.com' });
+    await settle();
+
+    const [{ fields }] = list.subscribe.mock.calls[0] as unknown as [{ fields: Record<string, unknown> }];
+    const link = new URL(String(fields.coast_fire_continue_url));
+    expect(link.pathname).toBe('/coast-fire/continue');
+    expect(link.searchParams.get('ref')).toBe(new URL(readyCtaUrl()).searchParams.get('ref'));
+    expect(link.searchParams.get('entry')).toBe('drip_email');
+    expect(link.searchParams.has('to')).toBe(false);
+  });
+
+  it('points an existing account’s follow-up link at sign-in', async () => {
+    accounts.exists.mockResolvedValue(true);
+
+    await request(buildApp()).post('/api/coast-fire/email-results').send({ ...SCENARIO, email: 'reader@example.com' });
+    await settle();
+
+    const [{ fields }] = list.subscribe.mock.calls[0] as unknown as [{ fields: Record<string, unknown> }];
+    const link = new URL(String(fields.coast_fire_continue_url));
+    expect(link.searchParams.get('to')).toBe('sign-in');
+    expect(link.searchParams.get('entry')).toBe('drip_email');
+  });
+
   /* The list is a nice-to-have; the results the visitor asked for are not. */
   it('reports success even when the list rejects the address', async () => {
     list.subscribe.mockResolvedValue('failed');

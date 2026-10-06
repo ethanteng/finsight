@@ -127,7 +127,8 @@ export function buildVisitorJourneys(
         return [
           { id: `signup_${calculator}`, label: `${name} · all signup routes`, origin: `${calculator}_calculator` },
           ...[
-            ['results_page', 'Save results'], ['results_email', 'Email return'], ['calculator_cta', 'Calculator signup button'],
+            ['results_page', 'Save results'], ['results_email', 'Email return'], ['drip_email', 'Follow-up email'],
+            ['calculator_cta', 'Calculator signup button'],
           ].map(([entry, label]) => ({ id: `signup_${calculator}_${entry}`, label: `${name} · ${label}`, origin: `${calculator}_calculator`, entry })),
         ];
       }),

@@ -111,6 +111,19 @@ export function trialGroupIds(): string[] {
   return groupIdsFrom('MAILER_LITE_TRIAL_GROUP_ID');
 }
 
+/**
+ * The signup `entry` a calculator lead's follow-up emails carry in their
+ * continue links. The frontend reads the same value (`SIGNUP_ENTRY_DRIP_EMAIL`)
+ * so those clicks report as their own entry rather than as opens of the
+ * results email, whose GA4 key event counts only that email.
+ *
+ * The links themselves are stored on the subscriber as `coast_fire_continue_url`
+ * and `retirement_continue_url`. They carry the lead's token, so anyone with
+ * access to the MailerLite account can open a lead's run until it expires,
+ * exactly as anyone with access to the inbox can.
+ */
+export const LIFECYCLE_EMAIL_SIGNUP_ENTRY = 'drip_email';
+
 function groupIdsFrom(variable: string): string[] {
   const groupId = process.env[variable]?.trim();
   return groupId ? [groupId] : [];

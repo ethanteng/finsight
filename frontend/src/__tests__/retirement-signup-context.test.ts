@@ -1,11 +1,15 @@
 import {
+  RETIREMENT_REF_COOKIE,
   RETIREMENT_SIGNUP_SOURCE,
   RETIREMENT_SIGNUP_STORAGE_KEY,
+  clearRetirementSignupContext,
   hasRetirementSignupSource,
   readRetirementSignupContext,
+  readRetirementSignupRef,
   storeRetirementSignupContext,
   type RetirementSignupInputs,
 } from '@/lib/retirement-signup-context';
+import { writeHandoverToken } from '@/lib/calculator-handover';
 
 const INPUTS: RetirementSignupInputs = {
   currentAge: 48,
@@ -29,6 +33,29 @@ describe('retirement signup context', () => {
       savedAt: 1_000,
       inputs: INPUTS,
     });
+  });
+
+  /*
+   * The calculator's own CTA carries no run. Signup keeps the handover cookie
+   * for a retry when a lookup fails, so a click inside its lifetime would
+   * otherwise spend the old token and count as a results-email return.
+   */
+  it('drops a retained handover token along with the stored run', () => {
+    const token = 'c'.repeat(48);
+    // The cookie is scoped to the page that spends it.
+    window.history.pushState({}, '', '/getstarted');
+    try {
+      writeHandoverToken(RETIREMENT_REF_COOKIE, token);
+      storeRetirementSignupContext(INPUTS);
+      expect(readRetirementSignupRef()).toBe(token);
+
+      clearRetirementSignupContext();
+
+      expect(readRetirementSignupRef()).toBeNull();
+      expect(readRetirementSignupContext()).toBeNull();
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
   });
 
   it('rejects and removes expired context', () => {

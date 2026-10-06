@@ -346,6 +346,35 @@ describe('RegisterForm', () => {
       expect(stored.signupEntry).toBe('results_email');
     });
 
+    /*
+     * A follow-up email carries the same token, so only the marker the
+     * continue route passed on separates it. It restores the run like the
+     * results email does, but must not count as an open of that email.
+     */
+    it('attributes a follow-up email’s token to its own entry', async () => {
+      const token = 'e'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}&entry=drip_email`);
+      handOverRetirementRef(token);
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: 'reader@example.com',
+          inputs: RETIREMENT_SCENARIO,
+        }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+
+      const stored = JSON.parse(
+        window.sessionStorage.getItem('asklinc.trial-signup-flow.v1')!,
+      );
+      expect(stored.signupEntry).toBe('drip_email');
+      expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
+      expect(mockPushCalculatorResultsEmailCtaOpened).not.toHaveBeenCalled();
+      expect(mockPushCalculatorResultsPageCtaOpened).not.toHaveBeenCalled();
+    });
+
     it('exchanges an emailed retirement token and prefills that address', async () => {
       const token = 'f'.repeat(48);
       searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);

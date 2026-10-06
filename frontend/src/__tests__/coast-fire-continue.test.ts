@@ -90,4 +90,28 @@ describe('/coast-fire/continue', () => {
 
     expect(response.headers.get('location')).toBe('https://asklinc.com/getstarted?source=coast-fire-calculator');
   });
+
+  /*
+   * A follow-up email's link: the same handover, with its marker passed on so
+   * signup counts the click as its own entry rather than a results-email open.
+   */
+  it('passes a follow-up email’s marker on to signup, and nothing else', () => {
+    const response = visit(`https://asklinc.com/coast-fire/continue?ref=${TOKEN}&entry=drip_email`);
+
+    const location = response.headers.get('location')!;
+    expect(location).toBe('https://asklinc.com/getstarted?source=coast-fire-calculator&entry=drip_email');
+    expect(location).not.toContain(TOKEN);
+    expect(response.cookies.get(COAST_FIRE_REF_COOKIE)!.value).toBe(TOKEN);
+
+    for (const entry of ['results_page', 'results_email', 'https://evil.example']) {
+      expect(visit(`https://asklinc.com/coast-fire/continue?ref=${TOKEN}&entry=${entry}`).headers.get('location'))
+        .toBe('https://asklinc.com/getstarted?source=coast-fire-calculator');
+    }
+  });
+
+  it('keeps the follow-up marker off the sign-in link', () => {
+    const response = visit(`https://asklinc.com/coast-fire/continue?ref=${TOKEN}&to=sign-in&entry=drip_email`);
+
+    expect(response.headers.get('location')).toBe('https://asklinc.com/login?source=coast-fire-calculator');
+  });
 });

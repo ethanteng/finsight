@@ -116,6 +116,20 @@ function removeStoredContext(): void {
   }
 }
 
+/**
+ * The calculator calls this when its CTA is clicked. That CTA carries the
+ * source but no run, so it drops both carriers a run could still be riding:
+ * the stored scenario, which lives for two hours, and the handover cookie,
+ * which signup keeps for a retry when a lookup fails transiently. Either would
+ * otherwise hand signup a run this click did not ask for, and count the click
+ * as a results-email return.
+ */
+export function clearRetirementSignupContext(): void {
+  if (typeof window === 'undefined') return;
+  removeStoredContext();
+  clearHandoverToken(RETIREMENT_REF_COOKIE);
+}
+
 interface RetirementSignupOptions {
   email?: string;
   sourceToken?: string;

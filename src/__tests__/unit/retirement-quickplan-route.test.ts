@@ -455,6 +455,21 @@ describe('retirement quick plan route', () => {
       }));
     }, 60_000);
 
+    /* See the Coast FIRE route: the follow-up emails open the same saved run. */
+    it('gives the follow-up emails the continue link, marked as a drip entry', async () => {
+      await request(buildApp())
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: 'reader@example.com' });
+      await settle();
+
+      const [{ fields }] = list.subscribe.mock.calls[0] as unknown as [{ fields: Record<string, unknown> }];
+      const link = new URL(String(fields.retirement_continue_url));
+      expect(link.pathname).toBe('/retirement/continue');
+      expect(link.searchParams.get('ref')).toBe(new URL(readyCtaUrl()).searchParams.get('ref'));
+      expect(link.searchParams.get('entry')).toBe('drip_email');
+      expect(link.searchParams.has('to')).toBe(false);
+    }, 60_000);
+
     /* The list is a nice-to-have; the results the visitor asked for are not. */
     it('reports success even when the list rejects the address', async () => {
       list.subscribe.mockResolvedValue('failed');

@@ -27,11 +27,16 @@ export type CalculatorSignupOrigin = (typeof CALCULATOR_SIGNUP_ORIGINS)[number];
  * converts differently from a link opened out of an email hours later, so the
  * whole funnel — viewed, started, submitted, completed — has to be able to
  * tell them apart, not just the moment the scenario is restored.
+ *
+ * `drip_email` is a follow-up email's button: the same saved run as
+ * `results_email`, but a different email, so it gets its own funnel rather
+ * than inflating the results email's.
  */
 export const CALCULATOR_SIGNUP_ENTRIES = [
   'calculator_cta',
   'results_email',
   'results_page',
+  'drip_email',
 ] as const;
 export type CalculatorSignupEntry = (typeof CALCULATOR_SIGNUP_ENTRIES)[number];
 

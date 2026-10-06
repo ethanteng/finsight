@@ -13,6 +13,8 @@ import {
   SIGN_IN_HANDOVER_COOKIE_PATH,
   SIGN_IN_HANDOVER_PARAM,
   SIGN_IN_HANDOVER_VALUE,
+  SIGNUP_ENTRY_DRIP_EMAIL,
+  SIGNUP_ENTRY_PARAM,
   isHandoverToken,
 } from './calculator-handover';
 
@@ -24,6 +26,10 @@ import {
  * redirect. A link sent to an address that already has an account adds
  * `to=sign-in`, which picks `signInDestination` — also a constant — and scopes
  * the cookie to sign-in, the page that spends it there.
+ *
+ * A follow-up email's link adds `entry=drip_email`, which is passed on to
+ * signup so that page reports the click as its own entry. Only that one
+ * value is forwarded, and only as a marker the redirect appends itself.
  */
 export function handoverRedirect(
   request: NextRequest,
@@ -32,8 +38,12 @@ export function handoverRedirect(
   const ref = request.nextUrl.searchParams.get('ref');
   const signIn =
     request.nextUrl.searchParams.get(SIGN_IN_HANDOVER_PARAM) === SIGN_IN_HANDOVER_VALUE;
+  const fromDrip = request.nextUrl.searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_DRIP_EMAIL;
+  const destination = fromDrip && !signIn
+    ? `${options.destination}${options.destination.includes('?') ? '&' : '?'}${SIGNUP_ENTRY_PARAM}=${SIGNUP_ENTRY_DRIP_EMAIL}`
+    : options.destination;
   const response = NextResponse.redirect(
-    new URL(signIn ? options.signInDestination : options.destination, request.nextUrl.origin),
+    new URL(signIn ? options.signInDestination : destination, request.nextUrl.origin),
     // 302, not 308: the exchange is a one-time action, and a permanent
     // redirect is exactly the kind of thing a browser caches and replays.
     302,

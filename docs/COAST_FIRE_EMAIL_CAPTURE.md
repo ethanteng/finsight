@@ -36,7 +36,15 @@ the email that brings back anyone who leaves before the password.
    written. If the lead could not be stored, the endpoint answers 503 and the
    form asks the visitor to try again.
 5. After the response, the address is added to MailerLite, in the Coast FIRE
-   group.
+   group, with `coast_fire_continue_url`: the same continue link as the email,
+   plus `entry=drip_email`. The follow-up emails a lead gets before starting a
+   trial use it for their buttons, so a signup from one opens the saved run
+   and records the lead's own acquisition (campaign, click ids) rather than
+   the follow-up email's. The continue route passes the marker on, and
+   `/getstarted` reports those arrivals as `signup_entry=drip_email`, never as
+   `calculator_results_email_cta_opened`. The link carries the token, so anyone
+   with access to the MailerLite account can open the run until it expires,
+   as anyone with access to the inbox can.
 6. `/getstarted` renders the Coast FIRE variant of the signup page with the
    email prefilled: "Choose a password to see it", what they saved, their
    retirement age and spending — and no result. Arriving straight from the
