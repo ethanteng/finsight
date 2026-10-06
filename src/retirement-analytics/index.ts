@@ -26,6 +26,7 @@ import { analyzeOutcomes } from './engine/outcome-analyzer';
 import { assessPortfolioCharacteristics } from './engine/characteristics-assessor';
 import { formatAnalysisOutput } from './interpretation/analysis-formatter';
 import { calculateDataQuality } from './interpretation/uncertainty-quantifier';
+import { ensureAppliedRegistryEntries } from '../services/target-date-registry-store';
 
 export function buildRetirementTimeline(input: Pick<
   RetirementAnalysisInput,
@@ -95,6 +96,10 @@ export async function analyzeRetirementPortfolio(
       console.log(`✅ FMP: Successfully fetched metadata for ${batchResult.size}/${uniqueTickers.size} tickers (batch, shared across functions)`);
     }
   }
+
+  // Target-date publications applied from the admin panel live in the
+  // database; the registry lookup inside the mapper reads an in-memory copy.
+  await ensureAppliedRegistryEntries();
 
   // Phase 1: Resolve holdings once, then derive both simulation weights and
   // published composition metrics from that same auditable mapping.

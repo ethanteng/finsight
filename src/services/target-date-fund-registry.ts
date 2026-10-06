@@ -65,7 +65,7 @@ export interface TargetDateFundAllocation {
 }
 
 /** Registry rows always carry a fingerprint; lookup results may omit it. */
-type RegistryEntry = Omit<
+export type RegistryEntry = Omit<
   TargetDateFundAllocation,
   'allocationAgeDays' | 'staleAllocation'
 > & {
@@ -148,7 +148,10 @@ const REGISTRY: RegistryEntry[] = [
     },
     // nominalBonds 0.2886 = Aggregate Bond 21.10 + Short Term Treasury 7.76.
     // High Yield 6.98 and Short Term Corporate 1.99 are credit, excluded.
-    weights: { usEquity: 0.2201, internationalEquity: 0.1368, nominalBonds: 0.2886, tips: 0.1793, cash: 0.0014 },
+    // cash 0.0013 = money market 0.18 less 0.05: the lines total 100.05%. This
+    // was first transcribed as 0.0014, which left the row at 100.01% with its
+    // exclusions; deriving it from the fingerprint caught the slip.
+    weights: { usEquity: 0.2201, internationalEquity: 0.1368, nominalBonds: 0.2886, tips: 0.1793, cash: 0.0013 },
   },
   {
     identity: { provider: 'state-street', series: 'target-retirement', vintage: 2030 },
@@ -298,6 +301,53 @@ const REGISTRY: RegistryEntry[] = [
 ];
 
 /**
+ * Publications applied from the admin panel's Update button, after the rows
+ * above. They live in Postgres (`target-date-registry-store.ts`) because a
+ * deployed build cannot edit this file, and are mirrored here so lookup stays
+ * synchronous inside the engine.
+ *
+ * An applied row never replaces one above. It is a later publication of the
+ * same fund with its own `allocationAsOf` and `availableFrom`, so a snapshot
+ * dated before it still resolves to the weights that were published then.
+ */
+let appliedEntries: RegistryEntry[] = [];
+
+function copyEntry(entry: RegistryEntry): RegistryEntry {
+  return {
+    ...entry,
+    identity: { ...entry.identity },
+    weights: { ...entry.weights },
+    sourceFingerprint: { ...entry.sourceFingerprint },
+  };
+}
+
+/** Replace the mirrored applied rows. Only the store should call this. */
+export function setAppliedRegistryEntries(entries: RegistryEntry[]): void {
+  appliedEntries = entries.map(copyEntry);
+}
+
+/**
+ * Applied rows come after the code rows, and within them in the order they
+ * were applied, so the later of two otherwise-tied publications is the one
+ * `newestFirst` keeps.
+ */
+function allEntries(): RegistryEntry[] {
+  return [...REGISTRY, ...appliedEntries];
+}
+
+function newestFirst(entries: RegistryEntry[]): RegistryEntry[] {
+  // Reversed before the (stable) sort so a tie goes to the later row.
+  return [...entries].reverse().sort((left, right) =>
+    right.allocationAsOf.localeCompare(left.allocationAsOf) ||
+    right.availableFrom.localeCompare(left.availableFrom)
+  );
+}
+
+function sameIdentity(left: RegisteredTargetDateFundIdentity, right: RegisteredTargetDateFundIdentity): boolean {
+  return left.provider === right.provider && left.series === right.series && left.vintage === right.vintage;
+}
+
+/**
  * The registry's entries, for auditing tools. Returns copies so a caller cannot
  * mutate the table that the retirement engine reads.
  *
@@ -305,12 +355,32 @@ const REGISTRY: RegistryEntry[] = [
  * requires an exact identity key, and nothing here widens that.
  */
 export function listRegistryEntries(): RegistryEntry[] {
-  return REGISTRY.map(entry => ({
-    ...entry,
-    identity: { ...entry.identity },
-    weights: { ...entry.weights },
-    sourceFingerprint: { ...entry.sourceFingerprint },
-  }));
+  return allEntries().map(copyEntry);
+}
+
+/**
+ * The newest publication of each fund, which is the row a lookup made today
+ * uses once its `availableFrom` has passed.
+ *
+ * This is what the source check compares against the live page. A superseded
+ * row still describes the publication it was transcribed from, which is no
+ * longer the one the provider serves, so checking it would report drift for
+ * as long as the history is kept.
+ */
+export function listCurrentRegistryEntries(): RegistryEntry[] {
+  const current: RegistryEntry[] = [];
+  for (const entry of newestFirst(allEntries())) {
+    if (!current.some(kept => sameIdentity(kept.identity, entry.identity))) current.push(entry);
+  }
+  // Back in registry order, so the panel and the CLI list funds the same way
+  // whether or not a fund has been updated.
+  const order = allEntries();
+  return current
+    .sort((left, right) =>
+      order.findIndex(entry => sameIdentity(entry.identity, left.identity)) -
+      order.findIndex(entry => sameIdentity(entry.identity, right.identity))
+    )
+    .map(copyEntry);
 }
 
 /**
@@ -330,17 +400,12 @@ export function lookupTargetDateAllocation(
   const normalizedAsOfDate = normalizeAsOfDate(asOfDate);
   if (!normalizedAsOfDate) return null;
 
-  const entry = REGISTRY
-    .filter(candidate =>
-      candidate.identity.provider === identity.provider &&
-      candidate.identity.series === identity.series &&
-      candidate.identity.vintage === identity.vintage &&
-      candidate.availableFrom <= normalizedAsOfDate
-    )
-    .sort((left, right) =>
-      right.allocationAsOf.localeCompare(left.allocationAsOf) ||
-      right.availableFrom.localeCompare(left.availableFrom)
-    )[0];
+  const entry = newestFirst(allEntries().filter(candidate =>
+    candidate.identity.provider === identity.provider &&
+    candidate.identity.series === identity.series &&
+    candidate.identity.vintage === identity.vintage &&
+    candidate.availableFrom <= normalizedAsOfDate
+  ))[0];
   if (!entry) return null;
 
   const allocationAgeDays = Math.max(

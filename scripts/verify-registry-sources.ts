@@ -9,11 +9,14 @@
  * stored with the entry.
  *
  * It reports divergence. It never edits the registry: deciding that new
- * published weights should replace transcribed ones is a human judgment, and
- * an auto-updating registry would defeat the point of citing evidence.
+ * published weights should replace transcribed ones is a human judgment, made
+ * with the admin panel's Update button or by re-transcribing by hand.
  *
  *   npx ts-node scripts/verify-registry-sources.ts
  *   npx ts-node scripts/verify-registry-sources.ts --emit   # print TS to paste back
+ *
+ * With DATABASE_URL set, publications applied from the admin panel are checked
+ * too, exactly as production reads them; without it, only the code rows are.
  *
  * Observation and classification live in `src/services/registry-source-check.ts`,
  * shared with the admin panel so a check cannot mean one thing on the command
@@ -25,6 +28,8 @@
  */
 
 import { checkRegistrySources, type RegistrySourceStatus } from '../src/services/registry-source-check';
+import { refreshAppliedRegistryEntries } from '../src/services/target-date-registry-store';
+import { getPrismaClient } from '../src/prisma-client';
 
 const ICON: Record<RegistrySourceStatus, string> = {
   unchanged: 'ok      ',
@@ -35,6 +40,15 @@ const ICON: Record<RegistrySourceStatus, string> = {
 
 (async () => {
   const emit = process.argv.includes('--emit');
+  if (process.env.DATABASE_URL) {
+    try {
+      await refreshAppliedRegistryEntries();
+    } finally {
+      await getPrismaClient().$disconnect();
+    }
+  } else {
+    console.log('DATABASE_URL not set: checking the code registry only, without publications applied from the admin panel.\n');
+  }
   const results = await checkRegistrySources();
 
   for (const result of results) {

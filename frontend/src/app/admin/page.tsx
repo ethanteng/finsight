@@ -212,10 +212,28 @@ export default function AdminPage() {
       allocationAgeDays: number;
       staleByAge: boolean;
       observedSourceAsOf?: string;
+      /** Hash of what the source publishes now; an update approves exactly this. */
+      observedValue?: string;
+      /** For a moved source: the row Update would add, or why it cannot. */
+      update?:
+        | {
+            applicable: true;
+            allocationAsOf: string;
+            availableFrom: string;
+            weights: { usEquity: number; internationalEquity: number; nominalBonds: number; tips: number; cash: number };
+            derivation: string[];
+          }
+        | { applicable: false; reason: string };
     }>;
   } | null>(null);
   const [registryLoading, setRegistryLoading] = useState(false);
   const [registryError, setRegistryError] = useState<string | null>(null);
+  const [registryUpdating, setRegistryUpdating] = useState(false);
+  const [registryUpdateOutcomes, setRegistryUpdateOutcomes] = useState<Array<{
+    key: string;
+    outcome: 'applied' | 'already-applied' | 'changed' | 'not-drifted' | 'refused';
+    detail: string;
+  }> | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -931,9 +949,10 @@ export default function AdminPage() {
     }
   };
 
-  const loadRegistrySources = async () => {
+  const loadRegistrySources = async (options: { keepOutcomes?: boolean } = {}) => {
     setRegistryLoading(true);
     setRegistryError(null);
+    if (!options.keepOutcomes) setRegistryUpdateOutcomes(null);
     try {
       const response = await fetch(`${API_URL}/admin/registry-sources`, { headers: getAuthHeaders() });
       if (response.status === 401 || response.status === 403) {
@@ -945,6 +964,54 @@ export default function AdminPage() {
       setRegistryError(error instanceof Error ? error.message : 'Failed to check registry sources');
     } finally {
       setRegistryLoading(false);
+    }
+  };
+
+  // Moved sources whose new weights the server could derive. Each approval
+  // carries the observation shown on screen; the server re-observes and only
+  // applies it if the source still publishes exactly that.
+  const updatableRegistrySources = (registrySources?.sources ?? []).filter(
+    source => source.status === 'drifted' && source.update?.applicable && source.observedValue
+  );
+
+  const applyRegistryUpdates = async () => {
+    const count = updatableRegistrySources.length;
+    if (count === 0) return;
+    const confirmed = window.confirm(
+      `Record the current publication for ${count} entr${count === 1 ? 'y' : 'ies'}? ` +
+      'Projections from today use the weights shown; earlier snapshots keep the weights published then.'
+    );
+    if (!confirmed) return;
+
+    setRegistryUpdating(true);
+    setRegistryError(null);
+    try {
+      const response = await fetch(`${API_URL}/admin/registry-sources/update`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approvals: updatableRegistrySources.map(source => ({
+            key: source.key,
+            observedValue: source.observedValue,
+          })),
+        }),
+      });
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication required for admin access');
+      }
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(
+          typeof payload?.error === 'string' ? payload.error : `Update failed (${response.status})`
+        );
+      }
+      setRegistryUpdateOutcomes(payload.outcomes);
+      // Re-check so the table shows what the registry holds now.
+      await loadRegistrySources({ keepOutcomes: true });
+    } catch (error) {
+      setRegistryError(error instanceof Error ? error.message : 'Failed to update registry sources');
+    } finally {
+      setRegistryUpdating(false);
     }
   };
 
@@ -1131,17 +1198,54 @@ export default function AdminPage() {
                 republishing inside its window.
               </p>
             </div>
-            <button
-              onClick={loadRegistrySources}
-              disabled={registryLoading}
-              className="min-h-10 rounded bg-[#102319] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {registryLoading ? 'Checking…' : registrySources ? 'Re-check' : 'Check sources'}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => loadRegistrySources()}
+                disabled={registryLoading || registryUpdating}
+                className="min-h-10 rounded bg-[#102319] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {registryLoading ? 'Checking…' : registrySources ? 'Re-check' : 'Check sources'}
+              </button>
+              {registrySources && (
+                <button
+                  onClick={applyRegistryUpdates}
+                  disabled={registryLoading || registryUpdating || updatableRegistrySources.length === 0}
+                  title={updatableRegistrySources.length === 0
+                    ? 'No moved source has weights that can be derived automatically'
+                    : undefined}
+                  className="min-h-10 rounded border border-[#102319] px-4 py-2 text-sm font-medium text-[#102319] disabled:opacity-50"
+                >
+                  {registryUpdating
+                    ? 'Updating…'
+                    : updatableRegistrySources.length > 0
+                      ? `Update ${updatableRegistrySources.length} source${updatableRegistrySources.length === 1 ? '' : 's'}`
+                      : 'Update'}
+                </button>
+              )}
+            </div>
           </div>
 
           {registryError && (
             <p className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">{registryError}</p>
+          )}
+
+          {registryUpdateOutcomes && (
+            <div className="mt-4 rounded bg-sky-50 p-3 text-sm text-sky-900">
+              <p className="font-medium">
+                {(() => {
+                  const applied = registryUpdateOutcomes.filter(outcome => outcome.outcome === 'applied').length;
+                  return `Updated ${applied} of ${registryUpdateOutcomes.length} entr${registryUpdateOutcomes.length === 1 ? 'y' : 'ies'}.`;
+                })()}
+              </p>
+              <ul className="mt-1 space-y-0.5 text-xs">
+                {registryUpdateOutcomes.map(outcome => (
+                  <li key={outcome.key}>
+                    <span className="font-medium">{outcome.key}</span>:{' '}
+                    {outcome.outcome === 'applied' ? 'updated' : outcome.outcome.replace('-', ' ')} — {outcome.detail}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {registrySources && (
@@ -1155,8 +1259,10 @@ export default function AdminPage() {
                     <p className="mt-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
                       <strong>{diverged.length} source{diverged.length === 1 ? '' : 's'} moved since transcription.</strong>{' '}
                       The stored weights are not wrong, but they no longer match what the provider
-                      publishes. Re-transcribe from the current publication when you are ready — this
-                      panel never edits the registry.
+                      publishes. Review the weights shown under each entry and press Update to record
+                      the current publication. It is added as a new dated entry, so earlier snapshots
+                      keep the weights published then. Entries Update cannot derive say why, and still
+                      need transcribing by hand.
                     </p>
                   );
                 }
@@ -1204,6 +1310,29 @@ export default function AdminPage() {
                           {source.status !== 'unchanged' && source.detail && (
                             <p className="mt-1 whitespace-pre-wrap font-normal text-xs text-[#5e6b63]">
                               {source.detail}
+                            </p>
+                          )}
+                          {source.update?.applicable && (
+                            <div className="mt-2 rounded bg-emerald-50 p-2 font-normal text-xs text-emerald-900">
+                              <p>
+                                <span className="font-medium">Update records</span> holdings as of{' '}
+                                {source.update.allocationAsOf}, used from {source.update.availableFrom}:{' '}
+                                {[
+                                  ['US equity', source.update.weights.usEquity],
+                                  ['International', source.update.weights.internationalEquity],
+                                  ['Nominal bonds', source.update.weights.nominalBonds],
+                                  ['TIPS', source.update.weights.tips],
+                                  ['Cash', source.update.weights.cash],
+                                ].map(([label, weight]) => `${label} ${((weight as number) * 100).toFixed(2)}%`).join(' · ')}
+                              </p>
+                              <ul className="mt-1 space-y-0.5 text-emerald-800">
+                                {source.update.derivation.map(line => <li key={line}>{line}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {source.update && !source.update.applicable && (
+                            <p className="mt-2 rounded bg-black/5 p-2 font-normal text-xs text-[#5e6b63]">
+                              <span className="font-medium">Update can&apos;t apply this one:</span> {source.update.reason}
                             </p>
                           )}
                         </td>

@@ -13,8 +13,9 @@
 
 import { createHash } from 'node:crypto';
 import {
-  listRegistryEntries,
+  listCurrentRegistryEntries,
   STALE_ALLOCATION_DAYS,
+  type RegistryEntry,
   type SourceFingerprint,
 } from './target-date-fund-registry';
 
@@ -252,8 +253,17 @@ export interface RegistrySourceResult {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** provider/series/vintage — how the panel, the CLI and an update name an entry. */
+export function registryEntryKey(entry: Pick<RegistryEntry, 'identity'>): string {
+  return `${entry.identity.provider}/${entry.identity.series}/${entry.identity.vintage}`;
+}
+
 /**
  * Observe every registry source concurrently and classify each result.
+ *
+ * Only each fund's newest publication is checked. An older row attests to a
+ * publication the provider has since replaced, so it would report drift for as
+ * long as the history is kept, while saying nothing the newest row does not.
  *
  * `asOfDate` exists so a caller can reproduce a past run; it only affects the
  * reported age, never what is fetched.
@@ -261,10 +271,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export async function checkRegistrySources(
   asOfDate: string = todayUtc()
 ): Promise<RegistrySourceResult[]> {
-  const entries = listRegistryEntries();
+  const entries = listCurrentRegistryEntries();
 
   return Promise.all(entries.map(async entry => {
-    const key = `${entry.identity.provider}/${entry.identity.series}/${entry.identity.vintage}`;
+    const key = registryEntryKey(entry);
     const ageDays = Math.max(0, Math.floor(
       (Date.parse(`${asOfDate}T00:00:00.000Z`) - Date.parse(`${entry.allocationAsOf}T00:00:00.000Z`)) / DAY_MS
     ));

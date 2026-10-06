@@ -1350,29 +1350,96 @@ app.get('/sync/status', async (req: Request, res: Response) => {
      *
      * On demand rather than on page load: six outbound fetches, and nobody
      * needs them every time the admin panel opens.
+     *
+     * A moved source also carries the row Update would add for it, or the
+     * reason it cannot, so the operator approves weights they have seen.
      */
     app.get('/admin/registry-sources', adminAuth, async (req: Request, res: Response) => {
       try {
-        const { checkRegistrySources } = await import('./services/registry-source-check');
+        const { checkRegistrySources, registryEntryKey } = await import('./services/registry-source-check');
+        const { refreshAppliedRegistryEntries } = await import('./services/target-date-registry-store');
+        const { proposeRegistryUpdate } = await import('./services/registry-source-update');
+        const { listCurrentRegistryEntries } = await import('./services/target-date-fund-registry');
+        // From the database, not this instance's cached copy: a check against
+        // a stale copy would show an update another instance applied as drift.
+        await refreshAppliedRegistryEntries();
         const results = await checkRegistrySources();
+        const current = listCurrentRegistryEntries();
         const diverged = results.filter(result => result.status === 'drifted').length;
         console.log(`Admin: registry sources — ${results.length} checked, ${diverged} diverged`);
         res.json({
           checkedAt: new Date().toISOString(),
-          sources: results.map(result => ({
-            key: result.key,
-            status: result.status,
-            detail: result.detail,
-            sourceUrl: result.sourceUrl,
-            allocationAsOf: result.allocationAsOf,
-            allocationAgeDays: result.allocationAgeDays,
-            staleByAge: result.staleByAge,
-            observedSourceAsOf: result.observedSourceAsOf,
-          })),
+          sources: results.map(result => {
+            const entry = current.find(candidate => registryEntryKey(candidate) === result.key);
+            const proposal = result.status === 'drifted' && result.fingerprint && entry
+              ? proposeRegistryUpdate(entry, result.fingerprint)
+              : null;
+            return {
+              key: result.key,
+              status: result.status,
+              detail: result.detail,
+              sourceUrl: result.sourceUrl,
+              allocationAsOf: result.allocationAsOf,
+              allocationAgeDays: result.allocationAgeDays,
+              staleByAge: result.staleByAge,
+              observedSourceAsOf: result.observedSourceAsOf,
+              observedValue: result.fingerprint?.value,
+              update: proposal == null
+                ? undefined
+                : proposal.applicable
+                  ? {
+                      applicable: true,
+                      allocationAsOf: proposal.entry.allocationAsOf,
+                      availableFrom: proposal.entry.availableFrom,
+                      weights: proposal.entry.weights,
+                      derivation: proposal.derivation,
+                    }
+                  : { applicable: false, reason: proposal.reason },
+            };
+          }),
         });
       } catch (error) {
         console.error('Error checking registry sources:', error);
         res.status(500).json({ error: 'Failed to check registry sources' });
+      }
+    });
+
+    /**
+     * Record the current publication of each approved source as a new registry
+     * row (see `target-date-registry-store.ts`).
+     *
+     * Each approval names the observation the operator reviewed. Sources are
+     * observed again server-side and only an unchanged observation is applied,
+     * so nothing the client sends becomes a weight.
+     */
+    app.post('/admin/registry-sources/update', adminAuth, async (req: Request, res: Response) => {
+      const approvals: unknown = req.body?.approvals;
+      if (
+        !Array.isArray(approvals) ||
+        approvals.length === 0 ||
+        approvals.length > 50 ||
+        !approvals.every(approval =>
+          typeof approval?.key === 'string' && approval.key.length <= 200 &&
+          typeof approval?.observedValue === 'string' && /^[0-9a-f]{64}$/.test(approval.observedValue)
+        )
+      ) {
+        res.status(400).json({ error: 'approvals must list { key, observedValue } for each source to update' });
+        return;
+      }
+
+      try {
+        const { applyRegistryUpdates } = await import('./services/target-date-registry-store');
+        const appliedBy = req.user!.email;
+        const outcomes = await applyRegistryUpdates(
+          approvals.map(approval => ({ key: approval.key, observedValue: approval.observedValue })),
+          appliedBy,
+        );
+        const applied = outcomes.filter(outcome => outcome.outcome === 'applied').map(outcome => outcome.key);
+        console.log(`Admin: registry update by ${appliedBy} — applied ${applied.length}/${outcomes.length}: ${applied.join(', ') || 'none'}`);
+        res.json({ outcomes });
+      } catch (error) {
+        console.error('Error applying registry updates:', error);
+        res.status(500).json({ error: 'Failed to apply registry updates' });
       }
     });
 

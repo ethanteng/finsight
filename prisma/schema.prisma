@@ -683,6 +683,45 @@ model ProviderCoverageGap {
   @@map("provider_coverage_gaps")
 }
 
+/// A target-date publication applied from the admin panel's Update button.
+///
+/// The hand-transcribed rows live in `src/services/target-date-fund-registry.ts`;
+/// a deployed build cannot edit that file, so a later publication of one of
+/// those funds is stored here and read alongside them. Rows are appended, never
+/// rewritten: each is a dated publication, and an analysis of an earlier
+/// snapshot keeps resolving to the row that was published then.
+model TargetDateRegistryPublication {
+  id                   String   @id @default(cuid())
+  provider             String
+  series               String
+  vintage              Int
+  /// Holdings date the weights were derived from (YYYY-MM-DD).
+  allocationAsOf       String
+  /// First snapshot date that may use these weights (YYYY-MM-DD): the day the
+  /// publication was observed, so nothing earlier sees figures before they existed.
+  availableFrom        String
+  sourceUrl            String
+  sourceContext        String
+  exactAllocation      Boolean
+  /// 'exact' or 'lower-bound'.
+  tipsAllocationStatus String
+  /// { usEquity, internationalEquity, nominalBonds, tips, cash } as fractions.
+  weights              Json
+  /// The SourceFingerprint the weights were derived from.
+  sourceFingerprint    Json
+  /// sourceFingerprint.value, held separately so a publication applies once.
+  fingerprintValue     String
+  /// How each published holding became a sleeve weight, one line per sleeve.
+  derivation           String[]
+  /// Admin email that applied it.
+  appliedBy            String
+  createdAt            DateTime @default(now())
+
+  @@unique([provider, series, vintage, fingerprintValue])
+  @@index([provider, series, vintage])
+  @@map("target_date_registry_publications")
+}
+
 /// Security metadata cache (ETF/fund classifications)
 model SecurityMetadata {
   id              String   @id @default(cuid())
