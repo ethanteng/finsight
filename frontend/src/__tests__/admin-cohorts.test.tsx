@@ -245,3 +245,17 @@ it('joins source and campaign filters and distinguishes immature retention from 
     expect(latest.searchParams.get('campaign')).toBe('coast_fire');
   });
 });
+
+it('shows recovered source coverage and historical activity without presenting unmeasured milestones as zero', async () => {
+  mockFetch({ ...engagementReport,
+    sourceCoverage: { recorded: 0, recovered: 2, unknown: 0 },
+    quality: { measuredSignups: 0, unmeasuredSignups: 2, resultViewed: 0, meaningfulAnswer: 0,
+      accountLinked: 0, returnedEngaged: 0, returnEligible: 0, returnMaturedCount: 0 },
+  });
+  render(<CohortReportPanel kind="engagement" apiUrl="https://api.example.test" getAuthHeaders={headers} />);
+  expect(await screen.findByLabelText('Signup source coverage')).toHaveTextContent('2 inferred from an initial calculator result');
+  const quality = screen.getByLabelText('Quality milestones');
+  expect(within(quality).getByText(/No signups with milestone tracking/)).toBeInTheDocument();
+  expect(within(quality).getAllByRole('definition').map(value => value.textContent)).toEqual(['—', '—', '—', '—']);
+  expect(within(screen.getByRole('button', { name: 'Week of Sep 21, 2026' }).closest('tr')!).getByText('50%')).toBeInTheDocument();
+});

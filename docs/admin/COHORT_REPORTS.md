@@ -77,9 +77,19 @@ provider-specific history row surviving. New signups use the durable milestone i
 
 Signup source, acquisition channel, and exact `utm_campaign` filters use immutable signup
 attribution. For Coast FIRE ads choose **Coast FIRE calculator / Google Ads / coast_fire**.
-The original server-resolved calculator lead outranks later signup-page parameters. Filters
-are prospective: historical accounts without attribution remain in All sources, but cannot
-be assigned to a campaign reliably.
+The original server-resolved calculator lead outranks later signup-page parameters. For accounts without recorded attribution, the report infers a calculator source only when
+its first surviving decision (of any origin) is a calculator seed written within ten minutes
+of account creation. A later calculator attachment never changes signup source. Recorded
+attribution always wins, even when it says Other / unknown. This read-only fallback does not
+create `UserAcquisition` or milestone rows.
+
+Historical campaign/channel attribution is available only from that seed's exact lead token
+in the matching calculator table, with the same normalized address and a lead created before
+signup. Older seeds without tokens still supply source, but not a campaign. No email-only
+lead matching or “most recent lead” inference is used. Other / unknown includes historical
+accounts without recoverable evidence, so the source groups partition All sources. The UI
+shows recorded, inferred, and unknown source coverage. Inferred sources are conservative,
+not proof of the signup route; removed first decisions or missing seeds can reduce coverage.
 
 The quality summary is separate from the question-count heatmap. It measures the first
 calculator result actually viewed, first successful user answer viewed, first successful

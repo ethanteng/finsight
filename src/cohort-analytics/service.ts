@@ -10,6 +10,7 @@ import {
 } from './stripe-events';
 import { buildActivationReport, buildEngagementReport, windowStart } from './engine';
 import { resolveFirstLink, type FirstLinkEvidence } from './first-link';
+import { COHORT_ACQUISITION_SELECT, filterByAcquisition, type AcquisitionUser } from './acquisition';
 import type {
   ActivationReport,
   CohortExclusions,
@@ -20,6 +21,7 @@ import type {
   EngagementRule,
   FirstLink,
   QualitySummary,
+  SourceCoverage,
 } from './types';
 
 /** Stripe statuses that mean the account is paying now. */
@@ -40,6 +42,7 @@ const SEGMENT_NOTES: Record<CohortSegment, string> = {
 const LINK_NOTE = 'Linking means a Plaid bank, a SnapTrade brokerage, or a Public key that has verified. Disconnecting deletes those records, so someone who linked and later removed every connection counts only when the removal was recorded in history. SnapTrade links are dated from registration, the first step of connecting.';
 
 const USER_SELECT = {
+  ...COHORT_ACQUISITION_SELECT,
   id: true,
   email: true,
   createdAt: true,
@@ -48,7 +51,7 @@ const USER_SELECT = {
   lastLoginAt: true,
 } as const;
 
-interface UserRow {
+interface UserRow extends AcquisitionUser {
   id: string;
   email: string;
   createdAt: Date;
@@ -159,31 +162,16 @@ function toMember(user: UserRow, startedAt: Date, milestones: StripeMilestones):
   };
 }
 
-export function acquisitionFilter(window: CohortWindow): Prisma.UserWhereInput {
-  const filter: Prisma.UserAcquisitionWhereInput = {};
-  if (window.source && window.source !== 'all') filter.source = window.source;
-  if (window.campaign) filter.utmCampaign = window.campaign;
-  if (window.channel === 'google_ads') {
-    // Keep mediums aligned with hasPaidLeadAttribution so display traffic that
-    // can earn an ad dispatch is also visible under the Google Ads filter.
-    filter.OR = [
-      { gclid: { not: null } }, { gbraid: { not: null } }, { wbraid: { not: null } },
-      { utmSource: { equals: 'google', mode: 'insensitive' }, utmMedium: { in: ['cpc', 'ppc', 'paid', 'display'], mode: 'insensitive' } },
-    ];
-  }
-  return Object.keys(filter).length ? { acquisition: { is: filter } } : {};
-}
-
-async function usersByIds(ids: string[], window: CohortWindow): Promise<UserRow[]> {
+async function usersByIds(ids: string[]): Promise<UserRow[]> {
   const prisma = getPrismaClient();
   const users: UserRow[] = [];
   for (const chunk of chunks(ids)) {
-    users.push(...await prisma.user.findMany({ where: { id: { in: chunk }, ...acquisitionFilter(window) }, select: USER_SELECT }));
+    users.push(...await prisma.user.findMany({ where: { id: { in: chunk } }, select: USER_SELECT }));
   }
   return users;
 }
 
-async function loadMembers(window: CohortWindow, now: Date): Promise<{ members: CohortMember[]; excluded: CohortExclusions }> {
+async function loadMembers(window: CohortWindow, now: Date): Promise<{ members: CohortMember[]; excluded: CohortExclusions; sourceCoverage: SourceCoverage }> {
   const prisma = getPrismaClient();
   const start = windowStart(window, now);
   const milestones = await loadStripeMilestones();
@@ -195,33 +183,34 @@ async function loadMembers(window: CohortWindow, now: Date): Promise<{ members: 
   const users = starts
     ? await usersByIds([...starts.entries()]
       .filter(([, at]) => at.getTime() >= start.getTime() && at.getTime() <= now.getTime())
-      .map(([userId]) => userId), window)
+      .map(([userId]) => userId))
     : await prisma.user.findMany({
-      where: { createdAt: { gte: start, lte: now }, ...acquisitionFilter(window) },
+      where: { createdAt: { gte: start, lte: now } },
       select: USER_SELECT,
     });
 
-  const members = users
-    .filter(user => !isAdminOperatorEmail(user.email))
-    .map(user => toMember(user, starts?.get(user.id) ?? user.createdAt, milestones));
-  const excluded: CohortExclusions = { operatorAccounts: users.length - members.length };
+  const filtered = await filterByAcquisition(users, window);
+  const included = filtered.filter(({ user }) => !isAdminOperatorEmail(user.email));
+  const members = included.map(({ user }) => toMember(user, starts?.get(user.id) ?? user.createdAt, milestones));
+  const sourceCoverage: SourceCoverage = { recorded: 0, recovered: 0, unknown: 0 };
+  for (const { acquisition } of included) sourceCoverage[acquisition.evidence]++;
+  const excluded: CohortExclusions = { operatorAccounts: filtered.length - members.length };
 
   if (window.segment === 'paid') {
     const paying = await prisma.user.findMany({
       where: {
-        ...acquisitionFilter(window),
         OR: [
           { subscriptionStatus: { in: PAYING_STATUSES } },
           { subscriptions: { some: { status: { in: PAYING_STATUSES } } } },
         ],
       },
-      select: { id: true, email: true },
+      select: USER_SELECT,
     });
-    excluded.payingWithoutRecordedCharge = paying
+    excluded.payingWithoutRecordedCharge = (await filterByAcquisition(paying, window)).map(({ user }) => user)
       .filter(user => !milestones.firstCharges.has(user.id) && !isAdminOperatorEmail(user.email))
       .length;
   }
-  return { members, excluded };
+  return { members, excluded, sourceCoverage };
 }
 
 async function loadQuestionTimes(members: CohortMember[], window: CohortWindow, now: Date): Promise<Map<string, number[]>> {
@@ -398,10 +387,12 @@ async function loadQuality(members: CohortMember[], now: Date): Promise<QualityS
   return quality;
 }
 
-const QUALITY_NOTE = 'Quality milestones and acquisition filters cover signups recorded after the measurement release; older accounts are not backfilled or treated as zero. Milestone totals are since signup, even in trial and paid views. A meaningful answer is user-initiated, passes the server validation checks, and is viewed in the app. Return engagement requires a new successful answer on a later signup-relative day within seven days.';
+const SOURCE_NOTE = 'Source uses recorded signup attribution when available. Older calculator sources are inferred only when the first saved decision is a calculator result within ten minutes of signup. Later calculator use never changes the source. Campaign and Google Ads filters require recorded attribution or the exact saved result’s lead from before signup; an email match alone is insufficient. Other / unknown includes accounts with no recoverable source.';
+
+const QUALITY_NOTE = 'Quality milestones cover signups recorded after the measurement release; older accounts remain in the cohort heatmap but are excluded from milestone totals, not treated as zero. Milestone totals are since signup, even in trial and paid views. A meaningful answer is user-initiated, passes the server validation checks, and is viewed in the app. Return engagement requires a new successful answer on a later signup-relative day within seven days.';
 
 export async function getEngagementReport(window: CohortWindow, rule: EngagementRule, now = new Date()): Promise<EngagementReport> {
-  const { members, excluded } = await loadMembers(window, now);
+  const { members, excluded, sourceCoverage } = await loadMembers(window, now);
   const questionTimes = await loadQuestionTimes(members, window, now);
   const report = buildEngagementReport({
     members,
@@ -410,13 +401,13 @@ export async function getEngagementReport(window: CohortWindow, rule: Engagement
     rule,
     now,
     excluded,
-    notes: [SEGMENT_NOTES[window.segment], QUESTION_NOTE, OPERATOR_NOTE, QUALITY_NOTE],
+    notes: [SEGMENT_NOTES[window.segment], QUESTION_NOTE, OPERATOR_NOTE, SOURCE_NOTE, QUALITY_NOTE],
   });
-  return { ...report, quality: await loadQuality(members, now) };
+  return { ...report, sourceCoverage, quality: await loadQuality(members, now) };
 }
 
 export async function getActivationReport(window: CohortWindow, now = new Date()): Promise<ActivationReport> {
-  const { members, excluded } = await loadMembers(window, now);
+  const { members, excluded, sourceCoverage } = await loadMembers(window, now);
   const firstLinks = await loadFirstLinks(members.map(member => member.userId));
   const report = buildActivationReport({
     members,
@@ -424,7 +415,7 @@ export async function getActivationReport(window: CohortWindow, now = new Date()
     window,
     now,
     excluded,
-    notes: [SEGMENT_NOTES[window.segment], 'New instrumented signups use durable, provider-confirmed first-link timestamps. ' + LINK_NOTE, OPERATOR_NOTE, QUALITY_NOTE],
+    notes: [SEGMENT_NOTES[window.segment], 'New instrumented signups use durable, provider-confirmed first-link timestamps. ' + LINK_NOTE, OPERATOR_NOTE, SOURCE_NOTE, QUALITY_NOTE],
   });
-  return { ...report, quality: await loadQuality(members, now) };
+  return { ...report, sourceCoverage, quality: await loadQuality(members, now) };
 }

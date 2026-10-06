@@ -264,3 +264,45 @@ describe('prospective quality summary', () => {
     });
   });
 });
+
+
+describe('historical signup source reporting', () => {
+  it.each(['engagement', 'activation'] as const)('keeps historical calculator users in %s without inventing quality milestones', async kind => {
+    const historical = user('coast', '2026-09-21T09:00:00Z', {
+      acquisition: null,
+      conversations: [{ origin: 'calculator_coast_fire', createdAt: at('2026-09-21T09:00:02Z'), calculatorLeadToken: null }],
+    });
+    const db = fakePrisma({
+      user: { findMany: jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([historical, user('unknown', '2026-09-21T09:00:00Z')]) },
+      conversation: { findMany: jest.fn().mockResolvedValue([{ userId: 'coast', createdAt: at('2026-09-22T09:00:00Z') }]) },
+      accessToken: { groupBy: jest.fn().mockResolvedValue([{ userId: 'coast', _min: { createdAt: at('2026-09-22T09:00:00Z') } }]) },
+    });
+    const window = { ...weekly, segment: 'signup' as const, source: 'coast_fire_calculator' as const };
+    const report = kind === 'engagement'
+      ? await getEngagementReport(window, { questions: 1, per: 'week' }, now)
+      : await getActivationReport(window, now);
+    expect(report.cohorts.flatMap(row => row.members.map(member => member.userId))).toEqual(['coast']);
+    expect(report.cohorts[0].cells[0]).toEqual({ rate: 1, count: 1, eligible: 1 });
+    expect(report.sourceCoverage).toEqual({ recorded: 0, recovered: 1, unknown: 0 });
+    expect(report.quality).toMatchObject({ measuredSignups: 0, unmeasuredSignups: 1, resultViewed: 0, meaningfulAnswer: 0 });
+    expect(db.user.findMany.mock.calls[1][0].select.conversations).toMatchObject({
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 1,
+    });
+    expect(db.user.findMany.mock.calls[1][0].where.acquisition).toBeUndefined();
+  });
+
+  it('filters trial cohorts by signup source, not the date of the trial or a later calculator visit', async () => {
+    fakePrisma({
+      subscription: { findMany: jest.fn().mockResolvedValue([
+        { userId: 'retirement', stripeCustomerId: 'cus_r', stripeSubscriptionId: 'sub_r', status: 'trialing', createdAt: at('2026-09-22T00:00:00Z'), currentPeriodStart: at('2026-09-22T00:00:00Z') },
+      ]) },
+      user: { findMany: jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([
+        user('retirement', '2026-08-01T09:00:00Z', { acquisition: null,
+          conversations: [{ origin: 'calculator_retirement', createdAt: at('2026-08-01T09:00:02Z'), calculatorLeadToken: null }] }),
+      ]) },
+    });
+    const report = await getEngagementReport({ ...weekly, segment: 'trial', source: 'retirement_calculator' }, { questions: 1, per: 'week' }, now);
+    expect(report.cohorts.flatMap(row => row.members.map(member => member.userId))).toEqual(['retirement']);
+    expect(report.sourceCoverage).toEqual({ recorded: 0, recovered: 1, unknown: 0 });
+  });
+});

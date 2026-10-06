@@ -8,7 +8,10 @@ attribution and later retention/payment quality have been validated.
 
 Only accounts with a signup-time `UserAcquisition` record participate. Operator accounts in
 `ADMIN_EMAILS` and browsers marked internal are excluded. Historical users are not backfilled
-or described as having zero engagement. A unique `(userId, kind, definitionVersion)` prevents
+or described as having zero engagement. Historical signup sources can nevertheless be
+inferred read-only from an initial calculator seed for cohort filtering (see
+[cohort source recovery](COHORT_REPORTS.md#acquisition-and-quality)); this never opts an old
+account into milestone measurement or dispatches historical conversions. A unique `(userId, kind, definitionVersion)` prevents
 multiple tabs, repeated views and provider reconnects from creating another first milestone.
 
 | Kind | Requirement |
