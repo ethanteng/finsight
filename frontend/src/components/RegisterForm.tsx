@@ -67,11 +67,12 @@ interface SubscriptionContext {
  * - `checkout` (/register): the post-Stripe account-setup step. Reads the
  *   checkout session out of the URL and hands it to the backend so the paid
  *   subscription gets linked to the new account.
- * - `trial` (/getstarted): the "Start free trial" destination. Never touches
- *   Stripe. Registering with no tier and no checkout session leaves the account
- *   at subscriptionStatus "inactive" with no subscription records, which the
- *   backend grants full access to — the same shape as an admin-created account.
- *   That is what makes "no credit card required" true.
+ * - `trial` (/getstarted): the "Start free trial" destination. The form itself
+ *   never calls Stripe or sends a checkout session. The backend's `/auth/register`
+ *   then grants the same 30-day admin trial (when Stripe is configured), so the
+ *   account is Trialing by the time the client gets its token — still no card,
+ *   which is what makes "no credit card required" true. If that grant fails the
+ *   account stays the Admin Created shape (inactive, full access).
  *
  * Both variants submit through the same handler, so the account-creation path
  * cannot drift between the two pages.

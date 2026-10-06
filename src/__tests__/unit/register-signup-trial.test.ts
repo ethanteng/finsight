@@ -5,7 +5,8 @@ import request from 'supertest';
 /**
  * A new no-card account gets exactly what "Convert to trial" in the admin
  * panel does, with the picker's 30-day default, started by registration
- * instead of by an admin. The signup never waits on it or fails for it.
+ * instead of by an admin. The grant finishes before the 201 so the client's
+ * first billing fetch sees the trial; Stripe can still never fail the signup.
  */
 
 const trials = {
@@ -65,9 +66,6 @@ function buildApp() {
 
 const DAY = 24 * 60 * 60 * 1000;
 
-/** The grant is fired after the response and never awaited by the route. */
-const settle = () => new Promise(resolve => setImmediate(resolve));
-
 function register(body: Record<string, unknown>) {
   return request(buildApp())
     .post('/auth/register')
@@ -97,10 +95,10 @@ describe('registration and the signup trial', () => {
   it('converts a plain no-card signup to a 30-day trial', async () => {
     const before = Date.now();
     const res = await register({});
-    await settle();
     const after = Date.now();
 
     expect(res.status).toBe(201);
+    // Awaited before the 201, so the grant has finished by the time we return.
     expect(trials.grant).toHaveBeenCalledTimes(1);
     const [params] = trials.grant.mock.calls[0] as [{ userId: string; trialEndsAt: Date }];
     expect(params.userId).toBe('user-1');
@@ -115,7 +113,6 @@ describe('registration and the signup trial', () => {
     });
 
     const res = await register({ calculatorRef: 'd'.repeat(48) });
-    await settle();
 
     expect(res.status).toBe(201);
     expect(trials.grant).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1' }));
@@ -124,7 +121,6 @@ describe('registration and the signup trial', () => {
   // The checkout already made a subscription; a second would bill beside it.
   it('leaves a paid checkout signup alone', async () => {
     await register({ stripeSessionId: 'cs_test_123', tier: 'premium' });
-    await settle();
 
     expect(trials.grant).not.toHaveBeenCalled();
   });
@@ -133,7 +129,6 @@ describe('registration and the signup trial', () => {
     delete process.env.STRIPE_SECRET_KEY;
 
     const res = await register({});
-    await settle();
 
     expect(res.status).toBe(201);
     expect(trials.grant).not.toHaveBeenCalled();
@@ -144,7 +139,6 @@ describe('registration and the signup trial', () => {
     trials.grant.mockRejectedValueOnce(new Error('Stripe is down'));
 
     const res = await register({});
-    await settle();
 
     expect(res.status).toBe(201);
     expect(res.body.token).toBeTruthy();
