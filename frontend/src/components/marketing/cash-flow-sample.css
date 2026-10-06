@@ -1,4 +1,12 @@
 /*
+ * Its own section: the scenarios above already end on their own padding, so
+ * this adds the same space below before the dark band starts.
+ */
+.cash-flow-sample-section {
+  padding-bottom: 120px;
+}
+
+/*
  * The cash-flow forecast page's "email me a sample forecast" card. The same
  * paper-and-rule treatment as the calculators' email capture, so a visitor
  * moving between those pages sees one kind of form.
@@ -119,6 +127,10 @@
 }
 
 @media (max-width: 720px) {
+  .cash-flow-sample-section {
+    padding-bottom: 75px;
+  }
+
   .cash-flow-sample {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;

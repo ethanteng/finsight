@@ -164,7 +164,7 @@ export default function CashFlowForecastPage() {
         </div>
       </section>
 
-      <section className="shell" aria-label="Get a sample forecast by email">
+      <section className="cash-flow-sample-section shell" aria-label="Get a sample forecast by email">
         <CashFlowSampleCapture />
       </section>
 
@@ -172,7 +172,7 @@ export default function CashFlowForecastPage() {
         <div className="shell case-context-inner">
           <div>
             <p className="section-kicker light">LOOK AHEAD</p>
-            <h2>Your bank app tells you what you spent. Ask Linc helps answer what you can afford.</h2>
+            <h2>Your bank app tells you what you spent. <span className="case-context-accent">Ask Linc helps answer what you can afford.</span></h2>
           </div>
           <div className="context-chips" aria-label="Questions Ask Linc can help answer">
             {questions.map((question) => <span key={question}>{question}</span>)}
