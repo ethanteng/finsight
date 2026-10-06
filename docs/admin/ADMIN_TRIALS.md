@@ -11,6 +11,12 @@ combination as "Admin-created user. Full access granted." — access with no end
 Converting the account replaces that with a real Stripe trial, so the date you pick is the
 date access actually stops.
 
+New no-card signups get this automatically: `/auth/register` awaits the same `grantAdminTrial`
+with the picker's default end date (30 days out) before returning the 201, exactly as if the
+button had been clicked. A failure is caught and logged — the signup still succeeds — and leaves
+the account Admin Created, to convert by hand. Awaiting avoids a window where the client still
+sees `upgradeAction: checkout` while the trial is being created.
+
 ## How the date becomes binding
 
 Nothing in this codebase expires an account on a date. The only live access gate is

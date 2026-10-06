@@ -4,9 +4,10 @@ export type CohortGrain = typeof COHORT_GRAINS[number];
 /**
  * Three starts an account can have, each its own clock:
  * - `signup`: every new account, from account creation.
- * - `trial`: accounts that began a Stripe trial — "Convert to trial" in the
- *   admin panel, or a checkout card trial — from the trial's start. A no-card
- *   signup carries no trial state until it is converted.
+ * - `trial`: accounts that began a Stripe trial — automatic grant on no-card
+ *   signup, "Convert to trial" in the admin panel, or a checkout card trial —
+ *   from the trial's start. A no-card signup whose grant failed (or ran without
+ *   Stripe configured) carries no trial state until converted by hand.
  * - `paid`: from the first successful charge above zero.
  * An account that goes through all three appears in each, from that start.
  */
