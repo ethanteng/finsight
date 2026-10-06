@@ -111,6 +111,13 @@ const HEAT_STEPS: Array<{ background: string; text: string }> = [
   { background: '#1b4530', text: '#ffffff' },
 ];
 
+/**
+ * Inline, like the heatmap: the signed-in theme re-inks `.text-white` dark
+ * (globals.css) and only restores it on its near-black background, so a
+ * `text-white` class on green renders dark on dark. White on this green is 5.8:1.
+ */
+const ENGAGED_CELL_STYLE: CSSProperties = { backgroundColor: '#397052', color: '#ffffff' };
+
 function cellStyle(cell: CohortCell): CSSProperties {
   if (cell.rate === null) return { backgroundColor: 'transparent' };
   const step = cell.rate === 0 ? HEAT_STEPS[0] : HEAT_STEPS[Math.min(5, 1 + Math.floor(cell.rate * 5))];
@@ -220,8 +227,9 @@ function EngagementMembers({ members, periodGrain }: { members: EngagementMember
                 key={index}
                 title={period ? `${period.questions} asked, ${period.required} needed` : 'Still in this period'}
                 className={`px-2 py-2 text-center tabular-nums ${
-                  period === null ? 'text-[#a3aca6]' : period.engaged ? 'bg-[#397052] font-semibold text-white' : 'text-[#5e6b63]'
+                  period === null ? 'text-[#a3aca6]' : period.engaged ? 'font-semibold' : 'text-[#5e6b63]'
                 }`}
+                style={period?.engaged ? ENGAGED_CELL_STYLE : undefined}
               >
                 {period === null ? '·' : period.questions}
               </td>

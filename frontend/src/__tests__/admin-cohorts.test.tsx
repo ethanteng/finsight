@@ -119,7 +119,9 @@ describe('CohortReportPanel', () => {
     expect(within(alice).getByText('Sep 21, 2026')).toBeInTheDocument();
     expect(within(alice).getByText('Aug 2, 2026')).toBeInTheDocument();
     expect(within(alice).getByText('3')).toBeInTheDocument();
-    expect(within(alice).getByTitle('2 asked, 2 needed')).toHaveClass('bg-[#397052]');
+    // Colors are inline because the signed-in theme re-inks `.text-white` dark.
+    expect(within(alice).getByTitle('2 asked, 2 needed')).toHaveStyle({ backgroundColor: '#397052', color: '#ffffff' });
+    expect(within(alice).getByTitle('2 asked, 2 needed')).not.toHaveClass('text-white');
     const bob = within(detail).getByText('bob@example.com').closest('tr')!;
     expect(within(bob).getByTitle('Still in this period')).toHaveTextContent('·');
     expect(within(bob).getByText('No subscription')).toBeInTheDocument();
