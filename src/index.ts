@@ -18,6 +18,7 @@ import askRoutes from './routes/ask';
 import retirementQuickPlanRoutes from './routes/retirement-quickplan';
 import coastFireRoutes from './routes/coast-fire';
 import adminMarketingRoutes from './routes/admin-marketing';
+import adminCohortRoutes from './routes/admin-cohorts';
 import institutionRoutes from './routes/institutions';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
 import { assertJwtSecretConfigured } from './auth/utils';
@@ -374,6 +375,9 @@ app.use('/api/stripe', stripeRoutes);
 // Authenticated marketing analytics. Vendor adapters remain server-side so no
 // GA4, BigQuery, Contentsquare or advertising credentials reach the browser.
 app.use('/admin/marketing', adminMarketingRoutes);
+
+// Trial and paid cohort engagement and activation for the admin dashboard.
+app.use('/admin/cohorts', adminCohortRoutes);
 
 // Get tier information and upgrade suggestions
 app.get('/tier-info', async (req: Request, res: Response) => {

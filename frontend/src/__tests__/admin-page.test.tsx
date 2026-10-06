@@ -91,6 +91,32 @@ describe('AdminPage', () => {
     expect(screen.queryByRole('link', { name: 'Calculator' })).not.toBeInTheDocument();
   });
 
+  it('opens the cohort engagement and activation reports from their tabs', async () => {
+    render(<AdminPage />);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Engagement' }));
+    expect(await screen.findByText('Cohort engagement')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/cohorts/engagement?'),
+        expect.any(Object)
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Activation' }));
+    expect(await screen.findByText('Cohort activation')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/cohorts/activation?'),
+        expect.any(Object)
+      );
+    });
+  });
+
   it('should switch to Market News tab when clicked', async () => {
     render(<AdminPage />);
 
