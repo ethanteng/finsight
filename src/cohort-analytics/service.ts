@@ -233,7 +233,8 @@ async function loadFirstLinks(userIds: string[]): Promise<Map<string, FirstLink>
         where: { userId: { in: ids } },
         select: { userId: true, createdAt: true, _count: { select: { activities: true } } },
       }),
-      // SnapTrade and Public accounts get a row here only when renamed, so each is a dated trace.
+      // SnapTrade/Public Account rows are written on sync (and kept for renames);
+      // createdAt is a dated trace that a brokerage or Public key was reached.
       prisma.account.findMany({
         where: {
           userId: { in: ids },
