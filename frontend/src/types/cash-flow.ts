@@ -162,6 +162,12 @@ export interface ExpectedMonthlySummary {
   learned: { income: number | null; spending: number | null } | null;
 }
 
+/** One category of the expected month's spending. */
+export interface CashFlowSpendingCategory {
+  label: string;
+  monthly: number;
+}
+
 export interface CashFlowReport {
   version: number;
   currency: string;
@@ -181,6 +187,12 @@ export interface CashFlowReport {
     total: CashFlowTotals | null;
   };
   highlights: CashFlowHighlight[];
+  /**
+   * The expected month's spending and what it is spent on, largest first; the
+   * categories add up to `monthly`. Null when the forecast is unavailable or a
+   * Finances override replaces spending.
+   */
+  usualSpending: { monthly: number; categories: CashFlowSpendingCategory[] } | null;
   baseline: {
     typicalBasisStart: string | null;
     typicalBasisDays: number;
