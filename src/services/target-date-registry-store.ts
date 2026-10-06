@@ -26,12 +26,6 @@ import { deriveStateStreetWeights, proposeRegistryUpdate } from './registry-sour
 const CACHE_TTL_MS = 60_000;
 let loadedAt = 0;
 
-const SERIES_BY_PROVIDER: Record<string, string> = {
-  'state-street': 'target-retirement',
-  blackrock: 'lifepath-index',
-  uc: 'pathway',
-};
-
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 interface PublicationRow {
@@ -54,9 +48,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** The row as a registry entry, or why it cannot be one. */
+/**
+ * The row as a registry entry, or why it cannot be one.
+ *
+ * Update only writes State Street publications whose weights it derived from
+ * the holdings they record, so that is all a row here may be, and its weights
+ * are derived again rather than trusted. A row of any other kind has no
+ * derivation to check its weights against.
+ */
 export function publicationToEntry(row: PublicationRow): RegistryEntry | string {
-  if (SERIES_BY_PROVIDER[row.provider] !== row.series) return `unknown identity ${row.provider}/${row.series}`;
+  if (row.provider !== 'state-street' || row.series !== 'target-retirement') {
+    return `unknown identity ${row.provider}/${row.series}`;
+  }
   if (!Number.isInteger(row.vintage)) return `vintage ${row.vintage} is not a year`;
   if (!ISO_DATE.test(row.allocationAsOf) || !ISO_DATE.test(row.availableFrom)) return 'dates are not YYYY-MM-DD';
   // The source check fetches this, so a row cannot aim it anywhere but a public page.
@@ -81,7 +84,7 @@ export function publicationToEntry(row: PublicationRow): RegistryEntry | string 
   const fingerprint = row.sourceFingerprint;
   if (!isRecord(fingerprint)) return 'sourceFingerprint is not an object';
   const { kind, value, observedAt, sourceAsOf, observed } = fingerprint;
-  if (kind !== 'published-values' && kind !== 'document-sha256') return `fingerprint kind ${String(kind)}`;
+  if (kind !== 'published-values') return `fingerprint kind ${String(kind)}`;
   if (typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value) || value !== row.fingerprintValue) {
     return 'fingerprint value is not the sha256 the row is keyed by';
   }
@@ -94,20 +97,16 @@ export function publicationToEntry(row: PublicationRow): RegistryEntry | string 
   if (row.availableFrom !== observedAt) {
     return 'availableFrom is not the day the publication was observed';
   }
-  if (kind === 'published-values') {
-    if (createHash('sha256').update(observed).digest('hex') !== value) return 'value !== sha256(observed)';
-    if (sourceAsOf !== row.allocationAsOf) return 'fingerprint attests to a different publication than the weights';
-    // Weights must be a pure function of the fingerprint. A hand-edited row
-    // that keeps a valid hash but redistributes sleeves would otherwise feed
-    // projections with figures nothing derived.
-    if (row.provider === 'state-street') {
-      const derived = deriveStateStreetWeights(observed);
-      if (!derived.ok) return derived.reason;
-      for (const sleeve of sleeves) {
-        if (weights[sleeve] !== derived.weights[sleeve]) {
-          return 'weights do not match the fingerprint they cite';
-        }
-      }
+  if (createHash('sha256').update(observed).digest('hex') !== value) return 'value !== sha256(observed)';
+  if (sourceAsOf !== row.allocationAsOf) return 'fingerprint attests to a different publication than the weights';
+  // Weights must be a pure function of the fingerprint. A hand-edited row
+  // that keeps a valid hash but redistributes sleeves would otherwise feed
+  // projections with figures nothing derived.
+  const derived = deriveStateStreetWeights(observed);
+  if (!derived.ok) return derived.reason;
+  for (const sleeve of sleeves) {
+    if (weights[sleeve] !== derived.weights[sleeve]) {
+      return 'weights do not match the fingerprint they cite';
     }
   }
 

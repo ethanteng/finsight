@@ -242,6 +242,12 @@ describe('stored publications', () => {
     expect(publicationToEntry(row)).toMatch(/weights do not match/);
   });
 
+  it('rejects a kind of row the update never writes', () => {
+    // No derivation exists for it, so nothing could check its weights.
+    const row = { ...validRow(), provider: 'blackrock', series: 'lifepath-index' };
+    expect(publicationToEntry(row)).toMatch(/unknown identity/);
+  });
+
   it('rejects a row that backdates when the new weights become available', () => {
     const row = validRow();
     row.availableFrom = '2026-01-01';
