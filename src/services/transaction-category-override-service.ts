@@ -1,4 +1,5 @@
 import { getPrismaClient } from '../prisma-client';
+import { counterpartyKey } from '../cash-flow/ledger';
 import { canonicalTypeForCategory } from './transaction-category-taxonomy';
 
 /**
@@ -139,15 +140,15 @@ export async function applyCategoryOverrides(userId: string, data: any): Promise
 }
 
 /**
- * Patches one transaction inside the stored snapshot so the next read reflects the
+ * Patches transactions inside the stored snapshot so the next read reflects the
  * change without waiting for a revision. Scoped by `computedAt` so a revision that
  * lands mid-write wins instead of being silently overwritten with stale rows.
  *
  * Returns true when the snapshot was updated.
  */
-export async function patchSnapshotTransactionCategory(
+export async function patchSnapshotTransactionCategories(
   userId: string,
-  transactionId: string,
+  transactionIds: ReadonlySet<string>,
   category: string[],
   source: 'user' | 'provider'
 ): Promise<boolean> {
@@ -160,7 +161,8 @@ export async function patchSnapshotTransactionCategory(
 
   let found = false;
   const transactions = (snapshot.transactions as any[]).map(transaction => {
-    if (resolveProviderTransactionId(transaction) !== transactionId) return transaction;
+    const id = resolveProviderTransactionId(transaction);
+    if (!id || !transactionIds.has(id)) return transaction;
     found = true;
     const patched = { ...transaction };
     stampCategoryFieldsOnTransaction(patched, category, source);
@@ -173,6 +175,15 @@ export async function patchSnapshotTransactionCategory(
     data: { transactions: transactions as any },
   });
   return update.count > 0;
+}
+
+export async function patchSnapshotTransactionCategory(
+  userId: string,
+  transactionId: string,
+  category: string[],
+  source: 'user' | 'provider'
+): Promise<boolean> {
+  return patchSnapshotTransactionCategories(userId, new Set([transactionId]), category, source);
 }
 
 export async function findSnapshotTransaction(
@@ -213,4 +224,48 @@ export async function findSnapshotTransactionCategory(
   const match = await findSnapshotTransaction(userId, transactionId);
   if (!match) return null;
   return providerCategoryFromTransaction(match);
+}
+
+/**
+ * The other transactions a category edit can be applied to along with this one:
+ * the same payee, keyed the way the cash-flow forecast groups a payee's
+ * transactions, with money moving the same way, and the same kind of activity
+ * (banking or investment). Direction matters because one payee can be both: an
+ * edit to outgoing Venmo payments should not recategorize money friends sent,
+ * and a merchant's refunds keep their own category. Only the sign is compared,
+ * so it holds whichever sign convention the provider uses.
+ *
+ * Transactions without a provider id cannot carry an override and are skipped,
+ * as is everything when the payee has no name to match on.
+ */
+export function matchingTransactions(transactions: readonly any[], target: any): any[] {
+  const key = counterpartyKey(target?.merchant_name, target?.name);
+  if (!key) return [];
+  const targetId = resolveProviderTransactionId(target);
+  const sign = Math.sign(Number(target?.amount) || 0);
+  const investment = Boolean(target?.investment_transaction_id);
+  return transactions.filter(transaction => {
+    const id = resolveProviderTransactionId(transaction);
+    return id !== null
+      && id !== targetId
+      && Boolean(transaction?.investment_transaction_id) === investment
+      && Math.sign(Number(transaction?.amount) || 0) === sign
+      && counterpartyKey(transaction?.merchant_name, transaction?.name) === key;
+  });
+}
+
+/** A snapshot transaction and the others a category edit can be applied to with it. */
+export async function findMatchingSnapshotTransactions(
+  userId: string,
+  transactionId: string
+): Promise<{ target: any; matches: any[] } | null> {
+  const snapshot = await getPrismaClient().financialSummarySnapshot.findUnique({
+    where: { userId },
+    select: { transactions: true },
+  });
+  if (!snapshot || !Array.isArray(snapshot.transactions)) return null;
+  const transactions = snapshot.transactions as any[];
+  const target = transactions.find(transaction => resolveProviderTransactionId(transaction) === transactionId);
+  if (!target) return null;
+  return { target, matches: matchingTransactions(transactions, target) };
 }

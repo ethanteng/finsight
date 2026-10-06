@@ -13,6 +13,8 @@ jest.mock('../../prisma-client', () => ({ getPrismaClient: () => prisma }));
 import {
   applyOverridesToTransactions,
   findSnapshotTransactionCategory,
+  matchingTransactions,
+  patchSnapshotTransactionCategories,
   patchSnapshotTransactionCategory,
   providerCategoryFromTransaction,
   resolveProviderTransactionId,
@@ -272,5 +274,60 @@ describe('snapshot patching', () => {
         category: ['FOOD_AND_DRINK'],
       })
     ).toEqual(['FOOD_AND_DRINK']);
+  });
+});
+
+describe('transactions a category edit can also apply to', () => {
+  const target = { transaction_id: 'txn-1', name: 'SAFEWAY #1234 SAN FRANCISCO', merchant_name: 'Safeway', amount: -82.1 };
+
+  it('matches the same payee with money moving the same way', () => {
+    const others = [
+      { transaction_id: 'txn-2', name: 'SAFEWAY #567', merchant_name: 'Safeway', amount: -45 },
+      // Store numbers differ, but no merchant name: the description still names the payee.
+      { transaction_id: 'txn-3', name: 'SAFEWAY 0042', amount: -12.5 },
+      // A refund from the same store keeps its own category.
+      { transaction_id: 'txn-4', name: 'SAFEWAY REFUND', merchant_name: 'Safeway', amount: 20 },
+      { transaction_id: 'txn-5', name: 'TRADER JOES', merchant_name: 'Trader Joe’s', amount: -40 },
+      // No provider id, so it cannot carry an override.
+      { name: 'SAFEWAY', merchant_name: 'Safeway', amount: -9 },
+      // Investment activity is never matched against banking.
+      { investment_transaction_id: 'inv-1', name: 'Safeway', amount: -100 },
+    ];
+    const matches = matchingTransactions([target, ...others], target);
+    expect(matches.map(transaction => transaction.transaction_id)).toEqual(['txn-2', 'txn-3']);
+  });
+
+  it('matches nothing for a payee with no name', () => {
+    const unnamed = { transaction_id: 'txn-1', name: '', amount: -5 };
+    expect(matchingTransactions([unnamed, { transaction_id: 'txn-2', name: '', amount: -5 }], unnamed)).toEqual([]);
+  });
+});
+
+describe('patching several snapshot transactions at once', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('rewrites every listed transaction in one guarded write', async () => {
+    const computedAt = new Date('2026-08-15T00:00:00.000Z');
+    prisma.financialSummarySnapshot.findUnique.mockResolvedValue({
+      computedAt,
+      transactions: [
+        { transaction_id: 'txn-1', category: ['GENERAL_MERCHANDISE'] },
+        { transaction_id: 'txn-2', category: ['TRAVEL'] },
+        { transaction_id: 'txn-3', category: ['GENERAL_MERCHANDISE'] },
+      ],
+    });
+    prisma.financialSummarySnapshot.updateMany.mockResolvedValue({ count: 1 });
+
+    const patched = await patchSnapshotTransactionCategories('user-1', new Set(['txn-1', 'txn-3']), ['FOOD_AND_DRINK'], 'user');
+
+    expect(patched).toBe(true);
+    expect(prisma.financialSummarySnapshot.updateMany).toHaveBeenCalledTimes(1);
+    const call = prisma.financialSummarySnapshot.updateMany.mock.calls[0][0] as any;
+    expect(call.where).toEqual({ userId: 'user-1', computedAt });
+    expect(call.data.transactions.map((transaction: any) => transaction.category)).toEqual([
+      ['FOOD_AND_DRINK'], ['TRAVEL'], ['FOOD_AND_DRINK'],
+    ]);
   });
 });
