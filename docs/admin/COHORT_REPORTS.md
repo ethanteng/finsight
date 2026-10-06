@@ -14,10 +14,11 @@ through all three appears in each, from that start.
 
 - **Signups** — every new account, clocked from account creation.
 - **Trials** — accounts that started a Stripe trial, clocked from the trial's start. That is
-  **Convert to trial** in User Management (`/admin/user-trial`, see `ADMIN_TRIALS.md`) or a
-  checkout card trial. A no-card signup carries no trial state — it is `subscriptionStatus:
-  inactive` with no end date — until it is converted, so a signup converted two weeks in starts
-  its trial clock on the conversion day, and one never converted is only in signup cohorts.
+  an automatic grant on no-card `/auth/register` (when Stripe is configured), **Convert to
+  trial** in User Management (`/admin/user-trial`, see `ADMIN_TRIALS.md`), or a checkout card
+  trial. A no-card signup whose grant failed (or a backend with no `STRIPE_SECRET_KEY`) stays
+  `subscriptionStatus: inactive` with no end date until converted by hand, so it is only in
+  signup cohorts until then.
   The start is `trial_start` from the logged `customer.subscription.*` webhooks, which stays
   on the subscription after the trial converts or lapses. A trial running now whose webhook
   was never logged is dated from its `Subscription` row. A finished trial with neither is

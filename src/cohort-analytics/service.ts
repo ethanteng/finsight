@@ -33,7 +33,7 @@ const QUESTION_NOTE = 'A question is one typed into Ask Linc. Calculator results
 const OPERATOR_NOTE = 'Accounts in ADMIN_EMAILS are left out. Deleted accounts are gone from every cohort, along with their questions.';
 const SEGMENT_NOTES: Record<CohortSegment, string> = {
   signup: 'Signup cohorts are every new account, from its signup.',
-  trial: 'Trial cohorts are accounts that started a Stripe trial (Convert to trial in User Management, or a checkout card trial), from the day the trial started. A signup that was never put on a trial is only in signup cohorts.',
+  trial: 'Trial cohorts are accounts that started a Stripe trial (automatic on no-card signup, Convert to trial in User Management, or a checkout card trial), from the day the trial started. A signup whose trial grant failed is only in signup cohorts until converted by hand.',
   paid: 'Paid cohorts start at the first successful charge above $0 logged from Stripe, so a converted account also appears in its signup and trial cohorts.',
 };
 const LINK_NOTE = 'Linking means a Plaid bank, a SnapTrade brokerage, or a Public key that has verified. Disconnecting deletes those records, so someone who linked and later removed every connection counts only when the removal was recorded in history. SnapTrade links are dated from registration, the first step of connecting.';
