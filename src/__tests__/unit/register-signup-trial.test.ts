@@ -159,11 +159,25 @@ describe('registration and the signup trial', () => {
   });
 
   /*
-   * Each signup now costs Stripe calls. Its own forwarded address keeps this
-   * window apart from the other cases', which share the socket address.
+   * Each signup now costs Stripe calls. Isolate the router so this case reads
+   * the production default (20) rather than the raised test-suite ceiling, and
+   * use its own forwarded address so it does not share a window with the
+   * other cases on the socket address.
    */
   it('stops a single caller after 20 attempts in the window', async () => {
-    const app = buildApp();
+    const previousLimit = process.env.REGISTER_RATE_LIMIT;
+    process.env.REGISTER_RATE_LIMIT = '20';
+    let router: express.Router;
+    jest.isolateModules(() => {
+      router = require('../../auth/routes').default;
+    });
+    if (previousLimit === undefined) delete process.env.REGISTER_RATE_LIMIT;
+    else process.env.REGISTER_RATE_LIMIT = previousLimit;
+
+    const app = express();
+    app.use(express.json());
+    app.use('/auth', router!);
+
     const attempt = () => request(app)
       .post('/auth/register')
       .set('X-Forwarded-For', '203.0.113.9')

@@ -9,6 +9,17 @@ try {
   console.log('⚠️ .env.test file not found, using environment variables from CI/CD');
 }
 
+/*
+ * `/auth/register` meters every attempt (see REGISTER_RATE_LIMIT). Integration
+ * and auth suites share one Jest worker and one in-memory window, and together
+ * they exceed the production default of 20 — raise the ceiling here, before
+ * `src/index` loads the router, so those suites are not fighting the limiter.
+ * The unit case that pins the production default isolates its own module.
+ */
+if (!process.env.REGISTER_RATE_LIMIT) {
+  process.env.REGISTER_RATE_LIMIT = '10000';
+}
+
 // For CI/CD, ensure we have the required environment variables
 if (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true') {
   console.log('🔧 CI/CD Environment Detected');

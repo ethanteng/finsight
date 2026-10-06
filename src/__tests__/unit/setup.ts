@@ -13,6 +13,15 @@ global.fetch = jest.fn().mockImplementation(() =>
 // Provide required env vars to avoid test failures that expect them
 process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'dummy_key_123';
 process.env.PROFILE_ENCRYPTION_KEY = process.env.PROFILE_ENCRYPTION_KEY || 'dummy_profile_key_1234567890123456';
+/*
+ * Same reason as `src/__tests__/setup/load-env.ts`: unit files that hit
+ * `/auth/register` share one worker-scoped rate-limit window. Keep the
+ * production default out of their way; the case that asserts the default
+ * reloads the router under `jest.isolateModules` with REGISTER_RATE_LIMIT=20.
+ */
+if (!process.env.REGISTER_RATE_LIMIT) {
+  process.env.REGISTER_RATE_LIMIT = '10000';
+}
 
 
 // Mock market news aggregator to prevent real API calls
