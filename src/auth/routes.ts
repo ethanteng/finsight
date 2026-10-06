@@ -18,6 +18,7 @@ import {
 import { sendContactEmail } from './resend-email';
 import { stripeService } from '../services/stripe';
 import { SubscriptionTier } from '../types/stripe';
+import { createFixedWindowRateLimit, positiveIntFromEnv } from '../routes/fixed-window-rate-limit';
 import { isValidTimeZone, normalizeTimeZone } from '../domain/time-zone';
 import {
   attachCalculatorLeadToAccount,
@@ -123,8 +124,21 @@ router.get('/verify', async (req: Request, res: Response) => {
   }
 });
 
+/*
+ * Every no-card signup starts a Stripe trial, so an unmetered public endpoint
+ * would let a script spend the Stripe API capacity checkout and billing need.
+ * Set far above what a person signing up, and retrying a rejected password,
+ * ever reaches.
+ */
+const registerRateLimit = createFixedWindowRateLimit({
+  limit: positiveIntFromEnv('REGISTER_RATE_LIMIT', 20),
+  windowMs: 10 * 60 * 1000,
+  trustedHops: positiveIntFromEnv('TRUSTED_PROXY_HOPS', 1),
+  message: 'Too many signup attempts. Please wait a few minutes and try again.',
+});
+
 // Register new user
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', registerRateLimit, async (req: Request, res: Response) => {
   try {
     const {
       email,
@@ -173,6 +187,12 @@ router.post('/register', async (req: Request, res: Response) => {
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.isValid) {
       return res.status(400).json({ error: passwordValidation.error });
+    }
+
+    // As `PUT /profile` checks. An unknown tier has no Stripe price, so the
+    // trial grant below would fail and leave the account open-ended.
+    if (!['starter', 'standard', 'premium'].includes(tier)) {
+      return res.status(400).json({ error: 'Invalid tier' });
     }
 
     // Check if user already exists
@@ -411,7 +431,7 @@ router.post('/register', async (req: Request, res: Response) => {
      * proved they own it, which is the same set of addresses `mailerlite-sync`
      * has always sent, just sooner. What it adds is that the trial group can
      * carry a welcome sequence, so an unintended recipient of a forged
-     * registration can receive one. `/auth/register` has no rate limit. The
+     * registration can receive one. `/auth/register` is limited only per address. The
      * verification mail's security note is written to match — it says the
      * address was subscribed and points at the unsubscribe link — rather than
      * promising something this no longer honours.

@@ -147,4 +147,34 @@ describe('registration and the signup trial', () => {
       expect.any(Error)
     );
   });
+
+  // An unknown tier has no Stripe price, so the grant would throw and leave
+  // the account open-ended. Refused up front, as PUT /profile does.
+  it('refuses a tier with no Stripe price before creating the account', async () => {
+    const res = await register({ tier: 'free' });
+
+    expect(res.status).toBe(400);
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(trials.grant).not.toHaveBeenCalled();
+  });
+
+  /*
+   * Each signup now costs Stripe calls. Its own forwarded address keeps this
+   * window apart from the other cases', which share the socket address.
+   */
+  it('stops a single caller after 20 attempts in the window', async () => {
+    const app = buildApp();
+    const attempt = () => request(app)
+      .post('/auth/register')
+      .set('X-Forwarded-For', '203.0.113.9')
+      .send({ email: 'new@example.com' });
+
+    for (let i = 0; i < 20; i += 1) {
+      expect((await attempt()).status).toBe(400);
+    }
+    const res = await attempt();
+
+    expect(res.status).toBe(429);
+    expect(res.body.error).toMatch(/Too many signup attempts/);
+  });
 });
