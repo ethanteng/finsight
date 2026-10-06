@@ -19,9 +19,10 @@ const CONTENTSQUARE_APP = "https://*.contentsquare.com";
 /**
  * Where next.config.ts sends this policy: every path except the teaser video's
  * player page and captions, which set their own (see lib/teaser-video). This
- * policy's media sources (default-src 'self') and deliberately short img-src
- * would refuse a video file and poster served from a file host. Only those two
- * exact paths are left out, so any other /video address still gets the policy.
+ * policy's media-src (only 'self' and Ghost's hosts) and deliberately short
+ * img-src would refuse a video file and poster served from a file host. Only
+ * those two exact paths are left out, so any other /video address still gets
+ * the policy.
  */
 export const CSP_HEADER_SOURCE = "/:path((?!video/(?:embed|captions)$).*)";
 
@@ -98,6 +99,9 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     // (components/marketing/ListedOn), each pinned to its exact host.
     `img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://*.google-analytics.com https://www.googletagmanager.com https://*.g.doubleclick.net https://google.com https://www.google.com https://*.google.com https://pagead2.googlesyndication.com https://www.googleadservices.com ${CONTENTSQUARE} https://alb.reddit.com https://bat.bing.com https://bat.bing.net ${DIRECTORY_BADGE_HOSTS.join(" ")}`,
     "font-src 'self' data: https://fonts.gstatic.com",
+    // Videos uploaded to a blog post. Ghost(Pro) stores them on
+    // storage.ghost.io; a self-hosted file sits under the blog's /content/.
+    "media-src 'self' https://*.ghost.io https://blog.asklinc.com",
     connectSrc,
     // The marketing teaser video's frame loads /video/embed ('self'), which
     // redirects to YouTube's privacy-enhanced host; frame-src must allow both

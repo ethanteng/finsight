@@ -116,16 +116,68 @@ export async function getPostsByTag(tagSlug: string, limit = 6): Promise<GhostPo
   }
 }
 
+const HTML_ATTRIBUTE = /([^\s"'<>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+
+function readAttributes(tag: string): Map<string, string> {
+  const attributes = new Map<string, string>();
+  const body = tag.replace(/^<\w+/, '').replace(/\/?>$/, '');
+  for (const [, name, double, single, bare] of body.matchAll(HTML_ATTRIBUTE)) {
+    attributes.set(name.toLowerCase(), double ?? single ?? bare ?? '');
+  }
+  return attributes;
+}
+
+function quoted(value: string): string {
+  return `"${value.replace(/"/g, '&quot;')}"`;
+}
+
+const VIDEO_ATTRIBUTES = ['src', 'width', 'height', 'loop', 'autoplay', 'muted', 'playsinline', 'preload'];
+
+/**
+ * Ghost's video card is a bare <video> plus a hand-built player (play button,
+ * seek and volume sliders, a speed toggle) that only Ghost's cards.min.js and
+ * cards.min.css bring to life. We load neither, so the player rendered as a
+ * row of unstyled, dead controls. Keep the video and hand playback to the
+ * browser's own controls. A looping video is Ghost's GIF-like mode: it plays
+ * muted on its own and Ghost shows it no controls, so neither do we.
+ */
+function nativeVideoCard(card: string): string {
+  const figure = readAttributes(card.match(/^<figure\b[^>]*>/)?.[0] ?? '');
+  const videoTag = card.match(/<video\b[^>]*>/)?.[0];
+  if (!videoTag) return card;
+
+  const video = readAttributes(videoTag);
+  if (!video.get('src')) return card;
+
+  const attributes: string[] = [];
+  for (const name of VIDEO_ATTRIBUTES) {
+    if (!video.has(name)) continue;
+    const value = video.get(name)!;
+    attributes.push(value ? `${name}=${quoted(value)}` : name);
+  }
+  // Ghost's own poster is a transparent spacer; the real frame is the thumbnail.
+  const poster = figure.get('data-kg-custom-thumbnail') || figure.get('data-kg-thumbnail');
+  if (poster) attributes.push(`poster=${quoted(poster)}`);
+  if (!video.has('loop')) attributes.push('controls');
+
+  const caption = card.match(/<figcaption\b[^>]*>[\s\S]*?<\/figcaption>/)?.[0] ?? '';
+  const figureClass = figure.get('class') || 'kg-card kg-video-card';
+  return `<figure class=${quoted(figureClass)}><video ${attributes.join(' ')}></video>${caption}</figure>`;
+}
+
 /**
  * Process Ghost HTML content to preserve formatting and fix links
  */
 export function processGhostHtml(html: string): string {
   if (!html) return '';
-  
+
   return html
-    // Fix absolute links from Ghost domains
-    .replace(/https:\/\/[^\/]+\.ghost\.io\//g, '/blog/')
-    .replace(/https:\/\/blog\.asklinc\.com\//g, '/blog/')
+    .replace(/<figure\b[^>]*\bkg-video-card\b[^>]*>[\s\S]*?<\/figure>/g, nativeVideoCard)
+    // Fix absolute links from Ghost domains. Uploaded files (images, video,
+    // audio) live on storage.ghost.io or under /content/ on the blog's own
+    // host; they are files, not posts, and have no page under /blog/.
+    .replace(/https:\/\/(?!storage\.ghost\.io\/)[a-z0-9-]+\.ghost\.io\/(?!content\/)/g, '/blog/')
+    .replace(/https:\/\/blog\.asklinc\.com\/(?!content\/)/g, '/blog/')
     .replace(/https:\/\/asklinc\.com\/blog\//g, '/blog/')
     // Next.js serves article canonicals without a trailing slash. Normalize
     // internal article links so they do not take an unnecessary 308 hop.
