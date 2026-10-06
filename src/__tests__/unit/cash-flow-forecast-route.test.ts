@@ -14,14 +14,14 @@ const list = {
     async () => 'subscribed',
   ),
 };
-const accounts = { exists: jest.fn<Promise<boolean>, [string]>(async () => false) };
+const accounts = { exists: jest.fn<Promise<boolean | null>, [string]>(async () => false) };
 
 jest.mock('../../services/mailerlite-subscribe', () => ({
   ...jest.requireActual('../../services/mailerlite-subscribe'),
   subscribeToMailerLite: (...args: unknown[]) => list.subscribe(...(args as [never])),
 }));
 jest.mock('../../services/calculator-account-lookup', () => ({
-  accountExistsForEmail: (...args: unknown[]) => accounts.exists(...(args as [string])),
+  lookupAccountForEmail: (...args: unknown[]) => accounts.exists(...(args as [string])),
 }));
 
 function buildApp(env: Record<string, string | undefined> = {}) {
@@ -68,6 +68,21 @@ describe('POST /api/cash-flow-forecast/sample-request', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ existingAccount: true });
+    expect(list.subscribe).not.toHaveBeenCalled();
+  });
+
+  /*
+   * The calculators treat a failed lookup as a new address because signup's
+   * 409 corrects it later. Nothing corrects it here, so the request fails.
+   */
+  it('refuses rather than guessing when the account lookup cannot answer', async () => {
+    accounts.exists.mockResolvedValue(null);
+
+    const response = await request(buildApp())
+      .post('/api/cash-flow-forecast/sample-request')
+      .send({ email: 'member@example.com' });
+
+    expect(response.status).toBe(503);
     expect(list.subscribe).not.toHaveBeenCalled();
   });
 

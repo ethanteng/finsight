@@ -5,7 +5,7 @@ jest.mock('../../prisma-client', () => ({
   getPrismaClient: () => ({ user: { findUnique } }),
 }));
 
-import { accountExistsForEmail } from '../../services/calculator-account-lookup';
+import { accountExistsForEmail, lookupAccountForEmail } from '../../services/calculator-account-lookup';
 
 describe('accountExistsForEmail', () => {
   it('finds an account by its lowercased address', async () => {
@@ -34,5 +34,18 @@ describe('accountExistsForEmail', () => {
     findUnique.mockRejectedValueOnce(new Error('connection reset'));
 
     await expect(accountExistsForEmail('new@example.com')).resolves.toBe(false);
+  });
+});
+
+describe('lookupAccountForEmail', () => {
+  it('says when it could not tell, for callers with nothing to recover a guess', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    findUnique.mockRejectedValueOnce(new Error('connection reset'));
+    await expect(lookupAccountForEmail('member@example.com')).resolves.toBeNull();
+
+    findUnique.mockResolvedValueOnce({ id: 'user-1' });
+    await expect(lookupAccountForEmail('member@example.com')).resolves.toBe(true);
+    findUnique.mockResolvedValueOnce(null);
+    await expect(lookupAccountForEmail('new@example.com')).resolves.toBe(false);
   });
 });

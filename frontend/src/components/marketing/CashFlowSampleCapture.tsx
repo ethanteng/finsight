@@ -58,13 +58,17 @@ export default function CashFlowSampleCapture() {
     }
   }
 
+  /*
+   * The address is shown back as text once the input is gone, so it carries
+   * the same `data-cs-mask` the input did: session replay records page text.
+   */
   if (status === "sent") {
     return (
       <div className="cash-flow-sample is-sent" role="status" aria-live="polite">
         <p className="section-kicker">CHECK YOUR INBOX</p>
         <h3>Your sample forecast is on its way</h3>
         <p>
-          It should reach <strong>{email.trim()}</strong> within a few minutes, from ethan@asklinc.com.
+          It should reach <strong data-cs-mask>{email.trim()}</strong> within a few minutes, from ethan@asklinc.com.
           Reply to it with any question; it goes straight to Ethan, who built Ask Linc.
         </p>
       </div>
@@ -77,7 +81,7 @@ export default function CashFlowSampleCapture() {
         <p className="section-kicker">YOU ALREADY HAVE AN ACCOUNT</p>
         <h3>Build your forecast in Ask Linc</h3>
         <p>
-          <strong>{email.trim()}</strong> already has an Ask Linc account, so there is no need for a sample.{" "}
+          <strong data-cs-mask>{email.trim()}</strong> already has an Ask Linc account, so there is no need for a sample.{" "}
           <Link href={loginUrlFor("/cash-flow")}>Sign in to see your own forecast</Link>.
         </p>
       </div>

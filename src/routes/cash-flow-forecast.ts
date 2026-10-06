@@ -18,7 +18,7 @@ import express, { Request, Response } from 'express';
 import { createFixedWindowRateLimit, positiveIntFromEnv } from './fixed-window-rate-limit';
 import { validateEmail } from '../auth/utils';
 import { cashFlowGroupIds, subscribeToMailerLite } from '../services/mailerlite-subscribe';
-import { accountExistsForEmail } from '../services/calculator-account-lookup';
+import { lookupAccountForEmail } from '../services/calculator-account-lookup';
 
 const router = express.Router();
 
@@ -55,8 +55,17 @@ router.post('/sample-request', sampleRateLimit, async (req: Request, res: Respon
    * which exists to get them to start one; it would ask a paying customer to
    * start a free trial. The page sends them to sign in instead, the same way
    * the calculators do for an existing address.
+   *
+   * A lookup that could not answer is a failure here, not a new address: the
+   * calculators recover from that guess at signup, but nothing after this
+   * request would take an existing customer back off the sequence.
    */
-  if (await accountExistsForEmail(email)) {
+  const existingAccount = await lookupAccountForEmail(email);
+  if (existingAccount === null) {
+    res.status(503).json({ error: 'We could not send that just now. Please try again in a moment.' });
+    return;
+  }
+  if (existingAccount) {
     res.json({ existingAccount: true });
     return;
   }
