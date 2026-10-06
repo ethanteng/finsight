@@ -173,10 +173,10 @@ A plan can match the usual pace, and the page says so rather than showing two id
 Each highlight card on the page breaks its headline into one sum. The parts are:
 
 - **So far:** what actually happened, shown only when the headline includes it.
-- **Usual income and spending:** the forecast before any plans.
+- **Usual income** and **Usual spending:** the forecast before any plans, one line for each side. Planned income and spending stay out of these, in the planned line.
 - **Planned events:** what the plans change.
 
-A total row repeats the headline. Each part is rounded to the dollar, and the forecast part absorbs the rounding remainder, so the shown parts always add up to the shown headline. A window that history only partly reaches has no "so far" part, because its headline is only what is still expected. The card states what was observed since history began in its note instead.
+A total row repeats the headline. Each part is rounded to the dollar, and the larger of the two forecast parts absorbs the rounding remainder, so the shown parts always add up to the shown headline. A window that history only partly reaches has no "so far" part, because its headline is only what is still expected. The card states what was observed since history began in its note instead.
 
 ## Cash position
 

@@ -20,9 +20,10 @@ interface BreakdownLine {
 
 /**
  * The parts that add up to the card's headline: what happened so far (only
- * when the headline includes it), the forecast before any plans, and what the
- * plans change. Each part is rounded and the forecast part takes the rounding
- * remainder, so the figures shown always sum to the headline shown.
+ * when the headline includes it), the forecast's income and spending before
+ * any plans, and what the plans change. Each part is rounded and the larger
+ * forecast part takes the rounding remainder, so the figures shown always sum
+ * to the headline shown.
  */
 function breakdownLines(highlight: CashFlowHighlight, forecastStart: string): BreakdownLine[] {
   const headline = highlight.projected ?? highlight.remaining;
@@ -36,12 +37,17 @@ function breakdownLines(highlight: CashFlowHighlight, forecastStart: string): Br
     const actualLast = forecastFrom <= lastDay ? lastIncludedDay(forecastFrom) : lastDay;
     lines.push({ label: 'So far', detail: `Actual · ${formatShortRange(highlight.start, actualLast)}`, value: actual });
   }
-  if (forecastFrom <= lastDay) {
-    lines.push({
-      label: 'Usual income and spending',
-      detail: forecastFrom > highlight.start ? `Forecast · ${formatShortRange(forecastFrom, lastDay)}` : undefined,
-      value: Math.round(headline.net) - (actual ?? 0) - planned,
-    });
+  if (forecastFrom <= lastDay && highlight.remaining) {
+    const detail = forecastFrom > highlight.start ? `Forecast · ${formatShortRange(forecastFrom, lastDay)}` : undefined;
+    const usualIncome = highlight.remaining.income - highlight.planned.income;
+    const usualSpending = -(highlight.remaining.spending - highlight.planned.spending);
+    let income = Math.round(usualIncome);
+    let spending = Math.round(usualSpending);
+    const remainder = Math.round(headline.net) - (actual ?? 0) - planned - income - spending;
+    if (Math.abs(usualIncome) >= Math.abs(usualSpending)) income += remainder;
+    else spending += remainder;
+    lines.push({ label: 'Usual income', detail, value: income });
+    lines.push({ label: 'Usual spending', detail, value: spending });
   }
   if (planned !== 0) lines.push({ label: 'Planned events', value: planned });
   return lines;

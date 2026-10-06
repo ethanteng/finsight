@@ -155,17 +155,19 @@ describe('CashFlowPageClient', () => {
 
     const thisMonth = await screen.findByRole('heading', { name: 'This month' });
     const card = thisMonth.closest('article')!;
-    // One breakdown that adds up to the headline: +$100 so far, +$1,500 forecast.
+    // One breakdown that adds up to the headline: +$100 so far, +$2,500 − $1,000 forecast.
     expect(breakdown(card)).toEqual([
       ['So far', 'Actual · Oct 1–14', '+$100'],
-      ['Usual income and spending', 'Forecast · Oct 15–31', '+$1,500'],
+      ['Usual income', 'Forecast · Oct 15–31', '+$2,500'],
+      ['Usual spending', 'Forecast · Oct 15–31', '−$1,000'],
       ['Expected to save', null, '+$1,600'],
     ]);
 
     const quarter = screen.getByRole('heading', { name: 'This quarter' }).closest('article')!;
     expect(breakdown(quarter)).toEqual([
       ['So far', 'Actual · Oct 1–14', '+$100'],
-      ['Usual income and spending', 'Forecast · Oct 15 – Dec 31', '+$3,500'],
+      ['Usual income', 'Forecast · Oct 15 – Dec 31', '+$12,500'],
+      ['Usual spending', 'Forecast · Oct 15 – Dec 31', '−$9,000'],
       ['Planned events', null, '+$10,000'],
       ['Expected to save', null, '+$13,600'],
     ]);
@@ -173,7 +175,8 @@ describe('CashFlowPageClient', () => {
     // Nothing observed yet: the forecast covers the whole window, so it needs no dates.
     const year = screen.getByRole('heading', { name: 'Next 12 months' }).closest('article')!;
     expect(breakdown(year)).toEqual([
-      ['Usual income and spending', null, '+$9,000'],
+      ['Usual income', null, '+$55,000'],
+      ['Usual spending', null, '−$46,000'],
       ['Planned events', null, '+$10,000'],
       ['Expected to save', null, '+$19,000'],
     ]);
@@ -194,8 +197,8 @@ describe('CashFlowPageClient', () => {
       status: 200,
       body: report({
         highlights: [
-          // $1,000.60 + $499.60 rounds to $1,001 + $500, a dollar over the $1,500 headline.
-          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(1000.6, 0), actualCoverage: 'full', remaining: { ...totals(499.6, 0), components }, projected: totals(1500.2, 0), planned: totals(0, 0), projectedWithoutPlanned: totals(1500.2, 0) },
+          // $1,000.60 + $3,000.60 − $2,501 rounds to $1,001 + $3,001 − $2,501, a dollar over the $1,500 headline.
+          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(1000.6, 0), actualCoverage: 'full', remaining: { ...totals(3000.6, 2501), components }, projected: totals(4001.2, 2501), planned: totals(0, 0), projectedWithoutPlanned: totals(4001.2, 2501) },
           // History starts inside the quarter: the headline is only what is still expected.
           { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(500, 0), actualCoverage: 'partial', remaining: { ...totals(9000, 5000), components }, projected: null, planned: totals(0, 2000), projectedWithoutPlanned: null },
           { key: 'next_12_months', start: '2026-10-15', endExclusive: '2027-10-15', actualToDate: null, actualCoverage: null, remaining: { ...totals(65000, 46000), components }, projected: totals(65000, 46000), planned: totals(0, 0), projectedWithoutPlanned: totals(65000, 46000) },
@@ -207,22 +210,29 @@ describe('CashFlowPageClient', () => {
     const month = (await screen.findByRole('heading', { name: 'This month' })).closest('article')!;
     expect(breakdown(month)).toEqual([
       ['So far', 'Actual · Oct 1–14', '+$1,001'],
-      ['Usual income and spending', 'Forecast · Oct 15–31', '+$499'],
+      // The larger forecast part takes the remainder.
+      ['Usual income', 'Forecast · Oct 15–31', '+$3,000'],
+      ['Usual spending', 'Forecast · Oct 15–31', '−$2,501'],
       ['Expected to save', null, '+$1,500'],
     ]);
 
     const quarter = screen.getByRole('heading', { name: 'This quarter' }).closest('article')!;
     expect(breakdown(quarter)).toEqual([
-      ['Usual income and spending', 'Forecast · Oct 15 – Dec 31', '+$6,000'],
+      // Planned spending is its own line, not part of usual spending.
+      ['Usual income', 'Forecast · Oct 15 – Dec 31', '+$9,000'],
+      ['Usual spending', 'Forecast · Oct 15 – Dec 31', '−$3,000'],
       ['Planned events', null, '−$2,000'],
       ['Expected for the rest of it', null, '+$4,000'],
     ]);
     expect(within(quarter).getByText(/full period can’t be added up yet\. Since then: \+\$500\./)).toBeInTheDocument();
 
-    // A single part would only repeat the headline.
+    // With no plans, the forecast still splits into income and spending.
     const year = screen.getByRole('heading', { name: 'Next 12 months' }).closest('article')!;
-    expect(within(year).getByText('+$19,000')).toBeInTheDocument();
-    expect(breakdown(year)).toEqual([]);
+    expect(breakdown(year)).toEqual([
+      ['Usual income', null, '+$65,000'],
+      ['Usual spending', null, '−$46,000'],
+      ['Expected to save', null, '+$19,000'],
+    ]);
   });
 
   it('asks for the chosen grouping and forecast length', async () => {
