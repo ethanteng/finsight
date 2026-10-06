@@ -2176,11 +2176,6 @@ export default function AdminPage() {
       <div className="authenticated-site min-h-screen">
         <AuthenticatedPageHeader activePage="admin" eyebrow="Internal operations" title="Platform administration" />
         <div className="mx-auto max-w-[1200px] px-5 py-10 sm:px-6 md:py-12">
-        <div className="authenticated-intro mb-10">
-          <h2>Monitor the system without the visual noise.</h2>
-          <p>Review product activity, users, market context, and response guidance from one operational workspace.</p>
-        </div>
-
         {/* Tab Navigation */}
         <div className="mb-8 grid grid-cols-2 gap-1 rounded-xl border border-[#102319]/10 bg-[#e9eee5] p-1 sm:flex sm:overflow-x-auto">
           {SHOW_MARKETING_AND_CALCULATOR_TABS && (
