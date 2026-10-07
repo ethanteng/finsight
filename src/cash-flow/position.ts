@@ -34,11 +34,17 @@ export interface CashPositionItem {
   label: string;
   kind:
     | 'income' | 'bill' | 'transfer_in' | 'transfer_out' | 'card_payment'
-    | 'planned_income' | 'planned_expense' | 'planned_transfer_in' | 'planned_transfer_out';
-  /** Signed: positive into the accounts, negative out of them. */
+    | 'planned_income' | 'planned_expense' | 'planned_transfer' | 'planned_transfer_in' | 'planned_transfer_out';
+  /**
+   * Signed: positive into the accounts, negative out of them. Zero for a
+   * planned transfer between two accounts the position covers, which moves
+   * money without changing what they hold together.
+   */
   amount: number;
   /** Cash at the end of the item's day, everything else that day included. */
   balanceAfter: number;
+  /** For a planned transfer: the accounts it moves money between, as the position places them, and how much. */
+  transfer?: { fromAccountId: string | null; toAccountId: string | null; amount: number };
 }
 
 export type CashPosition =
@@ -176,9 +182,19 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
       if (place(event.accountId) === place(event.toAccountId)) continue;
       const leaves = counts(event.accountId);
       const arrives = counts(event.toAccountId);
+      const transfer = { fromAccountId: place(event.accountId), toAccountId: place(event.toAccountId), amount: event.amount };
       for (const date of expandPlannedEvent(event, start, model.forecastEndLimit)) {
-        if (leaves) outOf(date, event.amount, { label: event.label, kind: 'planned_transfer_out' });
-        if (arrives) into(date, event.amount, { label: event.label, kind: 'planned_transfer_in' });
+        if (leaves && arrives) {
+          // Both sides are in view: one item, since the two legs would list
+          // the same move twice with the same balance after each.
+          outOf(date, event.amount);
+          into(date, event.amount);
+          if (inWindow(date)) items.push({ date, amount: 0, label: event.label, kind: 'planned_transfer', transfer });
+        } else if (leaves) {
+          outOf(date, event.amount, { label: event.label, kind: 'planned_transfer_out', transfer });
+        } else if (arrives) {
+          into(date, event.amount, { label: event.label, kind: 'planned_transfer_in', transfer });
+        }
       }
       continue;
     }

@@ -208,6 +208,23 @@ describe('buildCashFlowModel', () => {
 });
 
 describe('buildCashFlowHighlights', () => {
+  it('names the plans that fall in each window’s forecast, even when the forecast starts before the window', () => {
+    // Transactions only reach Sep 20, so the forecast starts before this month does.
+    const once: PlannedCashFlowEvent = { ...bonus, id: 'once', startDate: '2026-09-25' };
+    const monthly: PlannedCashFlowEvent = { ...bonus, id: 'monthly', startDate: '2026-09-25', recurrence: 'monthly' };
+    const ended: PlannedCashFlowEvent = { ...monthly, id: 'ended', endDate: '2026-09-30' };
+    const stale = model({
+      transactions: householdTransactions('2026-06-03', '2026-09-20'),
+      dataThrough: '2026-09-20',
+      today: '2026-10-07',
+      plannedEvents: [once, monthly, ended],
+    });
+    expect(stale.forecastStart < '2026-10-01').toBe(true);
+    const highlights = buildCashFlowHighlights(stale);
+    expect(highlight(highlights, 'this_month').plannedEventIds).toEqual(['monthly']);
+    expect(highlight(highlights, 'next_12_months').plannedEventIds).toEqual(['once', 'monthly', 'ended']);
+  });
+
   it('splits the current month into what happened and what is expected', () => {
     // Snapshot through Oct 14: rent and the Oct 9 paycheck have posted.
     const midMonth = model({

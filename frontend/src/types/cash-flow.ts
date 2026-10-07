@@ -57,6 +57,8 @@ export interface CashFlowHighlight {
   remaining: ForecastTotals | null;
   projected: CashFlowTotals | null;
   planned: CashFlowTotals;
+  /** The plans with an occurrence inside the forecast part, by id. Absent from a report built before it existed. */
+  plannedEventIds?: string[];
   projectedWithoutPlanned: CashFlowTotals | null;
 }
 
@@ -328,11 +330,17 @@ export interface CashPositionItem {
   label: string;
   kind:
     | 'income' | 'bill' | 'transfer_in' | 'transfer_out' | 'card_payment'
-    | 'planned_income' | 'planned_expense' | 'planned_transfer_in' | 'planned_transfer_out';
-  /** Signed: positive into the accounts, negative out of them. */
+    | 'planned_income' | 'planned_expense' | 'planned_transfer' | 'planned_transfer_in' | 'planned_transfer_out';
+  /**
+   * Signed: positive into the accounts, negative out of them. Zero for a
+   * planned transfer between two accounts in view, which changes neither's
+   * total together.
+   */
   amount: number;
   /** Cash at the end of the item's day, everything else that day included. */
   balanceAfter: number;
+  /** For a planned transfer: the accounts it moves money between, and how much. */
+  transfer?: { fromAccountId: string | null; toAccountId: string | null; amount: number };
 }
 
 export interface CashFlowPositionAccount {

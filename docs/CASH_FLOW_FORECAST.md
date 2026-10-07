@@ -194,11 +194,11 @@ A plan can match the usual pace, and the page says so rather than showing two id
 
 Each highlight card on the page breaks its headline into one sum. The parts are:
 
-- **So far:** what actually happened, shown only when the headline includes it.
+- **Net so far:** what actually happened, income less spending, shown only when the headline includes it.
 - **Usual income** and **Usual spending:** the forecast before any plans, one line for each side. Planned income and spending stay out of these, in the planned line.
-- **Planned events:** what the plans change.
+- **Net from planned events:** what the plans change. That can be far smaller than the plans themselves: moving money between the user's own accounts is neither income nor spending, so a transfer adds nothing and a card payoff adds only the interest it saves. A line under it says what the net is made of (planned income, planned spending, card interest saved or added), and that transfers or card payments falling in the window count as $0. Each highlight lists the plans with an occurrence in its forecast part (`plannedEventIds`), since the forecast can start before the window when transactions are a few days behind. The row shows whenever the plans change the net or one of them falls in the window, so a transfer never seems to have gone missing.
 
-A total row repeats the headline. Each part is rounded to the dollar, and one part absorbs the rounding remainder, so the shown parts always add up to the shown headline. An estimate takes it before a fact: the larger usual part, then the planned line, then "so far". A part that shows $0 takes it only when every part does, so an empty side never shows a stray dollar. A window that history only partly reaches has no "so far" part, because its headline is only what is still expected. The card states what was observed since history began in its note instead.
+A total row repeats the headline. Each part is rounded to the dollar, and one part absorbs the rounding remainder, so the shown parts always add up to the shown headline. An estimate takes it before a fact: the larger usual part, then the planned line, then "net so far". A part that shows $0 takes it only when every part does, so an empty side never shows a stray dollar. A window that history only partly reaches has no "net so far" part, because its headline is only what is still expected. The card states what was observed since history began in its note instead.
 
 ## Cash position
 
@@ -252,7 +252,7 @@ The report gives balances at each period's end, the lowest point, and fixed mile
 
 Each of these is kept where the money moves, so the cash at a period's end is always the cash before, plus money in, less money out and card payments.
 
-The report also lists every cash account (`accounts`, with the primary one marked) and the ones the figures cover (`accountIds`, all unless the request chose some). It lists what is coming up (`upcoming`): the dated amounts in the month from the forecast start, with the balance at the end of each day. Paychecks, bills, transfers, card payments and planned events are listed; everyday spending runs as a daily rate and is not. `spreadPerDay` gives that rate for the accounts covered (`in` and `out`: typical income and spending, and transfers that run as a rate), so the list can be added up.
+The report also lists every cash account (`accounts`, with the primary one marked) and the ones the figures cover (`accountIds`, all unless the request chose some). It lists what is coming up (`upcoming`): the dated amounts in the month from the forecast start, with the balance at the end of each day. Paychecks, bills, transfers, card payments and planned events are listed; everyday spending runs as a daily rate and is not. A planned transfer names the accounts it moves between. With both in view it is one item that moves money without changing their total, so it has no sign and its balance after is that total; with one in view it is money in or out of that account, named by the account on the other side. `spreadPerDay` gives that rate for the accounts covered (`in` and `out`: typical income and spending, and transfers that run as a rate), so the list can be added up.
 
 On the page, Cash position has an account picker when there is more than one cash account. "All accounts" is the whole. Choosing an account shows just that one, and further choices add to it. The browser remembers the choice.
 

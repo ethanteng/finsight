@@ -71,8 +71,8 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
     totals: { coverage: 'full', actual: totals(7500, 6500), forecast: totals(7500, 4815.49), total: totals(15000, 11315.49) },
     highlights: [
       { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: { ...totals(2500, 1000), components }, projected: totals(5000, 3400), planned: totals(0, 0), projectedWithoutPlanned: totals(5000, 3400) },
-      { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: { ...totals(22500, 9000), components }, projected: totals(25000, 11400), planned: totals(10000, 0), projectedWithoutPlanned: totals(15000, 11400) },
-      { key: 'next_12_months', start: '2026-10-15', endExclusive: '2027-10-15', actualToDate: null, actualCoverage: null, remaining: { ...totals(65000, 46000), components }, projected: totals(65000, 46000), planned: totals(10000, 0), projectedWithoutPlanned: totals(55000, 46000) },
+      { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: { ...totals(22500, 9000), components: { ...components, plannedIncome: 10000 } }, projected: totals(25000, 11400), planned: totals(10000, 0), projectedWithoutPlanned: totals(15000, 11400) },
+      { key: 'next_12_months', start: '2026-10-15', endExclusive: '2027-10-15', actualToDate: null, actualCoverage: null, remaining: { ...totals(65000, 46000), components: { ...components, plannedIncome: 10000 } }, projected: totals(65000, 46000), planned: totals(10000, 0), projectedWithoutPlanned: totals(55000, 46000) },
     ],
     // Rounded on its own, each category would add up to $3,114 and 99%.
     usualSpending: {
@@ -197,7 +197,7 @@ describe('CashFlowPageClient', () => {
     const card = thisMonth.closest('article')!;
     // One breakdown that adds up to the headline: +$100 so far, +$2,500 − $1,000 forecast.
     expect(breakdown(card)).toEqual([
-      ['So far', 'Actual · Oct 1–14', '+$100'],
+      ['Net so far', 'Actual · Oct 1–14', '+$100'],
       ['Usual income', 'Forecast · Oct 15–31', '+$2,500'],
       ['Usual spending', 'Forecast · Oct 15–31', '−$1,000'],
       ['Expected to save', null, '+$1,600'],
@@ -205,10 +205,10 @@ describe('CashFlowPageClient', () => {
 
     const quarter = screen.getByRole('heading', { name: 'This quarter' }).closest('article')!;
     expect(breakdown(quarter)).toEqual([
-      ['So far', 'Actual · Oct 1–14', '+$100'],
+      ['Net so far', 'Actual · Oct 1–14', '+$100'],
       ['Usual income', 'Forecast · Oct 15 – Dec 31', '+$12,500'],
       ['Usual spending', 'Forecast · Oct 15 – Dec 31', '−$9,000'],
-      ['Planned events', null, '+$10,000'],
+      ['Net from planned events', 'Planned income', '+$10,000'],
       ['Expected to save', null, '+$13,600'],
     ]);
 
@@ -217,7 +217,7 @@ describe('CashFlowPageClient', () => {
     expect(breakdown(year)).toEqual([
       ['Usual income', null, '+$55,000'],
       ['Usual spending', null, '−$46,000'],
-      ['Planned events', null, '+$10,000'],
+      ['Net from planned events', 'Planned income', '+$10,000'],
       ['Expected to save', null, '+$19,000'],
     ]);
 
@@ -240,7 +240,7 @@ describe('CashFlowPageClient', () => {
           // $1,000.60 + $3,000.60 − $2,501 rounds to $1,001 + $3,001 − $2,501, a dollar over the $1,500 headline.
           { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(1000.6, 0), actualCoverage: 'full', remaining: { ...totals(3000.6, 2501), components }, projected: totals(4001.2, 2501), planned: totals(0, 0), projectedWithoutPlanned: totals(4001.2, 2501) },
           // History starts inside the quarter: the headline is only what is still expected.
-          { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(500, 0), actualCoverage: 'partial', remaining: { ...totals(9000, 5000), components }, projected: null, planned: totals(0, 2000), projectedWithoutPlanned: null },
+          { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(500, 0), actualCoverage: 'partial', remaining: { ...totals(9000, 5000), components: { ...components, plannedSpending: 2000 } }, projected: null, planned: totals(0, 2000), projectedWithoutPlanned: null },
           { key: 'next_12_months', start: '2026-10-15', endExclusive: '2027-10-15', actualToDate: null, actualCoverage: null, remaining: { ...totals(65000, 46000), components }, projected: totals(65000, 46000), planned: totals(0, 0), projectedWithoutPlanned: totals(65000, 46000) },
         ],
       }),
@@ -249,7 +249,7 @@ describe('CashFlowPageClient', () => {
 
     const month = (await screen.findByRole('heading', { name: 'This month' })).closest('article')!;
     expect(breakdown(month)).toEqual([
-      ['So far', 'Actual · Oct 1–14', '+$1,001'],
+      ['Net so far', 'Actual · Oct 1–14', '+$1,001'],
       // The larger forecast part takes the remainder.
       ['Usual income', 'Forecast · Oct 15–31', '+$3,000'],
       ['Usual spending', 'Forecast · Oct 15–31', '−$2,501'],
@@ -261,7 +261,7 @@ describe('CashFlowPageClient', () => {
       // Planned spending is its own line, not part of usual spending.
       ['Usual income', 'Forecast · Oct 15 – Dec 31', '+$9,000'],
       ['Usual spending', 'Forecast · Oct 15 – Dec 31', '−$3,000'],
-      ['Planned events', null, '−$2,000'],
+      ['Net from planned events', 'Planned spending', '−$2,000'],
       ['Expected for the rest of it', null, '+$4,000'],
     ]);
     expect(within(quarter).getByText(/full period can’t be added up yet\. Since then: \+\$500\./)).toBeInTheDocument();
@@ -275,6 +275,58 @@ describe('CashFlowPageClient', () => {
     ]);
   });
 
+  it('says what the planned net is made of when moving money changes little or nothing', async () => {
+    // Paying off a card saves $5 of interest this month; the $3,000 transfer starts in November.
+    const payoff = {
+      id: 'payoff', label: 'Pay off Rewards Card', kind: 'card_payment', amount: 0, startDate: '2026-10-26', recurrence: 'once',
+      endDate: null, accountId: 'card', paymentMode: 'full', nextDate: '2026-10-26', occurrencesInRange: 1,
+    } as const;
+    const move = {
+      id: 'move', label: 'Savings', kind: 'transfer', amount: 3000, startDate: '2026-11-01', recurrence: 'monthly', endDate: null,
+      accountId: 'checking', toAccountId: 'savings', paymentMode: null, nextDate: '2026-11-01', occurrencesInRange: 3,
+    } as const;
+    const withPlans = (planned: ReturnType<typeof totals>) => ({ ...totals(2500, 1000 + planned.spending), components });
+    mockFetch(url => (url.includes('/api/cash-flow?') ? {
+      status: 200,
+      body: report({
+        plannedEvents: [payoff, move],
+        highlights: [
+          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: withPlans(totals(0, -5)), projected: totals(5000, 3395), planned: totals(0, -5), plannedEventIds: ['payoff'], projectedWithoutPlanned: totals(5000, 3400) },
+          { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: withPlans(totals(0, -13)), projected: totals(5000, 3387), planned: totals(0, -13), plannedEventIds: ['payoff', 'move'], projectedWithoutPlanned: totals(5000, 3400) },
+          { key: 'next_12_months', start: '2026-10-15', endExclusive: '2027-10-15', actualToDate: null, actualCoverage: null, remaining: withPlans(totals(0, -22)), projected: totals(2500, 978), planned: totals(0, -22), plannedEventIds: ['payoff', 'move'], projectedWithoutPlanned: totals(2500, 1000) },
+        ],
+      }),
+    } : undefined));
+    const { unmount } = render(<CashFlowPageClient />);
+
+    const month = (await screen.findByRole('heading', { name: 'This month' })).closest('article')!;
+    expect(breakdown(month)).toContainEqual(['Net from planned events', 'Card interest saved · card payments count as $0', '+$5']);
+    const quarter = screen.getByRole('heading', { name: 'This quarter' }).closest('article')!;
+    expect(breakdown(quarter)).toContainEqual(
+      ['Net from planned events', 'Card interest saved · transfers and card payments count as $0', '+$13']
+    );
+    unmount();
+
+    // A transfer alone changes nothing, and the row says why rather than vanishing; this
+    // month it hasn't started, so there is nothing to say. Which plans fall in a window
+    // is the server's call: the forecast can start before the window when data is stale.
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ plannedEvents: [move], highlights: [
+      { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: withPlans(totals(0, 0)), projected: totals(5000, 3400), planned: totals(0, 0), plannedEventIds: [], projectedWithoutPlanned: totals(5000, 3400) },
+      { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: withPlans(totals(0, 0)), projected: totals(5000, 3400), planned: totals(0, 0), plannedEventIds: ['move'], projectedWithoutPlanned: totals(5000, 3400) },
+    ] }) } : undefined));
+    render(<CashFlowPageClient />);
+    const transferMonth = (await screen.findByRole('heading', { name: 'This month' })).closest('article')!;
+    expect(breakdown(transferMonth).map(line => line[0])).not.toContain('Net from planned events');
+    const transferQuarter = screen.getByRole('heading', { name: 'This quarter' }).closest('article')!;
+    expect(breakdown(transferQuarter)).toEqual([
+      ['Net so far', 'Actual · Oct 1–14', '+$100'],
+      ['Usual income', 'Forecast · Oct 15 – Dec 31', '+$2,500'],
+      ['Usual spending', 'Forecast · Oct 15 – Dec 31', '−$1,000'],
+      ['Net from planned events', 'Transfers count as $0', '$0'],
+      ['Expected to save', null, '+$1,600'],
+    ]);
+  });
+
   it('keeps the rounding remainder off a usual line that is really $0', async () => {
     mockFetch(url => (url.includes('/api/cash-flow?') ? {
       status: 200,
@@ -282,7 +334,7 @@ describe('CashFlowPageClient', () => {
         highlights: [
           // Nothing usual is expected, only a planned $1,000.60. With $1,000.60 so far,
           // the parts round to $1,001 + $1,001, a dollar over the $2,001 headline.
-          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(1000.6, 0), actualCoverage: 'full', remaining: { ...totals(1000.6, 0), components }, projected: totals(2001.2, 0), planned: totals(1000.6, 0), projectedWithoutPlanned: totals(1000.6, 0) },
+          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(1000.6, 0), actualCoverage: 'full', remaining: { ...totals(1000.6, 0), components: { ...components, plannedIncome: 1000.6 } }, projected: totals(2001.2, 0), planned: totals(1000.6, 0), projectedWithoutPlanned: totals(1000.6, 0) },
         ],
       }),
     } : undefined));
@@ -290,11 +342,11 @@ describe('CashFlowPageClient', () => {
 
     const month = (await screen.findByRole('heading', { name: 'This month' })).closest('article')!;
     expect(breakdown(month)).toEqual([
-      ['So far', 'Actual · Oct 1–14', '+$1,001'],
+      ['Net so far', 'Actual · Oct 1–14', '+$1,001'],
       ['Usual income', 'Forecast · Oct 15–31', '$0'],
       ['Usual spending', 'Forecast · Oct 15–31', '$0'],
       // The plans take it before what was observed.
-      ['Planned events', null, '+$1,000'],
+      ['Net from planned events', 'Planned income', '+$1,000'],
       ['Expected to save', null, '+$2,001'],
     ]);
   });
@@ -986,6 +1038,38 @@ describe('CashFlowPageClient', () => {
       fireEvent.click(within(list).getByRole('button', { name: 'Show all 10' }));
       expect(within(list).getByText('Bill 9')).toBeInTheDocument();
       expect(within(list).getByText('−$900 after')).toBeInTheDocument();
+    });
+
+    it('names where a planned transfer goes, once when both accounts are in view', async () => {
+      const transfer = { fromAccountId: 'checking', toAccountId: 'savings', amount: 3000 };
+      const both_ = both({ upcoming: [
+        { date: '2026-11-01', label: 'Savings', kind: 'planned_transfer', amount: 0, balanceAfter: 15200, transfer },
+      ] });
+      const checking = checkingOnly({ upcoming: [
+        { date: '2026-11-01', label: 'Savings', kind: 'planned_transfer_out', amount: -3000, balanceAfter: 2200, transfer },
+      ] });
+      mockFetch(url => {
+        if (!url.includes('/api/cash-flow?')) return undefined;
+        return { status: 200, body: url.includes('accounts=checking') ? checking : both_ };
+      });
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'This month' });
+      fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+
+      // All accounts: the move leaves their total as it was, so it has no sign.
+      let list = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
+      expect(within(list).getAllByText('Savings')).toHaveLength(1);
+      expect(within(list).getByText('Nov 1, 2026 · Planned transfer from Everyday Checking ••1234 to High Yield Savings ••5678'))
+        .toBeInTheDocument();
+      expect(within(list).getByText('$3,000')).toBeInTheDocument();
+      expect(within(list).getByText('$15,200 after')).toBeInTheDocument();
+
+      // Checking alone: money leaving it, with its own balance after.
+      fireEvent.click(screen.getByRole('button', { name: /Everyday Checking/ }));
+      await waitFor(() => expect(screen.getByText('Nov 1, 2026 · Planned transfer to High Yield Savings ••5678')).toBeInTheDocument());
+      list = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
+      expect(within(list).getByText('−$3,000')).toBeInTheDocument();
+      expect(within(list).getByText('$2,200 after')).toBeInTheDocument();
     });
 
     it.each([

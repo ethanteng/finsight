@@ -160,12 +160,20 @@ describe('the cash position, account by account', () => {
     const without = expectSumsToWhole(model());
     const withTransfer = expectSumsToWhole(model({ plannedEvents: [transfer] }));
 
+    const route = { fromAccountId: 'checking', toAccountId: 'savings', amount: 750 };
     expect(withTransfer.checking.itemsBetween('2026-10-15', '2026-10-16')).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'Move to savings', kind: 'planned_transfer_out', amount: -750 }),
+      expect.objectContaining({ label: 'Move to savings', kind: 'planned_transfer_out', amount: -750, transfer: route }),
     ]));
     expect(withTransfer.savings.itemsBetween('2026-10-15', '2026-10-16')).toEqual([
-      expect.objectContaining({ label: 'Move to savings', kind: 'planned_transfer_in', amount: 750 }),
+      expect.objectContaining({ label: 'Move to savings', kind: 'planned_transfer_in', amount: 750, transfer: route }),
     ]);
+    // With both accounts in view it is one item that leaves their total as it was.
+    const together = withTransfer.whole.itemsBetween('2026-10-15', '2026-10-16').filter(item => item.label === 'Move to savings');
+    expect(together).toEqual([expect.objectContaining({ kind: 'planned_transfer', amount: 0, transfer: route })]);
+    expect(together[0].balanceAfter).toBe(withTransfer.whole.cashBefore('2026-10-16'));
+    const both = available(buildCashPosition(model({ plannedEvents: [transfer] }), ['checking', 'savings']));
+    expect(both.itemsBetween('2026-10-15', '2026-10-16').filter(item => item.label === 'Move to savings'))
+      .toEqual([expect.objectContaining({ kind: 'planned_transfer', amount: 0 })]);
     // Three transfers by the start of January: checking holds $2,250 less, savings $2,250 more.
     expect(withTransfer.checking.cashBefore('2027-01-01')).toBeCloseTo(without.checking.cashBefore('2027-01-01') - 2250, 2);
     expect(withTransfer.savings.cashBefore('2027-01-01')).toBeCloseTo(without.savings.cashBefore('2027-01-01') + 2250, 2);

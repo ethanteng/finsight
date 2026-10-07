@@ -65,9 +65,22 @@ const KIND_WORDS: Record<CashPositionItem['kind'], string> = {
   card_payment: 'Card payment',
   planned_income: 'Planned income',
   planned_expense: 'Planned expense',
-  planned_transfer_in: 'Planned transfer in',
-  planned_transfer_out: 'Planned transfer out',
+  planned_transfer: 'Planned transfer',
+  planned_transfer_in: 'Planned transfer',
+  planned_transfer_out: 'Planned transfer',
 };
+
+/**
+ * Where a planned transfer goes, from the accounts in view: "from Checking to
+ * Savings" when both are, otherwise just the account on the other side.
+ */
+function transferRoute(item: CashPositionItem, names: Map<string, string>): string {
+  if (!item.transfer) return '';
+  const name = (id: string | null) => (id && names.get(id)) || 'another account';
+  if (item.kind === 'planned_transfer_out') return ` to ${name(item.transfer.toAccountId)}`;
+  if (item.kind === 'planned_transfer_in') return ` from ${name(item.transfer.fromAccountId)}`;
+  return ` from ${name(item.transfer.fromAccountId)} to ${name(item.transfer.toAccountId)}`;
+}
 
 /** How many coming-up items show before "Show all". */
 const UPCOMING_SHOWN = 8;
@@ -96,6 +109,7 @@ export function UpcomingItems({ report }: { report: Pick<CashFlowReport, 'positi
   if (items.length === 0) return null;
   const shown = expanded ? items : items.slice(0, UPCOMING_SHOWN);
   const note = spreadNote(report.position.spreadPerDay);
+  const names = new Map(report.position.accounts.map(account => [account.id, cashAccountName(account)]));
   return (
     <div className="mt-5 rounded-2xl border border-[#102319]/10 bg-white/50 p-4">
       <h4 className="text-sm font-bold text-[#102319]">Coming up in the next month</h4>
@@ -108,10 +122,15 @@ export function UpcomingItems({ report }: { report: Pick<CashFlowReport, 'positi
           <li key={`${item.date}-${item.kind}-${item.label}-${index}`} className="flex items-center justify-between gap-3 py-2.5 text-sm">
             <div className="min-w-0">
               <p className="truncate font-semibold text-[#102319]">{item.label}</p>
-              <p className="text-xs text-[#66736b]">{formatCalendarDate(item.date)} · {KIND_WORDS[item.kind]}</p>
+              <p className="text-xs text-[#66736b]">
+                {formatCalendarDate(item.date)} · {KIND_WORDS[item.kind]}{transferRoute(item, names)}
+              </p>
             </div>
             <div className="shrink-0 text-right">
-              <p className={`font-bold tabular-nums ${item.amount < 0 ? 'text-[#9b4137]' : 'text-[#28704d]'}`}>{formatSignedMoney(item.amount)}</p>
+              {/* A move between two accounts in view changes neither their total nor the sign. */}
+              {item.kind === 'planned_transfer' && item.transfer
+                ? <p className="font-bold tabular-nums text-[#102319]">{formatMoney(item.transfer.amount)}</p>
+                : <p className={`font-bold tabular-nums ${item.amount < 0 ? 'text-[#9b4137]' : 'text-[#28704d]'}`}>{formatSignedMoney(item.amount)}</p>}
               <p className={`text-xs tabular-nums ${item.balanceAfter < 0 ? 'font-bold text-[#9b4137]' : 'text-[#66736b]'}`}>
                 {formatMoney(item.balanceAfter)} after
               </p>

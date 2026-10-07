@@ -1,6 +1,11 @@
 "use client";
 
-import type { CashFlowHighlight, CashFlowHighlightKey, CashFlowReport } from '../../types/cash-flow';
+import type {
+  CashFlowHighlight,
+  CashFlowHighlightKey,
+  CashFlowPlannedEventSummary,
+  CashFlowReport,
+} from '../../types/cash-flow';
 import {
   HIGHLIGHT_LABELS,
   formatCalendarDate,
@@ -26,13 +31,47 @@ function part(label: string, exact: number, detail?: string): BreakdownPart {
 }
 
 /**
- * The parts that add up to the card's headline: what happened so far (only
- * when the headline includes it), the forecast's income and spending before
- * any plans, and what the plans change. Each part is rounded on its own and one
- * part takes the rounding remainder, so the figures shown always sum to the
+ * What the plans' net is made of, since it can be far smaller than the plans
+ * themselves: "Card interest saved · card payments count as $0". Moving money
+ * between the user's own accounts is neither income nor spending, so a $3,000
+ * transfer adds nothing and a card payoff adds only the interest it saves.
+ */
+function plannedDetail(highlight: CashFlowHighlight, events: readonly CashFlowPlannedEventSummary[]): string | undefined {
+  const components = highlight.remaining?.components;
+  const parts: string[] = [];
+  if (components) {
+    // The plans' spending is what they plan to spend plus the card interest they change.
+    const interest = highlight.planned.spending - components.plannedSpending;
+    if (Math.round(components.plannedIncome) !== 0) parts.push('planned income');
+    if (Math.round(components.plannedSpending) !== 0) parts.push('planned spending');
+    if (Math.round(interest) !== 0) parts.push(interest < 0 ? 'card interest saved' : 'added card interest');
+  }
+  // The server says which plans fall in the window: the forecast can start
+  // before the window does, when transactions are a few days behind.
+  const ids = new Set(highlight.plannedEventIds ?? []);
+  const inWindow = (kind: CashFlowPlannedEventSummary['kind']) => events.some(event => event.kind === kind && ids.has(event.id));
+  const moves = [inWindow('transfer') && 'transfers', inWindow('card_payment') && 'card payments'].filter(Boolean);
+  const pieces = [
+    parts.length > 0 && parts.join(', '),
+    moves.length > 0 && `${moves.join(' and ')} count as $0`,
+  ].filter((piece): piece is string => Boolean(piece));
+  if (pieces.length === 0) return undefined;
+  const detail = pieces.join(' · ');
+  return detail.charAt(0).toUpperCase() + detail.slice(1);
+}
+
+/**
+ * The parts that add up to the card's headline: the net so far (only when the
+ * headline includes it), the forecast's income and spending before any plans,
+ * and the net the plans change. Each part is rounded on its own and one part
+ * takes the rounding remainder, so the figures shown always sum to the
  * headline shown.
  */
-function breakdownLines(highlight: CashFlowHighlight, forecastStart: string): BreakdownLine[] {
+function breakdownLines(
+  highlight: CashFlowHighlight,
+  forecastStart: string,
+  events: readonly CashFlowPlannedEventSummary[]
+): BreakdownLine[] {
   const headline = highlight.projected ?? highlight.remaining;
   if (!headline) return [];
   const lastDay = lastIncludedDay(highlight.endExclusive);
@@ -42,7 +81,7 @@ function breakdownLines(highlight: CashFlowHighlight, forecastStart: string): Br
   let actual: BreakdownPart | null = null;
   if (highlight.projected && highlight.actualToDate) {
     const actualLast = forecastInWindow ? lastIncludedDay(forecastFrom) : lastDay;
-    actual = part('So far', highlight.actualToDate.net, `Actual · ${formatShortRange(highlight.start, actualLast)}`);
+    actual = part('Net so far', highlight.actualToDate.net, `Actual · ${formatShortRange(highlight.start, actualLast)}`);
   }
   let usual: BreakdownPart[] = [];
   if (forecastInWindow && highlight.remaining) {
@@ -52,7 +91,12 @@ function breakdownLines(highlight: CashFlowHighlight, forecastStart: string): Br
       part('Usual spending', -(highlight.remaining.spending - highlight.planned.spending), detail),
     ];
   }
-  const planned = Math.round(highlight.planned.net) !== 0 ? part('Planned events', highlight.planned.net) : null;
+  // Shown when the plans change the net, or when one falls in the window and
+  // changes nothing, so a transfer doesn't seem to have gone missing.
+  const plannedNote = forecastInWindow ? plannedDetail(highlight, events) : undefined;
+  const planned = Math.round(highlight.planned.net) !== 0 || plannedNote
+    ? part('Net from planned events', highlight.planned.net, plannedNote)
+    : null;
   const parts = [actual, ...usual, planned].filter((p): p is BreakdownPart => p !== null);
 
   // An estimate takes the remainder before a fact: the larger usual part, then
@@ -84,17 +128,19 @@ function HighlightCard({
   highlight,
   forecastStart,
   coverageStart,
+  events,
 }: {
   highlight: CashFlowHighlight;
   forecastStart: string;
   coverageStart: string | null;
+  events: readonly CashFlowPlannedEventSummary[];
 }) {
   const headline = highlight.projected ?? highlight.remaining;
   const headlineLabel = highlight.projected
     ? (highlight.projected.net < 0 ? 'Expected shortfall' : 'Expected to save')
     : 'Expected for the rest of it';
   const headlineColor = headline && headline.net < 0 ? 'text-[#9b4137]' : 'text-[#102319]';
-  const lines = breakdownLines(highlight, forecastStart);
+  const lines = breakdownLines(highlight, forecastStart, events);
 
   return (
     <article className="rounded-[1.6rem] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-sm sm:p-6">
@@ -147,6 +193,7 @@ export default function CashFlowHighlights({ report }: { report: CashFlowReport 
           highlight={highlight}
           forecastStart={report.forecastStart}
           coverageStart={report.coverageStart}
+          events={report.plannedEvents}
         />
       ))}
     </section>
