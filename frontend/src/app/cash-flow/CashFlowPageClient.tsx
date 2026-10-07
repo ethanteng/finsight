@@ -263,7 +263,6 @@ export default function CashFlowPageClient() {
             )}
 
             {report.forecast.available && <CashFlowHighlights report={report} />}
-            <UsualSpendingBreakdown report={report} />
 
             <section className="rounded-[1.6rem] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-sm sm:p-7" aria-labelledby="cash-flow-chart-heading">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -441,6 +440,8 @@ export default function CashFlowPageClient() {
                 </details>
               )}
             </section>
+
+            <UsualSpendingBreakdown report={report} />
 
             <CreditCardsPanel
               cards={report.cards}
