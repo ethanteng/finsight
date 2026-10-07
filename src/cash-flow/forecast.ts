@@ -1012,23 +1012,31 @@ export interface ExpectedMonthly {
   spendingSource: FlowSource;
 }
 
+/** A month of the regular items the forecast projects on one side, each at its monthly rate. */
+export function recurringMonthly(model: CashFlowModel, flow: CashFlowDirection): number {
+  let monthly = 0;
+  for (const stream of model.streams) {
+    if (stream.flow === flow && stream.status === 'active') monthly += streamMonthlyAmount(stream);
+  }
+  return monthly;
+}
+
+/** A month's share of the card interest the usual pace projects over the next 12 months. */
+export function usualCardInterestMonthly(model: CashFlowModel): number {
+  return cardInterestTotal(model, model.forecastStart, addMonths(model.forecastStart, 12), false) / 12;
+}
+
 export function expectedMonthly(model: CashFlowModel): ExpectedMonthly {
   const { typical } = model;
-  const learned = (flow: CashFlowDirection, daily: number): number | null => {
-    if (!model.forecast.available) return null;
-    let monthly = daily * DAYS_PER_MONTH;
-    for (const stream of model.streams) {
-      if (stream.flow === flow && stream.status === 'active') monthly += streamMonthlyAmount(stream);
-    }
-    return monthly;
-  };
+  // What repeats on a schedule, plus everything else at the typical rate.
+  const learned = (flow: CashFlowDirection, daily: number): number | null => (model.forecast.available
+    ? daily * DAYS_PER_MONTH + recurringMonthly(model, flow)
+    : null);
   const income = typical.monthlyIncomeOverride ?? learned('income', typical.dailyIncome);
   let spending = typical.monthlyExpenseOverride;
   if (spending === null) {
     const learnedSpending = learned('spending', typical.dailySpending);
-    spending = learnedSpending === null
-      ? null
-      : learnedSpending + cardInterestTotal(model, model.forecastStart, addMonths(model.forecastStart, 12), false) / 12;
+    spending = learnedSpending === null ? null : learnedSpending + usualCardInterestMonthly(model);
   }
   return {
     income: income === null ? null : roundCents(income),
@@ -1476,6 +1484,15 @@ export interface CashFlowReport {
     typicalBasisDays: number;
     typicalMonthlyIncome: number;
     typicalMonthlySpending: number;
+    /**
+     * What repeats on a schedule: a month of each regular item at its monthly
+     * rate. With the typical rate and, for spending, the card interest, it is
+     * the expected month.
+     */
+    recurringMonthlyIncome: number;
+    recurringMonthlySpending: number;
+    /** A month's share of the card interest the usual pace projects; part of the expected month's spending. */
+    cardInterestMonthly: number;
     incomeSource: FlowSource;
     spendingSource: FlowSource;
     monthlyIncomeOverride: number | null;
@@ -1944,6 +1961,9 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
       typicalBasisDays: model.typical.basisDays,
       typicalMonthlyIncome: roundCents(model.typical.dailyIncome * DAYS_PER_MONTH),
       typicalMonthlySpending: roundCents(model.typical.dailySpending * DAYS_PER_MONTH),
+      recurringMonthlyIncome: roundCents(recurringMonthly(model, 'income')),
+      recurringMonthlySpending: roundCents(recurringMonthly(model, 'spending')),
+      cardInterestMonthly: roundCents(usualCardInterestMonthly(model)),
       incomeSource: model.typical.incomeSource,
       spendingSource: model.typical.spendingSource,
       monthlyIncomeOverride: model.typical.monthlyIncomeOverride,

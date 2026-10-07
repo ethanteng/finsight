@@ -112,7 +112,7 @@ Changes affect only the forecast. Past months stay as they happened, because tho
 
 The columns:
 
-- **Counted in the forecast:** money in and money out, each with its regular items and the payees behind its typical rate (`typicalPayees`, largest first, up to 25 a direction), then recurring transfers. A side the user overrode on Finances shows the override instead, since nothing learned on that side is used.
+- **Counted in the forecast:** money in and money out, then recurring transfers. Each side is the usual month in two halves with their monthly totals: **Repeating** (the regular items, each projected on its own dates; `baseline.recurringMonthlyIncome` / `recurringMonthlySpending`) and **Everything else** (the typical rate over the basis, with the payees behind it, `typicalPayees`, largest first, up to 25 a direction). Spending adds a **Card interest** line (`cardInterestMonthly`) when the usual pace projects any. A bar shows the split, and the halves are rounded together so they add up to the side's total, which is the expected month (`expectedMonthly`). A side the user overrode on Finances shows the override instead, since nothing learned on that side is used.
   - With more than one account, each regular item and recurring transfer names the account it is expected in, or the card a charge is made on (`accountId` in the report), so the user can check where it lands.
 - **Left out:** one-offs, stopped items, and what the user left out. The column is always shown, empty groups included, so the user can see that nothing is left out and what would be. The one-off group states the actual thresholds the engine applied (`oneOffThresholds`: at least $1,000 and twice a typical week, by direction).
 
@@ -126,7 +126,7 @@ Long lists show eight items. "Show more" adds eight at a time and "Show all" sho
 
 Planned events are stored in `planned_cash_flow_events`, are scoped to the user, and are capped at 100 per user. The cap is enforced under a per-user advisory lock, so simultaneous creates cannot pass it.
 
-Each event is `income`, `expense`, `transfer` or `card_payment`, has a start date, and recurs once, weekly, every two weeks, monthly, quarterly or annually, with an optional end date. Income, expenses and transfers carry a positive amount.
+Each event is `income`, `expense`, `transfer` or `card_payment`, has a start date, and recurs once, weekly, every two weeks, monthly, quarterly, every six months, annually or on a custom interval, with an optional end date. A custom interval is every 1 to 99 days, weeks, months or years (`repeatEvery`, `repeatUnit`); months step from the start date, like the monthly cadence. Card payments stay once or monthly. Income, expenses and transfers carry a positive amount.
 
 Income or an expense may name the cash account it lands in (`accountId`, checked against the user's own checking and savings accounts). One saved without an account lands in the primary account, described under Cash position. The form offers the choice only when there is more than one cash account, so a single-account user never ties an event to an account that may not stay primary.
 

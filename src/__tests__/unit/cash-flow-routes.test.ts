@@ -220,6 +220,8 @@ describe('cash flow routes', () => {
           startDate: new Date('2026-12-15T00:00:00.000Z'),
           recurrence: 'once',
           endDate: null,
+          repeatEvery: null,
+          repeatUnit: null,
           accountId: null,
           toAccountId: null,
           paymentMode: null,
@@ -227,7 +229,7 @@ describe('cash flow routes', () => {
       });
       expect(response.body.event).toEqual({
         id: 'event-1', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
-        accountId: null, toAccountId: null, paymentMode: null,
+        repeatEvery: null, repeatUnit: null, accountId: null, toAccountId: null, paymentMode: null,
       });
     });
 

@@ -63,7 +63,7 @@ describe('expectedMonthly', () => {
     const built = model({
       plannedEvents: [{
         id: 'trip', label: 'Trip', kind: 'expense', amount: 3000, startDate: '2026-12-01',
-        recurrence: 'once', endDate: null, accountId: null, toAccountId: null, paymentMode: null,
+        recurrence: 'once', endDate: null, repeatEvery: null, repeatUnit: null, accountId: null, toAccountId: null, paymentMode: null,
       }],
     });
     const end = addMonths(built.forecastStart, 12);
@@ -119,7 +119,7 @@ describe('expectedMonthly', () => {
     // A payoff plan changes the forecast, not the usual month.
     const payoff: PlannedCashFlowEvent = {
       id: 'payoff', label: 'Pay off the card', kind: 'card_payment', amount: 0, startDate: '2026-10-25',
-      recurrence: 'once', endDate: null, accountId: 'card', toAccountId: null, paymentMode: 'full',
+      recurrence: 'once', endDate: null, repeatEvery: null, repeatUnit: null, accountId: 'card', toAccountId: null, paymentMode: 'full',
     };
     const planned = model({
       transactions: [...history, ...interestCharges(FROM, THROUGH)],
@@ -135,6 +135,23 @@ describe('expectedMonthly', () => {
       overrides: { monthlyExpense: 5000 },
     });
     expect(expectedMonthly(overridden).spending).toBe(5000);
+  });
+
+  it('publishes the usual month in its parts: what repeats, everything else, and card interest', () => {
+    const carrying = model({
+      transactions: [...history, ...interestCharges(FROM, THROUGH)],
+      accounts: accountsWithCardTerms(),
+    });
+    const { baseline } = buildCashFlowReport(carrying, { granularity: 'month', horizonMonths: 6 });
+    const expected = expectedMonthly(carrying);
+    // Rent and the streaming charge repeat; the stopped gym does not.
+    expect(baseline.recurringMonthlySpending).toBeCloseTo(2000 + 15.49, 2);
+    expect(baseline.recurringMonthlyIncome).toBeCloseTo(2500 * PAYCHECKS_A_MONTH, 2);
+    expect(baseline.cardInterestMonthly).toBeGreaterThan(0);
+    // The parts are each rounded to cents, so their sum is good to the cent.
+    expect(baseline.recurringMonthlySpending + baseline.typicalMonthlySpending + baseline.cardInterestMonthly)
+      .toBeCloseTo(expected.spending!, 1);
+    expect(baseline.recurringMonthlyIncome + baseline.typicalMonthlyIncome).toBeCloseTo(expected.income!, 1);
   });
 
   it('has no learned figure while the forecast is unavailable, but keeps an override', () => {

@@ -27,6 +27,7 @@ import type {
   PlannedEventInput,
   PlannedEventKind,
   PlannedEventRecurrence,
+  RepeatUnit,
 } from '../cash-flow/planned-events';
 
 export interface CashFlowSnapshotMeta {
@@ -61,6 +62,8 @@ function toPlannedEvent(row: PlannedCashFlowEventRow): PlannedCashFlowEvent {
     startDate: dateOnly(row.startDate),
     recurrence: row.recurrence as PlannedEventRecurrence,
     endDate: row.endDate ? dateOnly(row.endDate) : null,
+    repeatEvery: row.repeatEvery ?? null,
+    repeatUnit: (row.repeatUnit as RepeatUnit | null) ?? null,
     accountId: row.accountId ?? null,
     toAccountId: row.toAccountId ?? null,
     paymentMode: (row.paymentMode as CardPaymentMode | null) ?? null,
@@ -75,6 +78,8 @@ function toRowData(input: PlannedEventInput) {
     startDate: new Date(`${input.startDate}T00:00:00.000Z`),
     recurrence: input.recurrence,
     endDate: input.endDate ? new Date(`${input.endDate}T00:00:00.000Z`) : null,
+    repeatEvery: input.repeatEvery,
+    repeatUnit: input.repeatUnit,
     accountId: input.accountId,
     toAccountId: input.toAccountId,
     paymentMode: input.paymentMode,

@@ -34,7 +34,7 @@ function available(position: CashPosition) {
 
 const event = (overrides: Partial<PlannedCashFlowEvent>): PlannedCashFlowEvent => ({
   id: 'event', label: 'Event', kind: 'expense', amount: 0, startDate: '2026-10-25', recurrence: 'once', endDate: null,
-  accountId: null, toAccountId: null, paymentMode: null,
+  repeatEvery: null, repeatUnit: null, accountId: null, toAccountId: null, paymentMode: null,
   ...overrides,
 });
 
@@ -60,7 +60,7 @@ describe('buildCashPosition', () => {
   });
 
   it('takes a payoff plan out of cash and off the card', () => {
-    const payoff = event({ kind: 'card_payment', accountId: 'card', toAccountId: null, paymentMode: 'full' });
+    const payoff = event({ kind: 'card_payment', repeatEvery: null, repeatUnit: null, accountId: 'card', toAccountId: null, paymentMode: 'full' });
     const built = model({ plannedEvents: [payoff] });
     const position = available(buildCashPosition(built));
     const payment = built.cards[0].projection!.payments.find(item => item.date === '2026-10-25')!.amount;
@@ -72,7 +72,7 @@ describe('buildCashPosition', () => {
   });
 
   it('adds up what cash pays the cards from the payments that move it', () => {
-    const payoff = event({ kind: 'card_payment', accountId: 'card', toAccountId: null, paymentMode: 'full' });
+    const payoff = event({ kind: 'card_payment', repeatEvery: null, repeatUnit: null, accountId: 'card', toAccountId: null, paymentMode: 'full' });
     const built = model({ plannedEvents: [payoff] });
     const position = available(buildCashPosition(built));
     const paid = (from: string, toExclusive: string) => built.cards[0].projection!.payments
@@ -101,7 +101,7 @@ describe('buildCashPosition', () => {
   });
 
   it('clears the card on the payoff day and never shows a credit', () => {
-    const payoff = event({ kind: 'card_payment', accountId: 'card', toAccountId: null, paymentMode: 'full' });
+    const payoff = event({ kind: 'card_payment', repeatEvery: null, repeatUnit: null, accountId: 'card', toAccountId: null, paymentMode: 'full' });
     const built = model({ plannedEvents: [payoff] });
     const position = available(buildCashPosition(built));
     expect(position.cardDebtBefore('2026-10-26')).toBe(0);
@@ -117,7 +117,7 @@ describe('buildCashPosition', () => {
       transactions: [...householdTransactions(FROM, through), ...interestCharges(FROM, through)],
       dataThrough: through,
       today: '2026-10-15',
-      plannedEvents: [event({ kind: 'card_payment', accountId: 'card', toAccountId: null, paymentMode: 'full', startDate: '2026-11-03' })],
+      plannedEvents: [event({ kind: 'card_payment', repeatEvery: null, repeatUnit: null, accountId: 'card', toAccountId: null, paymentMode: 'full', startDate: '2026-11-03' })],
     });
     expect(built.forecastStart).toBe('2026-10-15');
     expect(built.cards[0].currentPace!.carryingBalanceNow).toBe(true);

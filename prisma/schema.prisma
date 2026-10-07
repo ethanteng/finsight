@@ -614,8 +614,12 @@ model PlannedCashFlowEvent {
   amount      Float
   /// First (or only) occurrence, as a calendar date.
   startDate   DateTime  @db.Date
-  /// 'once', 'weekly', 'biweekly', 'monthly', 'quarterly' or 'annually'.
+  /// 'once', 'weekly', 'biweekly', 'monthly', 'quarterly', 'semiannually', 'annually' or 'custom'.
   recurrence  String    @default("once")
+  /// For a 'custom' recurrence, how many units apart occurrences fall (1-99); null otherwise.
+  repeatEvery Int?
+  /// For a 'custom' recurrence, 'day', 'week', 'month' or 'year'; null otherwise.
+  repeatUnit  String?
   /// Last date a recurring event can occur, inclusive. Null for open-ended or one-time events.
   endDate     DateTime? @db.Date
   /// The provider account id of the credit card a card payment pays, the cash

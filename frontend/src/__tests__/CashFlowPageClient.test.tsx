@@ -576,6 +576,45 @@ describe('CashFlowPageClient', () => {
       expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'spending', key: 'safeway' });
     });
 
+    it('splits each side into what repeats and everything else, adding up to the side', async () => {
+      const body = report({
+        baseline: {
+          ...report().baseline,
+          typicalMonthlySpending: 1825.4,
+          recurringMonthlySpending: 2015.49,
+          recurringMonthlyIncome: 5416.67,
+          cardInterestMonthly: 9.8,
+        },
+      });
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body } : undefined));
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      const moneyOut = within(section).getByRole('heading', { name: 'Money out' }).closest('div')!.parentElement!;
+      // $2,015.49 + $1,825.40 + $9.80 is $3,850.69. Rounded together to the $3,851 total, the largest
+      // remainders round up: $10 interest, $2,016 repeating, $1,825 everything else.
+      expect(moneyOut).toHaveTextContent('about $3,851 a month');
+      const half = (title: string) => within(moneyOut).getByRole('heading', { name: title }).parentElement!.parentElement!;
+      expect(half('Repeating')).toHaveTextContent('$2,016 a month');
+      expect(half('Repeating')).toHaveTextContent('Bills and subscriptions that come on a schedule. Each is projected on its own dates.');
+      expect(within(half('Repeating')).getByText('Oak Street Apartments')).toBeInTheDocument();
+      expect(half('Everything else')).toHaveTextContent('$1,825 a month');
+      expect(half('Everything else')).toHaveTextContent('Your last 90 days, spread evenly across every day ahead.');
+      expect(within(half('Everything else')).getByText('Safeway')).toBeInTheDocument();
+      expect(moneyOut).toHaveTextContent('Card interest: projected from each card’s APR at your usual payment pace.$10 a month');
+    });
+
+    it('reads the halves from an older report that lacks them, card interest included', async () => {
+      // No recurringMonthly* or cardInterestMonthly: the regular items at their monthly rates, and the
+      // usual-spending breakdown's projected interest ($9.80), stand in.
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      const moneyOut = within(section).getByRole('heading', { name: 'Money out' }).closest('div')!.parentElement!;
+      // $2,000 rent + $1,825 everything else + $9.80 interest.
+      expect(moneyOut).toHaveTextContent('about $3,835 a month');
+      expect(moneyOut).toHaveTextContent('Card interest: projected from each card’s APR at your usual payment pace.$10 a month');
+    });
+
     it('still offers typical income leave-out when spending is overridden', async () => {
       const body = report({
         baseline: {
@@ -590,7 +629,7 @@ describe('CashFlowPageClient', () => {
       const calls = adjusting(body);
       render(<CashFlowPageClient />);
       const section = await basis();
-      expect(within(section).getByText('Other income')).toBeInTheDocument();
+      expect(within(section).getByRole('heading', { name: 'Everything else' })).toBeInTheDocument();
       fireEvent.click(within(section).getByRole('button', { name: 'Leave out: Venmo' }));
       await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
       expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'income', key: 'venmo' });
@@ -816,8 +855,8 @@ describe('CashFlowPageClient', () => {
       const calls = adjusting(body);
       render(<CashFlowPageClient />);
       const section = await basis();
-      expect(within(section).getByText((_, element) =>
-        element?.tagName === 'P' && /^Other income: about \$3,211 a month, spread evenly/.test(element.textContent ?? ''))).toBeInTheDocument();
+      const everythingElse = within(section).getByRole('heading', { name: 'Everything else' }).parentElement!;
+      expect(everythingElse).toHaveTextContent('$3,211 a month');
       expect(within(section).getByText('Your monthly spending of $6,000 from the Finances page is used instead.')).toBeInTheDocument();
       fireEvent.click(within(section).getByRole('button', { name: 'Leave out: ACME CORP CONSULTING' }));
       await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
@@ -1342,6 +1381,53 @@ describe('CashFlowPageClient', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
     expect(screen.getByText('Paid to cards leaves out Marriott Amex ••1005: its payments don’t seem to come from your connected accounts.')).toBeInTheDocument();
+  });
+
+  it('repeats a planned event every 6 months, or on a custom interval', async () => {
+    const calls = mockFetch((url, init) => {
+      if (url.endsWith('/api/cash-flow/events') && init?.method === 'POST') return { status: 201, body: { event: {} } };
+      return url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined;
+    });
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'Planned events' });
+    fireEvent.click(screen.getByRole('button', { name: 'Add planned event' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Club dues' } });
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '90' } });
+    expect(screen.getByRole('option', { name: 'Every 6 months' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Repeats'), { target: { value: 'custom' } });
+    const howMany = screen.getByLabelText('How many');
+    expect(howMany).toHaveValue('2');
+    expect(screen.getByLabelText('Unit')).toHaveValue('month');
+    fireEvent.change(howMany, { target: { value: '0' } });
+    expect(screen.getByRole('button', { name: 'Add to forecast' })).toBeDisabled();
+    fireEvent.change(howMany, { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('Unit'), { target: { value: 'week' } });
+    expect(screen.getByRole('option', { name: 'weeks' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add to forecast' }));
+
+    await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+    expect(JSON.parse(String(calls.find(call => call.init?.method === 'POST')!.init!.body))).toMatchObject({
+      label: 'Club dues', kind: 'expense', amount: 90, recurrence: 'custom', repeatEvery: 3, repeatUnit: 'week',
+    });
+  });
+
+  it('describes a custom repeat in the list, and edits it back', async () => {
+    const dues = {
+      id: 'dues', label: 'Club dues', kind: 'expense', amount: 90, startDate: '2026-11-01', recurrence: 'custom', endDate: null,
+      repeatEvery: 3, repeatUnit: 'week', accountId: null, paymentMode: null, nextDate: '2026-11-01', occurrencesInRange: 4,
+    } as const;
+    const twice = { ...dues, id: 'twice', label: 'Insurance', recurrence: 'semiannually', repeatEvery: null, repeatUnit: null } as const;
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ plannedEvents: [dues, twice] }) } : undefined));
+    render(<CashFlowPageClient />);
+    const panel = (await screen.findByRole('heading', { name: 'Planned events' })).closest('section')!;
+    expect(within(panel).getByText(/Every 3 weeks from Nov 1, 2026/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Every 6 months from Nov 1, 2026/)).toBeInTheDocument();
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Edit Club dues' }));
+    expect(screen.getByLabelText('Repeats')).toHaveValue('custom');
+    expect(screen.getByLabelText('How many')).toHaveValue('3');
+    expect(screen.getByLabelText('Unit')).toHaveValue('week');
   });
 
   it('offers a transfer only with two cash accounts to move between', async () => {

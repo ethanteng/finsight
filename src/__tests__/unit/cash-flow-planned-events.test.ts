@@ -1,4 +1,5 @@
 import {
+  describeRecurrence,
   expandPlannedEvent,
   plannedEventNetEffect,
   validatePlannedEventInput,
@@ -14,7 +15,7 @@ describe('validatePlannedEventInput', () => {
       ok: true,
       value: {
         label: 'Holiday bonus', kind: 'income', amount: 10000.46, startDate: '2026-12-15', recurrence: 'once', endDate: null,
-        accountId: null, toAccountId: null, paymentMode: null,
+        repeatEvery: null, repeatUnit: null, accountId: null, toAccountId: null, paymentMode: null,
       },
     });
   });
@@ -34,6 +35,32 @@ describe('validatePlannedEventInput', () => {
   });
 });
 
+describe('validatePlannedEventInput for repeats', () => {
+  it('keeps a custom interval, and only for a custom recurrence', () => {
+    expect(validatePlannedEventInput({ ...base, recurrence: 'custom', repeatEvery: 3, repeatUnit: 'week' }))
+      .toMatchObject({ ok: true, value: { recurrence: 'custom', repeatEvery: 3, repeatUnit: 'week' } });
+    expect(validatePlannedEventInput({ ...base, recurrence: 'semiannually', repeatEvery: 3, repeatUnit: 'week' }))
+      .toMatchObject({ ok: true, value: { recurrence: 'semiannually', repeatEvery: null, repeatUnit: null } });
+  });
+
+  it.each([
+    [{ ...base, recurrence: 'custom', repeatUnit: 'week' }, 'Repeat every 1 to 99 days, weeks, months or years'],
+    [{ ...base, recurrence: 'custom', repeatEvery: 0, repeatUnit: 'week' }, 'Repeat every 1 to 99 days, weeks, months or years'],
+    [{ ...base, recurrence: 'custom', repeatEvery: 2.5, repeatUnit: 'week' }, 'Repeat every 1 to 99 days, weeks, months or years'],
+    [{ ...base, recurrence: 'custom', repeatEvery: 100, repeatUnit: 'week' }, 'Repeat every 1 to 99 days, weeks, months or years'],
+    [{ ...base, recurrence: 'custom', repeatEvery: 3, repeatUnit: 'fortnight' }, 'Choose days, weeks, months or years'],
+  ])('rejects %j', (input, error) => {
+    expect(validatePlannedEventInput(input)).toEqual({ ok: false, error });
+  });
+
+  it('keeps a card payment to once or every month', () => {
+    const card = { label: 'Card', kind: 'card_payment', accountId: 'card', paymentMode: 'full', startDate: '2026-11-01' };
+    expect(validatePlannedEventInput({ ...card, recurrence: 'semiannually' })).toEqual({ ok: false, error: 'A card payment happens once or every month' });
+    expect(validatePlannedEventInput({ ...card, recurrence: 'custom', repeatEvery: 1, repeatUnit: 'month' }))
+      .toEqual({ ok: false, error: 'A card payment happens once or every month' });
+  });
+});
+
 describe('validatePlannedEventInput for card payments', () => {
   const card = { label: 'Pay off Rewards Card', kind: 'card_payment', accountId: 'card', startDate: '2026-11-01', recurrence: 'once' };
 
@@ -42,7 +69,7 @@ describe('validatePlannedEventInput for card payments', () => {
       ok: true,
       value: {
         label: 'Pay off Rewards Card', kind: 'card_payment', amount: 0, startDate: '2026-11-01', recurrence: 'once', endDate: null,
-        accountId: 'card', toAccountId: null, paymentMode: 'full',
+        repeatEvery: null, repeatUnit: null, accountId: 'card', toAccountId: null, paymentMode: 'full',
       },
     });
   });
@@ -87,7 +114,7 @@ describe('validatePlannedEventInput for transfers', () => {
       ok: true,
       value: {
         label: 'Move to savings', kind: 'transfer', amount: 500, startDate: '2026-11-01', recurrence: 'monthly', endDate: null,
-        accountId: 'checking', toAccountId: 'savings', paymentMode: null,
+        repeatEvery: null, repeatUnit: null, accountId: 'checking', toAccountId: 'savings', paymentMode: null,
       },
     });
     expect(validatePlannedEventInput({ ...transfer, recurrence: 'biweekly' }).ok).toBe(true);
@@ -116,7 +143,7 @@ describe('validatePlannedEventInput for transfers', () => {
 describe('expandPlannedEvent', () => {
   const event = (overrides: Partial<PlannedCashFlowEvent>): PlannedCashFlowEvent => ({
     id: 'event', label: 'Event', kind: 'expense', amount: 100, startDate: '2026-01-31', recurrence: 'monthly', endDate: null,
-    accountId: null, toAccountId: null, paymentMode: null,
+    repeatEvery: null, repeatUnit: null, accountId: null, toAccountId: null, paymentMode: null,
     ...overrides,
   });
 
@@ -128,6 +155,50 @@ describe('expandPlannedEvent', () => {
   it('stops at the end date and starts at the window', () => {
     expect(expandPlannedEvent(event({ endDate: '2026-03-31' }), '2026-02-15', '2026-12-01'))
       .toEqual(['2026-02-28', '2026-03-31']);
+  });
+
+  it('expands an event every 6 months, keeping a month end', () => {
+    expect(expandPlannedEvent(event({ recurrence: 'semiannually', startDate: '2026-08-31' }), '2026-01-01', '2028-01-01'))
+      .toEqual(['2026-08-31', '2027-02-28', '2027-08-31']);
+  });
+
+  it.each([
+    ['day', 10, ['2026-10-01', '2026-10-11', '2026-10-21', '2026-10-31']],
+    ['week', 3, ['2026-10-01', '2026-10-22']],
+    ['month', 2, ['2026-10-01']],
+    ['year', 1, ['2026-10-01']],
+  ] as const)('expands a custom event every %s (%i)', (unit, every, dates) => {
+    expect(expandPlannedEvent(event({ recurrence: 'custom', repeatEvery: every, repeatUnit: unit, startDate: '2026-10-01' }), '2026-10-01', '2026-11-01'))
+      .toEqual(dates);
+  });
+
+  it('steps custom months from the start, and stops at the end date', () => {
+    const quarterEnds = event({ recurrence: 'custom', repeatEvery: 2, repeatUnit: 'month', startDate: '2026-12-31', endDate: '2027-07-01' });
+    expect(expandPlannedEvent(quarterEnds, '2026-01-01', '2028-01-01')).toEqual(['2026-12-31', '2027-02-28', '2027-04-30', '2027-06-30']);
+  });
+
+  it('treats a custom event saved without its interval as happening once', () => {
+    expect(expandPlannedEvent(event({ recurrence: 'custom', startDate: '2026-10-05' }), '2026-01-01', '2028-01-01')).toEqual(['2026-10-05']);
+  });
+
+  it('treats a custom event with an unusable interval as happening once', () => {
+    expect(expandPlannedEvent(event({
+      recurrence: 'custom', repeatEvery: -1, repeatUnit: 'week', startDate: '2026-10-05',
+    }), '2026-01-01', '2028-01-01')).toEqual(['2026-10-05']);
+    expect(expandPlannedEvent(event({
+      recurrence: 'custom', repeatEvery: 3, repeatUnit: 'fortnight' as PlannedCashFlowEvent['repeatUnit'], startDate: '2026-10-05',
+    }), '2026-01-01', '2028-01-01')).toEqual(['2026-10-05']);
+  });
+
+  it('says a custom recurrence in words', () => {
+    expect(describeRecurrence({ recurrence: 'custom', repeatEvery: 3, repeatUnit: 'week' })).toBe('every 3 weeks');
+    expect(describeRecurrence({ recurrence: 'custom', repeatEvery: 1, repeatUnit: 'month' })).toBe('every month');
+    expect(describeRecurrence({ recurrence: 'semiannually', repeatEvery: null, repeatUnit: null })).toBe('semiannually');
+    // Expanded as once without a usable interval, and described the same way.
+    expect(describeRecurrence({ recurrence: 'custom', repeatEvery: null, repeatUnit: 'week' })).toBe('once');
+    expect(describeRecurrence({ recurrence: 'custom', repeatEvery: 3, repeatUnit: null })).toBe('once');
+    expect(describeRecurrence({ recurrence: 'custom', repeatEvery: -1, repeatUnit: 'week' })).toBe('once');
+    expect(describeRecurrence({ recurrence: 'custom', repeatEvery: 3, repeatUnit: 'fortnight' as PlannedCashFlowEvent['repeatUnit'] })).toBe('once');
   });
 
   it('expands one-time, biweekly and annual events', () => {
