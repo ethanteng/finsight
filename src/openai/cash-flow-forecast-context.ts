@@ -60,7 +60,7 @@ export interface CashFlowForecastContext {
   plannedEvents?: Array<{
     id: string;
     label: string;
-    kind: 'income' | 'expense' | 'card_payment';
+    kind: 'income' | 'expense' | 'transfer' | 'card_payment';
     amount: number;
     startDate: string;
     recurrence: string;
@@ -69,6 +69,9 @@ export interface CashFlowForecastContext {
     /** For a card payment: the card it pays and how it is sized. */
     accountId?: string | null;
     paymentMode?: 'full' | 'fixed' | null;
+    /** For a transfer: the cash accounts it moves money from and to, when still connected. */
+    from?: { name: string; mask: string | null };
+    to?: { name: string; mask: string | null };
   }>;
   oneOffs?: Array<{ label: string; date: string; flow: 'income' | 'spending'; amount: number }>;
   cards?: Array<{
@@ -163,6 +166,10 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
   }
   // Where each item is expected, once there is more than one account it could be.
   const accounts = model.ledger.accounts.length > 1 ? new Map(model.ledger.accounts.map(account => [account.id, account])) : null;
+  const transferAccount = (id: string | null) => {
+    const account = id ? accounts?.get(id) : undefined;
+    return account ? { name: account.name, mask: account.mask } : undefined;
+  };
   const recurring = model.streams
     .filter(stream => scheduledNext.has(stream.id))
     .map(stream => {
@@ -206,6 +213,7 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
       endDate: event.endDate,
       nextDate: expandPlannedEvent(event, model.forecastStart, model.forecastEndLimit)[0] ?? null,
       ...(event.kind === 'card_payment' && { accountId: event.accountId, paymentMode: event.paymentMode }),
+      ...(event.kind === 'transfer' && { from: transferAccount(event.accountId), to: transferAccount(event.toAccountId) }),
     })),
     oneOffs: model.oneOffs.map(entry => ({
       label: entry.label,
@@ -467,7 +475,8 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
     const when = event.recurrence === 'once' ? `once on ${event.startDate}` : `${event.recurrence} from ${event.startDate}`;
     const what = event.kind === 'card_payment'
       ? `payment to ${cardNames.get(event.accountId ?? '') ?? 'a credit card'}`
-      : event.kind === 'income' ? 'income (money in)' : 'expense (money out)';
+      : event.kind === 'transfer' ? `transfer${transferRoute(event)} (moves cash between the user's own accounts; not income or spending)`
+        : event.kind === 'income' ? 'income (money in)' : 'expense (money out)';
     add({
       id: `cash_flow_planned_event_${index + 1}_amount`,
       label: `User-entered planned ${what} “${event.label}”, ${when}`,
@@ -689,6 +698,11 @@ function accountLabel(account: { name: string; mask: string | null; kind: 'cash'
   return account.kind === 'credit' ? cardLabel(account) : cashAccountLabel(account);
 }
 
+/** " from account “Checking” to account “Savings”" for a planned transfer; only the sides still connected. */
+function transferRoute(event: NonNullable<CashFlowForecastContext['plannedEvents']>[number]): string {
+  return `${event.from ? ` from ${cashAccountLabel(event.from)}` : ''}${event.to ? ` to ${cashAccountLabel(event.to)}` : ''}`;
+}
+
 /** " into account “Joint Checking”", " from account …", " on credit card …"; empty without an account. */
 function recurringPlace(item: NonNullable<CashFlowForecastContext['recurring']>[number]): string {
   if (!item.account) return '';
@@ -742,6 +756,11 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
       startDate: event.startDate,
       endDate: event.endDate,
       nextDate: event.nextDate,
+      ...(event.kind === 'transfer' && {
+        ...(event.from && { from: cashAccountLabel(event.from) }),
+        ...(event.to && { to: cashAccountLabel(event.to) }),
+        changesSavings: false,
+      }),
       // A full card payment is sized by the balance, so there is no amount fact to point at.
       ...(event.kind === 'card_payment' && event.paymentMode === 'full'
         ? { paysCardInFull: true }

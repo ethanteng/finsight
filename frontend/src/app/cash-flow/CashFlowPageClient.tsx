@@ -386,6 +386,12 @@ export default function CashFlowPageClient() {
                       payments show in Cash position.
                     </p>
                   )}
+                  {report.position.available && report.plannedEvents.some(event => event.kind === 'transfer' && event.nextDate !== null) && (
+                    <p className="mt-3 text-xs leading-5 text-[#66736b]">
+                      Moving money between your own accounts isn’t cash in or out here, so it doesn’t change what you save.
+                      Your planned transfers show in Cash position.
+                    </p>
+                  )}
                 </div>
               ) : report.position.available ? (
                 <div className="mt-5">

@@ -7,11 +7,13 @@ import { addDays, addMonths, isCalendarDate, type CalendarDate } from './calenda
  * not, and are never written here.
  *
  * `kind` decides the effect. Income adds to cash in and expense to cash out.
- * A card payment moves money from the user's cash to one of their credit
- * cards, so it changes balances and the interest the card charges, but it is
- * never income or spending itself.
+ * A transfer moves money from one of the user's cash accounts to another, say
+ * checking to savings: it changes what each account holds, never what the user
+ * saves. A card payment moves money from the user's cash to one of their
+ * credit cards, so it changes balances and the interest the card charges, but
+ * it is never income or spending itself.
  */
-export const PLANNED_EVENT_KINDS = ['income', 'expense', 'card_payment'] as const;
+export const PLANNED_EVENT_KINDS = ['income', 'expense', 'transfer', 'card_payment'] as const;
 export type PlannedEventKind = (typeof PLANNED_EVENT_KINDS)[number];
 
 /**
@@ -45,10 +47,13 @@ export interface PlannedCashFlowEvent {
   /** Last day a recurring event can occur, inclusive. Always null for `once`. */
   endDate: CalendarDate | null;
   /**
-   * For a card payment, the credit card it pays. For income or an expense, the
-   * cash account it lands in, or null to leave it to the primary account.
+   * For a card payment, the credit card it pays. For a transfer, the cash
+   * account it leaves. For income or an expense, the cash account it lands in,
+   * or null to leave it to the primary account.
    */
   accountId: string | null;
+  /** For a transfer, the cash account it goes to; null for every other kind. */
+  toAccountId: string | null;
   /** How a card payment is sized; null for every other kind. */
   paymentMode: CardPaymentMode | null;
 }
@@ -74,15 +79,23 @@ export function validatePlannedEventInput(raw: unknown): PlannedEventValidation 
   }
 
   if (!isOneOf(PLANNED_EVENT_KINDS, body.kind)) {
-    return { ok: false, error: 'Choose whether the event is money in, money out or a card payment' };
+    return { ok: false, error: 'Choose whether the event is money in, money out, a transfer or a card payment' };
   }
   const kind = body.kind;
 
   let accountId: string | null = null;
+  let toAccountId: string | null = null;
   let paymentMode: CardPaymentMode | null = null;
-  if (kind !== 'card_payment' && body.accountId !== undefined && body.accountId !== null && body.accountId !== '') {
+  if ((kind === 'income' || kind === 'expense') && body.accountId !== undefined && body.accountId !== null && body.accountId !== '') {
     accountId = typeof body.accountId === 'string' ? body.accountId.trim() : '';
     if (!accountId || accountId.length > ACCOUNT_ID_MAX_LENGTH) return { ok: false, error: 'Choose one of your accounts' };
+  }
+  if (kind === 'transfer') {
+    accountId = typeof body.accountId === 'string' ? body.accountId.trim() : '';
+    if (!accountId || accountId.length > ACCOUNT_ID_MAX_LENGTH) return { ok: false, error: 'Choose the account the money leaves' };
+    toAccountId = typeof body.toAccountId === 'string' ? body.toAccountId.trim() : '';
+    if (!toAccountId || toAccountId.length > ACCOUNT_ID_MAX_LENGTH) return { ok: false, error: 'Choose the account the money goes to' };
+    if (toAccountId === accountId) return { ok: false, error: 'Choose two different accounts' };
   }
   if (kind === 'card_payment') {
     accountId = typeof body.accountId === 'string' ? body.accountId.trim() : '';
@@ -126,6 +139,7 @@ export function validatePlannedEventInput(raw: unknown): PlannedEventValidation 
       recurrence,
       endDate,
       accountId,
+      toAccountId,
       paymentMode,
     },
   };
@@ -161,11 +175,12 @@ export function expandPlannedEvent(
 }
 
 /**
- * Signed effect on net cash flow: income adds, expenses subtract. A card
- * payment moves money between the user's own accounts, so it has none; what it
- * changes is the card's balance and the interest charged on it.
+ * Signed effect on net cash flow: income adds, expenses subtract. A transfer
+ * or a card payment moves money between the user's own accounts, so it has
+ * none; what a card payment changes is the card's balance and the interest
+ * charged on it.
  */
 export function plannedEventNetEffect(event: Pick<PlannedCashFlowEvent, 'kind' | 'amount'>): number {
-  if (event.kind === 'card_payment') return 0;
+  if (event.kind === 'card_payment' || event.kind === 'transfer') return 0;
   return event.kind === 'income' ? event.amount : -event.amount;
 }

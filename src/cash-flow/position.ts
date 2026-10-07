@@ -6,19 +6,20 @@ import { expandPlannedEvent } from './planned-events';
  * Cash position: what the user's cash accounts and credit cards will hold, day
  * by day, from the balances the providers last reported.
  *
- * Cash moves with income, spending paid from cash, the user's planned income
- * and expenses, transfers in and out, and the card payments the card model
- * schedules. A card's balance moves with its purchases, those payments and the
- * interest projected on it. Everything comes from the same forecast as the
- * savings view, so the two never disagree about a flow; they only count
- * different things -- savings counts a card purchase when it is made, cash
- * when the card is paid.
+ * Cash moves with income, spending paid from cash, the user's planned income,
+ * expenses and transfers, transfers in and out, and the card payments the
+ * card model schedules. A card's balance moves with its purchases, those
+ * payments and the interest projected on it. Everything comes from the same
+ * forecast as the savings view, so the two never disagree about a flow; they
+ * only count different things -- savings counts a card purchase when it is
+ * made, cash when the card is paid.
  *
  * Every flow lands in one cash account, so the position can be read for any
  * of them, or any set, as well as for all together: income and bills in the
  * account they were seen in, transfers likewise, planned income and expenses
- * in the account the user chose, and a card's payments in the account that
- * has paid it. What has no account goes to the primary account (see
+ * in the account the user chose, a planned transfer out of the account it
+ * leaves and into the one it goes to, and a card's payments in the account
+ * that has paid it. What has no account goes to the primary account (see
  * `primaryAccountId`). The accounts' positions therefore always add up to the
  * whole one. A card's payments come from the connected cash accounts unless
  * its history says otherwise. A card that cannot be projected is left out of
@@ -31,7 +32,9 @@ export type CashPositionUnavailableReason = 'forecast_unavailable' | 'no_cash_ac
 export interface CashPositionItem {
   date: CalendarDate;
   label: string;
-  kind: 'income' | 'bill' | 'transfer_in' | 'transfer_out' | 'card_payment' | 'planned_income' | 'planned_expense';
+  kind:
+    | 'income' | 'bill' | 'transfer_in' | 'transfer_out' | 'card_payment'
+    | 'planned_income' | 'planned_expense' | 'planned_transfer_in' | 'planned_transfer_out';
   /** Signed: positive into the accounts, negative out of them. */
   amount: number;
   /** Cash at the end of the item's day, everything else that day included. */
@@ -53,9 +56,9 @@ export type CashPosition =
       cardDebtBefore(date: CalendarDate): number;
       /** What the cash accounts pay the cards in `[from, toExclusive)`: exactly the payments that move the cash. */
       cardPaymentsBetween(from: CalendarDate, toExclusive: CalendarDate): number;
-      /** What arrives in `[from, toExclusive)`: income, transfers in and planned income. */
+      /** What arrives in `[from, toExclusive)`: income, transfers in, planned income and planned transfers in. */
       moneyInBetween(from: CalendarDate, toExclusive: CalendarDate): number;
-      /** What leaves in `[from, toExclusive)` besides card payments: spending, transfers out and planned expenses. */
+      /** What leaves in `[from, toExclusive)` besides card payments: spending, transfers out, planned expenses and planned transfers out. */
       moneyOutBetween(from: CalendarDate, toExclusive: CalendarDate): number;
       /** The lowest end-of-day cash in `[from, toExclusive)`. */
       lowPoint(from: CalendarDate, toExclusive: CalendarDate): { date: CalendarDate; cash: number } | null;
@@ -166,6 +169,19 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
   }
 
   for (const event of model.plannedEvents) {
+    if (event.kind === 'transfer') {
+      // Each side counts in its own account, so for the whole the two cancel.
+      // An account no longer connected falls to the primary one, and a
+      // transfer that would leave and land there moves nothing.
+      if (place(event.accountId) === place(event.toAccountId)) continue;
+      const leaves = counts(event.accountId);
+      const arrives = counts(event.toAccountId);
+      for (const date of expandPlannedEvent(event, start, model.forecastEndLimit)) {
+        if (leaves) outOf(date, event.amount, { label: event.label, kind: 'planned_transfer_out' });
+        if (arrives) into(date, event.amount, { label: event.label, kind: 'planned_transfer_in' });
+      }
+      continue;
+    }
     if (event.kind === 'card_payment' || !counts(event.accountId)) continue;
     for (const date of expandPlannedEvent(event, start, model.forecastEndLimit)) {
       if (event.kind === 'income') into(date, event.amount, { label: event.label, kind: 'planned_income' });

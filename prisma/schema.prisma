@@ -608,7 +608,7 @@ model PlannedCashFlowEvent {
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   label       String
-  /// 'income', 'expense' or 'card_payment'; decides the direction of `amount`.
+  /// 'income', 'expense', 'transfer' or 'card_payment'; decides the direction of `amount`.
   kind        String
   /// Positive magnitude in USD. Zero for a card payment that pays in full.
   amount      Float
@@ -618,8 +618,12 @@ model PlannedCashFlowEvent {
   recurrence  String    @default("once")
   /// Last date a recurring event can occur, inclusive. Null for open-ended or one-time events.
   endDate     DateTime? @db.Date
-  /// The provider account id of the credit card a card payment pays; null for other kinds.
+  /// The provider account id of the credit card a card payment pays, the cash
+  /// account a transfer leaves, or the cash account income or an expense lands in
+  /// (null for the primary account).
   accountId   String?
+  /// The provider account id of the cash account a transfer goes to; null for other kinds.
+  toAccountId String?
   /// 'full' or 'fixed' for a card payment; null for other kinds.
   paymentMode String?
   createdAt   DateTime  @default(now())
