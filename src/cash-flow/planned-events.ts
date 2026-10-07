@@ -193,9 +193,20 @@ function occurrenceAt(event: PlannedCashFlowEvent, index: number): CalendarDate 
   }
 }
 
+/** True when a custom interval can step forward without hanging expansion. */
+function customIntervalOk(every: unknown, unit: unknown): unit is RepeatUnit {
+  return typeof every === 'number'
+    && Number.isInteger(every)
+    && every >= 1
+    && every <= REPEAT_EVERY_MAX
+    && isOneOf(REPEAT_UNITS, unit);
+}
+
 /** True when the event can occur more than once. */
 function repeats(event: PlannedCashFlowEvent): boolean {
-  if (event.recurrence === 'custom') return Boolean(event.repeatEvery && event.repeatUnit);
+  // Require a real interval: a negative or unknown unit would not advance the
+  // date and expandPlannedEvent would never leave the start day.
+  if (event.recurrence === 'custom') return customIntervalOk(event.repeatEvery, event.repeatUnit);
   return event.recurrence !== 'once';
 }
 
@@ -205,8 +216,8 @@ function repeats(event: PlannedCashFlowEvent): boolean {
  */
 export function describeRecurrence(event: Pick<PlannedCashFlowEvent, 'recurrence' | 'repeatEvery' | 'repeatUnit'>): string {
   if (event.recurrence !== 'custom') return event.recurrence;
-  // Without its interval it is expanded as happening once, so it is described that way too.
-  if (!event.repeatEvery || !event.repeatUnit) return 'once';
+  // Without a usable interval it is expanded as happening once, so describe it that way too.
+  if (!customIntervalOk(event.repeatEvery, event.repeatUnit)) return 'once';
   return event.repeatEvery === 1 ? `every ${event.repeatUnit}` : `every ${event.repeatEvery} ${event.repeatUnit}s`;
 }
 

@@ -181,13 +181,24 @@ describe('expandPlannedEvent', () => {
     expect(expandPlannedEvent(event({ recurrence: 'custom', startDate: '2026-10-05' }), '2026-01-01', '2028-01-01')).toEqual(['2026-10-05']);
   });
 
+  it('treats a custom event with an unusable interval as happening once', () => {
+    expect(expandPlannedEvent(event({
+      recurrence: 'custom', repeatEvery: -1, repeatUnit: 'week', startDate: '2026-10-05',
+    }), '2026-01-01', '2028-01-01')).toEqual(['2026-10-05']);
+    expect(expandPlannedEvent(event({
+      recurrence: 'custom', repeatEvery: 3, repeatUnit: 'fortnight' as PlannedCashFlowEvent['repeatUnit'], startDate: '2026-10-05',
+    }), '2026-01-01', '2028-01-01')).toEqual(['2026-10-05']);
+  });
+
   it('says a custom recurrence in words', () => {
     expect(describeRecurrence({ recurrence: 'custom', repeatEvery: 3, repeatUnit: 'week' })).toBe('every 3 weeks');
     expect(describeRecurrence({ recurrence: 'custom', repeatEvery: 1, repeatUnit: 'month' })).toBe('every month');
     expect(describeRecurrence({ recurrence: 'semiannually', repeatEvery: null, repeatUnit: null })).toBe('semiannually');
-    // Expanded as once without its interval, and described the same way.
+    // Expanded as once without a usable interval, and described the same way.
     expect(describeRecurrence({ recurrence: 'custom', repeatEvery: null, repeatUnit: 'week' })).toBe('once');
     expect(describeRecurrence({ recurrence: 'custom', repeatEvery: 3, repeatUnit: null })).toBe('once');
+    expect(describeRecurrence({ recurrence: 'custom', repeatEvery: -1, repeatUnit: 'week' })).toBe('once');
+    expect(describeRecurrence({ recurrence: 'custom', repeatEvery: 3, repeatUnit: 'fortnight' as PlannedCashFlowEvent['repeatUnit'] })).toBe('once');
   });
 
   it('expands one-time, biweekly and annual events', () => {
