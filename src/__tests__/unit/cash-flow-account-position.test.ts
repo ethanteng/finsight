@@ -42,7 +42,7 @@ function available(position: CashPosition) {
 
 const event = (overrides: Partial<PlannedCashFlowEvent>): PlannedCashFlowEvent => ({
   id: 'event', label: 'Event', kind: 'income', amount: 1000, startDate: '2026-10-15', recurrence: 'once', endDate: null,
-  accountId: null, paymentMode: null,
+  accountId: null, toAccountId: null, paymentMode: null,
   ...overrides,
 });
 
@@ -150,6 +150,35 @@ describe('the cash position, account by account', () => {
     const onCard = model({ plannedEvents: [event({ id: 'odd', label: 'Odd', accountId: 'card' })] });
     expect(available(buildCashPosition(onCard, ['checking'])).itemsBetween('2026-10-15', '2026-10-16'))
       .toEqual(expect.arrayContaining([expect.objectContaining({ label: 'Odd' })]));
+  });
+
+  it('moves a planned transfer out of one account and into the other, leaving the whole unchanged', () => {
+    const transfer = event({
+      id: 'move', label: 'Move to savings', kind: 'transfer', amount: 750, accountId: 'checking', toAccountId: 'savings',
+      startDate: '2026-10-15', recurrence: 'monthly',
+    });
+    const without = expectSumsToWhole(model());
+    const withTransfer = expectSumsToWhole(model({ plannedEvents: [transfer] }));
+
+    expect(withTransfer.checking.itemsBetween('2026-10-15', '2026-10-16')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Move to savings', kind: 'planned_transfer_out', amount: -750 }),
+    ]));
+    expect(withTransfer.savings.itemsBetween('2026-10-15', '2026-10-16')).toEqual([
+      expect.objectContaining({ label: 'Move to savings', kind: 'planned_transfer_in', amount: 750 }),
+    ]);
+    // Three transfers by the start of January: checking holds $2,250 less, savings $2,250 more.
+    expect(withTransfer.checking.cashBefore('2027-01-01')).toBeCloseTo(without.checking.cashBefore('2027-01-01') - 2250, 2);
+    expect(withTransfer.savings.cashBefore('2027-01-01')).toBeCloseTo(without.savings.cashBefore('2027-01-01') + 2250, 2);
+    expect(withTransfer.whole.cashBefore('2027-01-01')).toBeCloseTo(without.whole.cashBefore('2027-01-01'), 2);
+  });
+
+  it('moves nothing when a planned transfer would leave and land in the same account', () => {
+    // The account it left is no longer connected, so it falls to checking, where it was going.
+    const stale = event({ id: 'stale', kind: 'transfer', amount: 750, accountId: 'closed', toAccountId: 'checking' });
+    const built = model({ plannedEvents: [stale] });
+    const checking = available(buildCashPosition(built, ['checking']));
+    expect(checking.itemsBetween('2026-10-15', '2026-10-16').filter(item => item.label === 'Event')).toEqual([]);
+    expect(checking.cashBefore('2027-01-01')).toBe(available(buildCashPosition(model(), ['checking'])).cashBefore('2027-01-01'));
   });
 
   it('spreads an override over the accounts the way the history did', () => {

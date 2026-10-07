@@ -62,6 +62,7 @@ function toPlannedEvent(row: PlannedCashFlowEventRow): PlannedCashFlowEvent {
     recurrence: row.recurrence as PlannedEventRecurrence,
     endDate: row.endDate ? dateOnly(row.endDate) : null,
     accountId: row.accountId ?? null,
+    toAccountId: row.toAccountId ?? null,
     paymentMode: (row.paymentMode as CardPaymentMode | null) ?? null,
   };
 }
@@ -75,6 +76,7 @@ function toRowData(input: PlannedEventInput) {
     recurrence: input.recurrence,
     endDate: input.endDate ? new Date(`${input.endDate}T00:00:00.000Z`) : null,
     accountId: input.accountId,
+    toAccountId: input.toAccountId,
     paymentMode: input.paymentMode,
   };
 }
@@ -90,9 +92,9 @@ export async function listPlannedEvents(userId: string): Promise<PlannedCashFlow
 /**
  * Which of the user's connected accounts `accountId` is: a credit card, a cash
  * account, or none of theirs. A planned event names its account by provider
- * account id -- the card a payment pays, or the cash account income or an
- * expense lands in -- so the id is checked against the user's own accounts
- * before it is stored.
+ * account id -- the card a payment pays, the cash accounts a transfer moves
+ * between, or the cash account income or an expense lands in -- so the id is
+ * checked against the user's own accounts before it is stored.
  */
 export async function userCashFlowAccountKind(userId: string, accountId: string): Promise<'cash' | 'credit' | null> {
   const snapshot = await getPrismaClient().financialSummarySnapshot.findUnique({

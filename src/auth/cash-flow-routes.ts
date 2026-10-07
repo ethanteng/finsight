@@ -32,11 +32,19 @@ import type { PlannedEventInput } from '../cash-flow/planned-events';
 const router = express.Router();
 
 /**
- * A card payment must name one of the user's own connected cards, and income
- * or an expense that names an account one of their own cash accounts. The
- * error to show when it does not; null when it does.
+ * A card payment must name one of the user's own connected cards, a transfer
+ * two of their own cash accounts, and income or an expense that names an
+ * account one of their own cash accounts. The error to show when it does not;
+ * null when it does.
  */
 async function accountError(userId: string, input: PlannedEventInput): Promise<string | null> {
+  if (input.kind === 'transfer') {
+    const [from, to] = await Promise.all([
+      input.accountId === null ? null : userCashFlowAccountKind(userId, input.accountId),
+      input.toAccountId === null ? null : userCashFlowAccountKind(userId, input.toAccountId),
+    ]);
+    return from === 'cash' && to === 'cash' ? null : 'Choose two of your connected checking or savings accounts';
+  }
   if (input.kind === 'card_payment') {
     return input.accountId !== null && await userCashFlowAccountKind(userId, input.accountId) === 'credit'
       ? null

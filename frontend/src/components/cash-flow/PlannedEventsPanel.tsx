@@ -34,7 +34,7 @@ interface PlannedEventsPanelProps {
   apiUrl: string;
   events: CashFlowPlannedEventSummary[];
   cards?: CashFlowCardSummary[];
-  /** The user's cash accounts, for choosing where planned income or an expense lands. */
+  /** The user's cash accounts, for choosing where planned income or an expense lands, and what a transfer moves between. */
   cashAccounts?: CashFlowPositionAccount[];
   cardPaymentRequest?: CardPaymentRequest | null;
   today: string;
@@ -61,6 +61,9 @@ interface FormState {
    * primary account rather than being pinned to whichever is primary today.
    */
   cashAccountId: string;
+  /** The cash accounts a transfer moves money from and to. */
+  fromAccountId: string;
+  toAccountId: string;
   paymentMode: CardPaymentMode;
 }
 
@@ -70,6 +73,7 @@ const CARD_RECURRENCES: PlannedEventRecurrence[] = ['once', 'monthly'];
 const KIND_LABELS: Record<PlannedEventKind, string> = {
   income: 'Money in',
   expense: 'Money out',
+  transfer: 'Transfer',
   card_payment: 'Pay a card',
 };
 
@@ -79,7 +83,7 @@ const fieldClass =
 function emptyForm(today: string): FormState {
   return {
     id: null, label: '', labelIsAutomatic: false, kind: 'expense', amount: '', startDate: today, recurrence: 'once',
-    endDate: '', accountId: '', cashAccountId: '', paymentMode: 'full',
+    endDate: '', accountId: '', cashAccountId: '', fromAccountId: '', toAccountId: '', paymentMode: 'full',
   };
 }
 
@@ -97,7 +101,11 @@ function Toggle<T extends string>({ legend, options, value, onChange }: {
   return (
     <fieldset className="text-sm font-semibold text-[#102319]">
       <legend>{legend}</legend>
-      <div className={`mt-1.5 grid gap-1 rounded-xl border border-[#102319]/10 bg-white p-1`} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      {/* Four options don't fit one row on a phone, so they take two there. */}
+      <div
+        className={`mt-1.5 grid gap-1 rounded-xl border border-[#102319]/10 bg-white p-1 ${options.length > 3 ? 'grid-cols-2 sm:grid-cols-4' : ''}`}
+        style={options.length > 3 ? undefined : { gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+      >
         {options.map(option => (
           <button
             key={option.value}
@@ -137,6 +145,17 @@ export default function PlannedEventsPanel({
   // Planned income and expenses land in the primary account unless the user chooses another.
   const primaryCashAccount = cashAccounts.find(account => account.primary) ?? cashAccounts[0];
   const choosesAccount = cashAccounts.length > 1;
+  const accountLabel = (id: string | null | undefined) => {
+    const account = id ? cashAccountById.get(id) : undefined;
+    return account ? cashAccountName(account) : 'an account no longer connected';
+  };
+  // A new transfer starts out of the primary account and into savings, if there is one.
+  const defaultRoute = () => {
+    const fromAccountId = primaryCashAccount?.id ?? '';
+    const others = cashAccounts.filter(account => account.id !== fromAccountId);
+    const toAccountId = (others.find(account => account.subtype === 'savings') ?? others[0])?.id ?? '';
+    return { fromAccountId, toAccountId };
+  };
 
   const update = (changes: Partial<FormState>) => setForm(current => {
     if (!current) return current;
@@ -179,7 +198,11 @@ export default function PlannedEventsPanel({
         ...(automatic && { label: automaticLabel(cardById.get(accountId), form?.paymentMode ?? 'full') }),
       });
     } else {
-      update({ kind, ...(form?.labelIsAutomatic && { label: '', labelIsAutomatic: false }) });
+      update({
+        kind,
+        ...(kind === 'transfer' && !form?.fromAccountId && !form?.toAccountId && defaultRoute()),
+        ...(form?.labelIsAutomatic && { label: '', labelIsAutomatic: false }),
+      });
     }
   };
 
@@ -188,9 +211,8 @@ export default function PlannedEventsPanel({
     // A disconnected cash account is no longer in the picker; such an event,
     // like one saved without an account, follows the primary account, so save
     // never sends an id the server would reject.
-    const cashAccountId = event.kind !== 'card_payment' && event.accountId && cashAccountById.has(event.accountId)
-      ? event.accountId
-      : '';
+    const connected = (id: string | null | undefined) => (id && cashAccountById.has(id) ? id : '');
+    const cashAccountId = event.kind === 'income' || event.kind === 'expense' ? connected(event.accountId) : '';
     setForm({
       id: event.id,
       label: event.label,
@@ -202,6 +224,9 @@ export default function PlannedEventsPanel({
       endDate: event.endDate ?? '',
       accountId: event.kind === 'card_payment' ? event.accountId ?? '' : '',
       cashAccountId,
+      // A side no longer connected is left for the user to choose again.
+      fromAccountId: event.kind === 'transfer' ? connected(event.accountId) : '',
+      toAccountId: event.kind === 'transfer' ? connected(event.toAccountId) : '',
       paymentMode: event.paymentMode ?? 'full',
     });
   };
@@ -224,7 +249,9 @@ export default function PlannedEventsPanel({
         // without one follows the primary account if more are connected later.
         ...(isCard
           ? { accountId: form.accountId, paymentMode: form.paymentMode }
-          : choosesAccount && { accountId: form.cashAccountId || null }),
+          : form.kind === 'transfer'
+            ? { accountId: form.fromAccountId, toAccountId: form.toAccountId }
+            : choosesAccount && { accountId: form.cashAccountId || null }),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -256,8 +283,16 @@ export default function PlannedEventsPanel({
     }
   };
 
-  const kinds: PlannedEventKind[] = cards.length > 0 ? ['income', 'expense', 'card_payment'] : ['income', 'expense'];
+  // A transfer needs two cash accounts; one already saved stays editable if an account has since gone.
+  const kinds: PlannedEventKind[] = [
+    'income',
+    'expense',
+    ...(choosesAccount || form?.kind === 'transfer' ? ['transfer' as const] : []),
+    ...(cards.length > 0 ? ['card_payment' as const] : []),
+  ];
   const isCardForm = form?.kind === 'card_payment';
+  const isTransferForm = form?.kind === 'transfer';
+  const sameAccount = Boolean(isTransferForm && form.fromAccountId && form.fromAccountId === form.toAccountId);
   // A card with no usual pace is projected only under a monthly plan; a
   // one-time payment counts once one exists, and on its own does nothing.
   const formCard = isCardForm ? cardById.get(form.accountId) : undefined;
@@ -281,7 +316,8 @@ export default function PlannedEventsPanel({
           <h3 id="planned-events-heading" className="text-lg font-semibold text-[#102319]">Planned events</h3>
           <p className="mt-1 max-w-xl text-sm leading-6 text-[#5e6b63]">
             Add money you expect that your history can’t show: a bonus, a tuition bill, a planned purchase
-            {cards.length > 0 ? ', or paying down a credit card' : ''}. Regular paychecks and bills are already in the forecast.
+            {choosesAccount ? ', a move to savings' : ''}{cards.length > 0 ? ', or paying down a credit card' : ''}. Regular
+            paychecks and bills are already in the forecast.
           </p>
         </div>
         {!form && (
@@ -319,6 +355,20 @@ export default function PlannedEventsPanel({
             </>
           )}
 
+          {isTransferForm && (
+            <>
+              {([['From', 'fromAccountId'], ['To', 'toAccountId']] as const).map(([fieldLabel, field]) => (
+                <label key={field} className="text-sm font-semibold text-[#102319]">
+                  {fieldLabel}
+                  <select className={fieldClass} value={form[field]} onChange={event => update({ [field]: event.target.value })} required>
+                    {!form[field] && <option value="" disabled>Choose an account</option>}
+                    {cashAccounts.map(account => <option key={account.id} value={account.id}>{cashAccountName(account)}</option>)}
+                  </select>
+                </label>
+              ))}
+            </>
+          )}
+
           <label className="text-sm font-semibold text-[#102319] sm:col-span-2">
             Name
             <input
@@ -326,12 +376,12 @@ export default function PlannedEventsPanel({
               value={form.label}
               maxLength={80}
               onChange={event => update({ label: event.target.value, labelIsAutomatic: false })}
-              placeholder={isCardForm ? 'e.g. Pay off my card' : 'e.g. Year-end bonus'}
+              placeholder={isCardForm ? 'e.g. Pay off my card' : isTransferForm ? 'e.g. Move to savings' : 'e.g. Year-end bonus'}
               required
             />
           </label>
 
-          {!isCardForm && choosesAccount && (
+          {!isCardForm && !isTransferForm && choosesAccount && (
             <label className="text-sm font-semibold text-[#102319] sm:col-span-2">
               Account
               <select
@@ -417,6 +467,17 @@ export default function PlannedEventsPanel({
             </p>
           )}
 
+          {sameAccount && (
+            <p className="text-xs leading-5 text-[#76510f] sm:col-span-2">Choose two different accounts.</p>
+          )}
+
+          {isTransferForm && (
+            <p className="text-xs leading-5 text-[#5e6b63] sm:col-span-2">
+              Moves money between your own accounts, so it changes what each one holds, not what you’re expected to
+              save. Transfers you already make regularly are in the forecast.
+            </p>
+          )}
+
           {isCardForm && (
             <p className="text-xs leading-5 text-[#5e6b63] sm:col-span-2">
               {form.paymentMode === 'full'
@@ -438,7 +499,7 @@ export default function PlannedEventsPanel({
           <div className="flex gap-2 sm:col-span-2">
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || sameAccount}
               className="min-h-10 rounded-full bg-[#102319] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#173c2c] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
             >
               {saving ? 'Saving…' : form.id ? 'Save changes' : 'Add to forecast'}
@@ -467,7 +528,8 @@ export default function PlannedEventsPanel({
                   <p className="mt-0.5 text-xs text-[#66736b]">
                     {event.kind === 'card_payment' ? describeCardPlan(event) : describeSchedule(event)}
                     {event.kind === 'card_payment' && (card ? ` · ${cardName(card)}` : ' · card no longer connected')}
-                    {event.kind !== 'card_payment' && choosesAccount && (() => {
+                    {event.kind === 'transfer' && ` · ${accountLabel(event.accountId)} to ${accountLabel(event.toAccountId)}`}
+                    {(event.kind === 'income' || event.kind === 'expense') && choosesAccount && (() => {
                       const account = event.accountId ? cashAccountById.get(event.accountId) : primaryCashAccount;
                       return account ? ` · ${cashAccountName(account)}` : ' · account no longer connected';
                     })()}
@@ -479,7 +541,9 @@ export default function PlannedEventsPanel({
                   <span className={`text-sm font-bold tabular-nums ${event.kind === 'income' ? 'text-[#28704d]' : event.kind === 'expense' ? 'text-[#9b4137]' : 'text-[#102319]'}`}>
                     {event.kind === 'card_payment'
                       ? (event.paymentMode === 'full' ? 'In full' : formatMoney(event.amount, true))
-                      : `${event.kind === 'income' ? '+' : '−'}${formatMoney(event.amount, true)}`}
+                      : event.kind === 'transfer'
+                        ? formatMoney(event.amount, true)
+                        : `${event.kind === 'income' ? '+' : '−'}${formatMoney(event.amount, true)}`}
                   </span>
                   <button
                     type="button"

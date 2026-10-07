@@ -65,6 +65,8 @@ const KIND_WORDS: Record<CashPositionItem['kind'], string> = {
   card_payment: 'Card payment',
   planned_income: 'Planned income',
   planned_expense: 'Planned expense',
+  planned_transfer_in: 'Planned transfer in',
+  planned_transfer_out: 'Planned transfer out',
 };
 
 /** How many coming-up items show before "Show all". */

@@ -42,7 +42,7 @@ function grocerySpending(from: string, to: string): number {
 
 const bonus: PlannedCashFlowEvent = {
   id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
-  accountId: null, paymentMode: null,
+  accountId: null, toAccountId: null, paymentMode: null,
 };
 
 describe('buildCashFlowModel', () => {
@@ -179,6 +179,17 @@ describe('buildCashFlowModel', () => {
     expect(december.components.typicalIncome).toBe(roundCents((6000 / DAYS_PER_MONTH) * 31));
     expect(december.components.typicalSpending).toBe(roundCents((4000 / DAYS_PER_MONTH) * 31));
     expect(december.components.plannedIncome).toBe(10000);
+  });
+
+  it('leaves a planned transfer between the user’s own accounts out of income and spending', () => {
+    const savings = { account_id: 'savings', name: 'Savings', type: 'depository', subtype: 'savings', balance: { current: 100 } };
+    const transfer: PlannedCashFlowEvent = {
+      ...bonus, id: 'move', label: 'Move to savings', kind: 'transfer', amount: 750, startDate: '2026-10-15', recurrence: 'monthly',
+      accountId: 'checking', toAccountId: 'savings',
+    };
+    const accounts = [...ACCOUNTS, savings];
+    const year = (built: ReturnType<typeof model>) => forecastTotals(built, '2026-10-01', '2027-10-01');
+    expect(year(model({ accounts, plannedEvents: [transfer] }))).toEqual(year(model({ accounts })));
   });
 
   it('still needs history for a side that is not overridden', () => {

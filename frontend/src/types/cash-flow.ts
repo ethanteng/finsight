@@ -125,7 +125,7 @@ export interface CashFlowTypicalPayee extends CashFlowItemTransactions {
   countedOneOffIds: string[];
 }
 
-export type PlannedEventKind = 'income' | 'expense' | 'card_payment';
+export type PlannedEventKind = 'income' | 'expense' | 'transfer' | 'card_payment';
 export type PlannedEventRecurrence = 'once' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annually';
 export type CardPaymentMode = 'full' | 'fixed';
 
@@ -138,8 +138,14 @@ export interface PlannedCashFlowEvent {
   startDate: string;
   recurrence: PlannedEventRecurrence;
   endDate: string | null;
-  /** For a card payment, the card it pays; for income or an expense, the cash account it lands in, or null for the primary one. */
+  /**
+   * For a card payment, the card it pays; for a transfer, the cash account it
+   * leaves; for income or an expense, the cash account it lands in, or null
+   * for the primary one.
+   */
   accountId: string | null;
+  /** For a transfer, the cash account it goes to. Absent from a report built before transfers existed. */
+  toAccountId?: string | null;
   paymentMode: CardPaymentMode | null;
 }
 
@@ -320,7 +326,9 @@ export interface CashFlowCardSummary {
 export interface CashPositionItem {
   date: string;
   label: string;
-  kind: 'income' | 'bill' | 'transfer_in' | 'transfer_out' | 'card_payment' | 'planned_income' | 'planned_expense';
+  kind:
+    | 'income' | 'bill' | 'transfer_in' | 'transfer_out' | 'card_payment'
+    | 'planned_income' | 'planned_expense' | 'planned_transfer_in' | 'planned_transfer_out';
   /** Signed: positive into the accounts, negative out of them. */
   amount: number;
   /** Cash at the end of the item's day, everything else that day included. */

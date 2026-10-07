@@ -21,7 +21,7 @@ import { ACCOUNTS, CARD_TERMS, accountsWithCardTerms, householdTransactions, int
 
 const bonus: PlannedCashFlowEvent = {
   id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
-  accountId: null, paymentMode: null,
+  accountId: null, toAccountId: null, paymentMode: null,
 };
 
 function context(
@@ -175,6 +175,38 @@ describe('cash flow forecast pack wiring', () => {
     expect(without.facts.some(fact => fact.id.startsWith('cash_flow_'))).toBe(false);
   });
 
+  it('describes a planned transfer as moving cash between the user’s accounts, not income or spending', () => {
+    const savings = {
+      account_id: 'savings', name: 'High Yield Savings', type: 'depository', subtype: 'savings', balance: { current: 100 }, mask: '5678',
+    };
+    const transfer: PlannedCashFlowEvent = {
+      ...bonus, id: 'move', label: 'Move to savings', kind: 'transfer', amount: 750, startDate: '2026-11-01', recurrence: 'monthly',
+      accountId: 'checking', toAccountId: 'savings',
+    };
+    const forecast = buildCashFlowForecastContext(buildCashFlowModel({
+      transactions: householdTransactions('2026-06-03', '2026-10-14'),
+      accounts: [...ACCOUNTS, savings],
+      plannedEvents: [transfer],
+      dataThrough: '2026-10-14',
+      today: '2026-10-15',
+    }));
+    const transferFacts = byId(cashFlowForecastFacts(forecast));
+    const amount = transferFacts.get('cash_flow_planned_event_1_amount')!;
+    expect(amount.value).toBe(750);
+    expect(amount.label).toContain('transfer from account “Everyday Checking ending 1234” to account “High Yield Savings ending 5678”');
+    expect(amount.label).toContain('not income or spending');
+    expect(transferFacts.get('cash_flow_this_quarter_planned_events_net')?.value ?? 0).toBe(0);
+
+    const details = compactCashFlowForecastDetails(forecast) as any;
+    expect(details.plannedEvents[0]).toMatchObject({
+      kind: 'transfer',
+      from: 'account “Everyday Checking ending 1234”',
+      to: 'account “High Yield Savings ending 5678”',
+      changesSavings: false,
+      amountFactId: 'cash_flow_planned_event_1_amount',
+    });
+  });
+
   it('gives the model structure that points at facts instead of repeating amounts', () => {
     const forecast = context();
     const details = compactCashFlowForecastDetails(forecast) as any;
@@ -237,7 +269,7 @@ describe('grounding answers about the forecast', () => {
 describe('credit cards and cash position in the pack', () => {
   const payoff: PlannedCashFlowEvent = {
     id: 'payoff', label: 'Pay off Rewards Card', kind: 'card_payment', amount: 0, startDate: '2026-10-25', recurrence: 'once',
-    endDate: null, accountId: 'card', paymentMode: 'full',
+    endDate: null, accountId: 'card', toAccountId: null, paymentMode: 'full',
   };
   const extra: PlannedCashFlowEvent = { ...payoff, id: 'extra', label: 'Extra card payment', paymentMode: 'fixed', amount: 500, startDate: '2026-11-25' };
   const carrying = [...householdTransactions('2026-06-03', '2026-10-14'), ...interestCharges('2026-06-03', '2026-10-14')];

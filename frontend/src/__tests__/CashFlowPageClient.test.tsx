@@ -1108,6 +1108,64 @@ describe('CashFlowPageClient', () => {
       await waitFor(() => expect(calls.filter(call => call.init?.method === 'PUT')).toHaveLength(3));
       expect(saved(calls)).toMatchObject({ accountId: 'checking' });
     });
+
+    it('plans a transfer from one account to another', async () => {
+      const calls = mockFetch((url, init) => {
+        if (url.endsWith('/api/cash-flow/events') && init?.method === 'POST') return { status: 201, body: { event: {} } };
+        return answer(url);
+      });
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'Planned events' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add planned event' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Transfer' }));
+      // Out of the primary account and into savings, until the user picks otherwise.
+      expect(screen.getByLabelText('From')).toHaveValue('checking');
+      expect(screen.getByLabelText('To')).toHaveValue('savings');
+      expect(screen.queryByLabelText('Account')).not.toBeInTheDocument();
+      expect(screen.getByText(/not what you’re expected to save/)).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Move to savings' } });
+      fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '500' } });
+      fireEvent.change(screen.getByLabelText('Repeats'), { target: { value: 'monthly' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Add to forecast' }));
+
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+      expect(JSON.parse(String(calls.find(call => call.init?.method === 'POST')!.init!.body))).toMatchObject({
+        label: 'Move to savings', kind: 'transfer', amount: 500, recurrence: 'monthly', accountId: 'checking', toAccountId: 'savings',
+      });
+    });
+
+    it('won’t save a transfer into the account it leaves', async () => {
+      mockFetch(answer);
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'Planned events' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add planned event' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Transfer' }));
+      fireEvent.change(screen.getByLabelText('To'), { target: { value: 'checking' } });
+      expect(screen.getByText('Choose two different accounts.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Add to forecast' })).toBeDisabled();
+    });
+
+    it('lists a planned transfer by its route, and says in the savings view where it shows', async () => {
+      const move = {
+        id: 'move', label: 'Move to savings', kind: 'transfer', amount: 500, startDate: '2026-11-01', recurrence: 'monthly', endDate: null,
+        accountId: 'checking', toAccountId: 'savings', paymentMode: null, nextDate: '2026-11-01', occurrencesInRange: 3,
+      } as const;
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: { ...both(), plannedEvents: [move] } } : undefined));
+      render(<CashFlowPageClient />);
+      const panel = (await screen.findByRole('heading', { name: 'Planned events' })).closest('section')!;
+      expect(within(panel).getByText(/Every month from Nov 1, 2026 · Everyday Checking ••1234 to High Yield Savings ••5678/))
+        .toBeInTheDocument();
+      // Neither money in nor money out, so no sign.
+      expect(within(panel).getByText('$500.00')).toBeInTheDocument();
+      expect(screen.getByText(/Moving money between your own accounts isn’t cash in or out here/)).toBeInTheDocument();
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'Edit Move to savings' }));
+      expect(screen.getByLabelText('From')).toHaveValue('checking');
+      expect(screen.getByLabelText('To')).toHaveValue('savings');
+    });
   });
 
   it('lists the cash position by period when the chart shows it', async () => {
@@ -1200,6 +1258,15 @@ describe('CashFlowPageClient', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
     expect(screen.getByText('Paid to cards leaves out Marriott Amex ••1005: its payments don’t seem to come from your connected accounts.')).toBeInTheDocument();
+  });
+
+  it('offers a transfer only with two cash accounts to move between', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'Planned events' });
+    fireEvent.click(screen.getByRole('button', { name: 'Add planned event' }));
+    expect(screen.getByRole('button', { name: 'Money out' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Transfer' })).not.toBeInTheDocument();
   });
 
   it('says in the savings view where planned card payments show', async () => {

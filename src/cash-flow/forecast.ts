@@ -917,9 +917,10 @@ function plannedTotals(model: CashFlowModel, from: CalendarDate, to: CalendarDat
   let income = 0;
   let spending = 0;
   for (const event of model.plannedEvents) {
-    // A card payment is a transfer between the user's accounts; its effect
-    // reaches savings only through the card interest it changes.
-    if (event.kind === 'card_payment') continue;
+    // A transfer moves money between the user's own accounts, and so does a
+    // card payment, whose effect reaches savings only through the card
+    // interest it changes.
+    if (event.kind === 'card_payment' || event.kind === 'transfer') continue;
     const count = expandPlannedEvent(event, from, to).length;
     if (event.kind === 'income') income += count * event.amount;
     else spending += count * event.amount;

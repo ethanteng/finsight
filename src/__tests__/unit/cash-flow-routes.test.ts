@@ -54,6 +54,7 @@ const eventRow = (overrides: Record<string, unknown> = {}) => ({
   recurrence: 'once',
   endDate: null,
   accountId: null,
+  toAccountId: null,
   paymentMode: null,
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -220,12 +221,13 @@ describe('cash flow routes', () => {
           recurrence: 'once',
           endDate: null,
           accountId: null,
+          toAccountId: null,
           paymentMode: null,
         },
       });
       expect(response.body.event).toEqual({
         id: 'event-1', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
-        accountId: null, paymentMode: null,
+        accountId: null, toAccountId: null, paymentMode: null,
       });
     });
 
@@ -288,6 +290,49 @@ describe('cash flow routes', () => {
       expect(response.status).toBe(400);
       expect(response.body).toEqual({ error: 'Choose one of your connected checking or savings accounts' });
       expect(prisma.plannedCashFlowEvent.create).not.toHaveBeenCalled();
+    });
+
+    describe('transfers', () => {
+      const transfer = {
+        label: 'Move to savings', kind: 'transfer', amount: 500, accountId: 'checking', toAccountId: 'savings',
+        startDate: '2026-11-01', recurrence: 'monthly',
+      };
+      const SAVINGS = { account_id: 'savings', name: 'Savings', type: 'depository', subtype: 'savings', balance: { current: 100 } };
+
+      beforeEach(() => {
+        prisma.financialSummarySnapshot.findUnique.mockResolvedValue({ accounts: [...ACCOUNTS, SAVINGS] });
+      });
+
+      it('saves a transfer between two of the user’s own cash accounts', async () => {
+        prisma.plannedCashFlowEvent.count.mockResolvedValue(0);
+        prisma.plannedCashFlowEvent.create.mockResolvedValue(eventRow({ kind: 'transfer', accountId: 'checking', toAccountId: 'savings' }));
+
+        const response = await request(app).post('/api/cash-flow/events').send(transfer);
+
+        expect(response.status).toBe(201);
+        expect(prisma.plannedCashFlowEvent.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({ kind: 'transfer', amount: 500, accountId: 'checking', toAccountId: 'savings', paymentMode: null }),
+        });
+        expect(response.body.event).toMatchObject({ kind: 'transfer', accountId: 'checking', toAccountId: 'savings' });
+      });
+
+      it.each([
+        ['from a credit card', { accountId: 'card' }],
+        ['to a credit card', { toAccountId: 'card' }],
+        ['to an account the user does not have', { toAccountId: 'someone-elses-savings' }],
+        ['to an investment account', { toAccountId: 'brokerage' }],
+      ])('refuses a transfer %s', async (_label, accounts) => {
+        const response = await request(app).post('/api/cash-flow/events').send({ ...transfer, ...accounts });
+        expect(response.status).toBe(400);
+        expect(response.body).toEqual({ error: 'Choose two of your connected checking or savings accounts' });
+        expect(prisma.plannedCashFlowEvent.create).not.toHaveBeenCalled();
+      });
+
+      it('checks both accounts on update too', async () => {
+        const response = await request(app).put('/api/cash-flow/events/event-1').send({ ...transfer, toAccountId: 'card' });
+        expect(response.status).toBe(400);
+        expect(prisma.plannedCashFlowEvent.updateMany).not.toHaveBeenCalled();
+      });
     });
 
     it('checks the card on update too', async () => {
