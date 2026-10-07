@@ -115,11 +115,12 @@ function breakdownLines(
 function Line({ label, detail, value }: BreakdownLine) {
   return (
     <div className="flex items-baseline justify-between gap-4 text-sm">
-      <dt className="text-[#5e6b63]">
+      <dt className="min-w-0 text-[#5e6b63]">
         {label}
         {detail && <span className="block text-xs text-[#66736b]">{detail}</span>}
       </dt>
-      <dd className="font-semibold tabular-nums text-[#102319]">{formatSignedMoney(value)}</dd>
+      {/* The label and its note wrap; the amount never splits from its sign. */}
+      <dd className="shrink-0 whitespace-nowrap font-semibold tabular-nums text-[#102319]">{formatSignedMoney(value)}</dd>
     </div>
   );
 }
@@ -163,7 +164,7 @@ function HighlightCard({
               {lines.map(line => <Line key={line.label} {...line} />)}
               <div className="flex items-baseline justify-between gap-4 border-t border-[#102319]/10 pt-2 text-sm">
                 <dt className="font-semibold text-[#102319]">{headlineLabel}</dt>
-                <dd className={`font-bold tabular-nums ${headlineColor}`}>{formatSignedMoney(headline.net)}</dd>
+                <dd className={`shrink-0 whitespace-nowrap font-bold tabular-nums ${headlineColor}`}>{formatSignedMoney(headline.net)}</dd>
               </div>
             </dl>
           )}
