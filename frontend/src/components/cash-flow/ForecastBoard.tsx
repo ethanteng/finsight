@@ -393,7 +393,13 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
       // A report from before the field existed: the same items at their monthly rates.
       ?? regular.reduce((sum, item) => sum + item.monthlyAmount, 0);
     const spread = flow === 'income' ? baseline.typicalMonthlyIncome : baseline.typicalMonthlySpending;
-    const interest = flow === 'spending' ? baseline.cardInterestMonthly ?? 0 : 0;
+    // A report from before the field existed still counts the interest in its
+    // usual spending, as projected-interest sources; take it from there.
+    const interest = flow === 'spending'
+      ? baseline.cardInterestMonthly ?? (report.usualSpending?.categories ?? [])
+        .flatMap(category => category.sources ?? [])
+        .reduce((sum, source) => sum + (source.kind === 'projected_interest' ? source.monthly : 0), 0)
+      : 0;
     const exact = [repeating, spread, interest];
     const total = Math.round(exact.reduce((sum, part) => sum + part, 0));
     const [repeatingShown, spreadShown, interestShown] = roundToTotal(exact, total);

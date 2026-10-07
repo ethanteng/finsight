@@ -603,6 +603,18 @@ describe('CashFlowPageClient', () => {
       expect(moneyOut).toHaveTextContent('Card interest: projected from each card’s APR at your usual payment pace.$10 a month');
     });
 
+    it('reads the halves from an older report that lacks them, card interest included', async () => {
+      // No recurringMonthly* or cardInterestMonthly: the regular items at their monthly rates, and the
+      // usual-spending breakdown's projected interest ($9.80), stand in.
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      const moneyOut = within(section).getByRole('heading', { name: 'Money out' }).closest('div')!.parentElement!;
+      // $2,000 rent + $1,825 everything else + $9.80 interest.
+      expect(moneyOut).toHaveTextContent('about $3,835 a month');
+      expect(moneyOut).toHaveTextContent('Card interest: projected from each card’s APR at your usual payment pace.$10 a month');
+    });
+
     it('still offers typical income leave-out when spending is overridden', async () => {
       const body = report({
         baseline: {

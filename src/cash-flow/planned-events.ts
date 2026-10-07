@@ -205,8 +205,9 @@ function repeats(event: PlannedCashFlowEvent): boolean {
  */
 export function describeRecurrence(event: Pick<PlannedCashFlowEvent, 'recurrence' | 'repeatEvery' | 'repeatUnit'>): string {
   if (event.recurrence !== 'custom') return event.recurrence;
-  const every = event.repeatEvery ?? 1;
-  return every === 1 ? `every ${event.repeatUnit}` : `every ${every} ${event.repeatUnit}s`;
+  // Without its interval it is expanded as happening once, so it is described that way too.
+  if (!event.repeatEvery || !event.repeatUnit) return 'once';
+  return event.repeatEvery === 1 ? `every ${event.repeatUnit}` : `every ${event.repeatEvery} ${event.repeatUnit}s`;
 }
 
 /** The event's occurrences in `[from, toExclusive)`, oldest first. */

@@ -185,6 +185,9 @@ describe('expandPlannedEvent', () => {
     expect(describeRecurrence({ recurrence: 'custom', repeatEvery: 3, repeatUnit: 'week' })).toBe('every 3 weeks');
     expect(describeRecurrence({ recurrence: 'custom', repeatEvery: 1, repeatUnit: 'month' })).toBe('every month');
     expect(describeRecurrence({ recurrence: 'semiannually', repeatEvery: null, repeatUnit: null })).toBe('semiannually');
+    // Expanded as once without its interval, and described the same way.
+    expect(describeRecurrence({ recurrence: 'custom', repeatEvery: null, repeatUnit: 'week' })).toBe('once');
+    expect(describeRecurrence({ recurrence: 'custom', repeatEvery: 3, repeatUnit: null })).toBe('once');
   });
 
   it('expands one-time, biweekly and annual events', () => {
