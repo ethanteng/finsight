@@ -57,6 +57,8 @@ export interface CashFlowHighlight {
   remaining: ForecastTotals | null;
   projected: CashFlowTotals | null;
   planned: CashFlowTotals;
+  /** The plans with an occurrence inside the forecast part, by id. Absent from a report built before it existed. */
+  plannedEventIds?: string[];
   projectedWithoutPlanned: CashFlowTotals | null;
 }
 

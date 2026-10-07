@@ -46,9 +46,10 @@ function plannedDetail(highlight: CashFlowHighlight, events: readonly CashFlowPl
     if (Math.round(components.plannedSpending) !== 0) parts.push('planned spending');
     if (Math.round(interest) !== 0) parts.push(interest < 0 ? 'card interest saved' : 'added card interest');
   }
-  const inWindow = (kind: CashFlowPlannedEventSummary['kind']) => events.some(
-    event => event.kind === kind && event.nextDate !== null && event.nextDate < highlight.endExclusive
-  );
+  // The server says which plans fall in the window: the forecast can start
+  // before the window does, when transactions are a few days behind.
+  const ids = new Set(highlight.plannedEventIds ?? []);
+  const inWindow = (kind: CashFlowPlannedEventSummary['kind']) => events.some(event => event.kind === kind && ids.has(event.id));
   const moves = [inWindow('transfer') && 'transfers', inWindow('card_payment') && 'card payments'].filter(Boolean);
   const pieces = [
     parts.length > 0 && parts.join(', '),

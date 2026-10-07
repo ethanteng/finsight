@@ -291,9 +291,9 @@ describe('CashFlowPageClient', () => {
       body: report({
         plannedEvents: [payoff, move],
         highlights: [
-          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: withPlans(totals(0, -5)), projected: totals(5000, 3395), planned: totals(0, -5), projectedWithoutPlanned: totals(5000, 3400) },
-          { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: withPlans(totals(0, -13)), projected: totals(5000, 3387), planned: totals(0, -13), projectedWithoutPlanned: totals(5000, 3400) },
-          { key: 'next_12_months', start: '2026-10-15', endExclusive: '2027-10-15', actualToDate: null, actualCoverage: null, remaining: withPlans(totals(0, -22)), projected: totals(2500, 978), planned: totals(0, -22), projectedWithoutPlanned: totals(2500, 1000) },
+          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: withPlans(totals(0, -5)), projected: totals(5000, 3395), planned: totals(0, -5), plannedEventIds: ['payoff'], projectedWithoutPlanned: totals(5000, 3400) },
+          { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: withPlans(totals(0, -13)), projected: totals(5000, 3387), planned: totals(0, -13), plannedEventIds: ['payoff', 'move'], projectedWithoutPlanned: totals(5000, 3400) },
+          { key: 'next_12_months', start: '2026-10-15', endExclusive: '2027-10-15', actualToDate: null, actualCoverage: null, remaining: withPlans(totals(0, -22)), projected: totals(2500, 978), planned: totals(0, -22), plannedEventIds: ['payoff', 'move'], projectedWithoutPlanned: totals(2500, 1000) },
         ],
       }),
     } : undefined));
@@ -308,10 +308,11 @@ describe('CashFlowPageClient', () => {
     unmount();
 
     // A transfer alone changes nothing, and the row says why rather than vanishing; this
-    // month it hasn't started, so there is nothing to say.
+    // month it hasn't started, so there is nothing to say. Which plans fall in a window
+    // is the server's call: the forecast can start before the window when data is stale.
     mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ plannedEvents: [move], highlights: [
-      { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: withPlans(totals(0, 0)), projected: totals(5000, 3400), planned: totals(0, 0), projectedWithoutPlanned: totals(5000, 3400) },
-      { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: withPlans(totals(0, 0)), projected: totals(5000, 3400), planned: totals(0, 0), projectedWithoutPlanned: totals(5000, 3400) },
+      { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: withPlans(totals(0, 0)), projected: totals(5000, 3400), planned: totals(0, 0), plannedEventIds: [], projectedWithoutPlanned: totals(5000, 3400) },
+      { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: withPlans(totals(0, 0)), projected: totals(5000, 3400), planned: totals(0, 0), plannedEventIds: ['move'], projectedWithoutPlanned: totals(5000, 3400) },
     ] }) } : undefined));
     render(<CashFlowPageClient />);
     const transferMonth = (await screen.findByRole('heading', { name: 'This month' })).closest('article')!;

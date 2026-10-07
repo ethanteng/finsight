@@ -1289,6 +1289,8 @@ export interface CashFlowHighlight {
   projected: CashFlowTotals | null;
   /** What the user's plans change inside the forecast part, card interest included. */
   planned: CashFlowTotals;
+  /** The plans with an occurrence inside the forecast part, by id, whether or not they change what is saved. */
+  plannedEventIds: string[];
   /** `projected` without the planned events; null whenever `projected` is. */
   projectedWithoutPlanned: CashFlowTotals | null;
 }
@@ -1328,6 +1330,11 @@ export function buildCashFlowHighlights(model: CashFlowModel): CashFlowHighlight
     const planned = remaining && remainingWithoutPlans
       ? totals(remaining.income - remainingWithoutPlans.income, remaining.spending - remainingWithoutPlans.spending)
       : totals(0, 0);
+    const forecastFrom = maxDate(start, model.forecastStart);
+    const forecastTo = minDate(endExclusive, model.forecastEndLimit);
+    const plannedEventIds = remaining
+      ? model.plannedEvents.filter(event => expandPlannedEvent(event, forecastFrom, forecastTo).length > 0).map(event => event.id)
+      : [];
     return {
       key,
       start,
@@ -1337,6 +1344,7 @@ export function buildCashFlowHighlights(model: CashFlowModel): CashFlowHighlight
       remaining,
       projected,
       planned,
+      plannedEventIds,
       projectedWithoutPlanned: projected && remainingWithoutPlans ? combine(actualToDate, remainingWithoutPlans) : null,
     };
   });
