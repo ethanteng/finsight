@@ -73,7 +73,7 @@ The Finances page shows the expected month as Monthly Income and Monthly Expense
 
 ### Usual spending by category
 
-`expectedSpendingByCategory(model)` splits the expected month's spending by category. The report carries it as `usualSpending`, and the cash flow page draws it as a ranked bar chart below the highlight cards. Its parts:
+`expectedSpendingByCategory(model)` splits the expected month's spending by category. The report carries it as `usualSpending`, and the cash flow page draws it as a ranked bar chart below "Cash flow over time". Its parts:
 
 - **Regular bills:** each one still running, at its monthly rate, in the category its transactions carry.
 - **The typical rate:** split the way the basis spent it, with refunds netted inside their own category. Only the accounts the rate counts are split: an account whose refunds outweighed its spending adds nothing to the rate, so its transactions are behind no category either. A category whose refunds outweighed its purchases has nothing to show, so the rest are scaled to the rate itself rather than summed.
