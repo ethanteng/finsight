@@ -8,6 +8,7 @@ import type {
   ForecastUnavailableReason,
   PlannedCashFlowEvent,
   PlannedEventRecurrence,
+  RepeatUnit,
   RecurringCadence,
 } from '../types/cash-flow';
 
@@ -149,8 +150,15 @@ export const RECURRENCE_LABELS: Record<PlannedEventRecurrence, string> = {
   biweekly: 'Every 2 weeks',
   monthly: 'Every month',
   quarterly: 'Every 3 months',
+  semiannually: 'Every 6 months',
   annually: 'Every year',
+  custom: 'Custom…',
 };
+
+/** "Every 3 weeks", "Every month": a custom recurrence in words. */
+export function customRecurrenceLabel(every: number, unit: RepeatUnit): string {
+  return every === 1 ? `Every ${unit}` : `Every ${every} ${unit}s`;
+}
 
 export const HIGHLIGHT_LABELS: Record<CashFlowHighlightKey, string> = {
   this_month: 'This month',
@@ -163,10 +171,15 @@ export const HIGHLIGHT_LABELS: Record<CashFlowHighlightKey, string> = {
   next_12_months: 'Next 12 months',
 };
 
-/** "Once on Dec 15, 2026", "Every month from Jan 1, 2027 until Jun 1, 2027". */
-export function describeSchedule(event: Pick<PlannedCashFlowEvent, 'recurrence' | 'startDate' | 'endDate'>): string {
-  if (event.recurrence === 'once') return `Once on ${formatCalendarDate(event.startDate)}`;
-  const base = `${RECURRENCE_LABELS[event.recurrence]} from ${formatCalendarDate(event.startDate)}`;
+/** "Once on Dec 15, 2026", "Every month from Jan 1, 2027 until Jun 1, 2027", "Every 3 weeks from …". */
+export function describeSchedule(
+  event: Pick<PlannedCashFlowEvent, 'recurrence' | 'startDate' | 'endDate' | 'repeatEvery' | 'repeatUnit'>
+): string {
+  const custom = event.recurrence === 'custom' && event.repeatEvery && event.repeatUnit
+    ? customRecurrenceLabel(event.repeatEvery, event.repeatUnit)
+    : null;
+  if (event.recurrence === 'once' || (event.recurrence === 'custom' && !custom)) return `Once on ${formatCalendarDate(event.startDate)}`;
+  const base = `${custom ?? RECURRENCE_LABELS[event.recurrence]} from ${formatCalendarDate(event.startDate)}`;
   return event.endDate ? `${base} until ${formatCalendarDate(event.endDate)}` : base;
 }
 

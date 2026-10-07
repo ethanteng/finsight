@@ -13,7 +13,7 @@ import type { ForecastAdjustmentKind } from '../cash-flow/adjustments';
 import { addDays } from '../cash-flow/calendar';
 import type { CardPaymentBehavior } from '../cash-flow/cards';
 import { buildCashPosition, cashMilestones } from '../cash-flow/position';
-import { expandPlannedEvent } from '../cash-flow/planned-events';
+import { describeRecurrence, expandPlannedEvent } from '../cash-flow/planned-events';
 import { streamMonthlyAmount } from '../cash-flow/recurring';
 import type { CanonicalFact } from './canonical-facts';
 import type { FinancialContextSnapshot } from './types';
@@ -209,7 +209,8 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
       kind: event.kind,
       amount: event.amount,
       startDate: event.startDate,
-      recurrence: event.recurrence,
+      // In words, so a custom interval reads "every 3 weeks" rather than "custom".
+      recurrence: describeRecurrence(event),
       endDate: event.endDate,
       nextDate: expandPlannedEvent(event, model.forecastStart, model.forecastEndLimit)[0] ?? null,
       ...(event.kind === 'card_payment' && { accountId: event.accountId, paymentMode: event.paymentMode }),

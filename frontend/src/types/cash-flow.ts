@@ -128,7 +128,10 @@ export interface CashFlowTypicalPayee extends CashFlowItemTransactions {
 }
 
 export type PlannedEventKind = 'income' | 'expense' | 'transfer' | 'card_payment';
-export type PlannedEventRecurrence = 'once' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annually';
+export type PlannedEventRecurrence =
+  'once' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'semiannually' | 'annually' | 'custom';
+/** The unit of a custom recurrence: "every 3 weeks". */
+export type RepeatUnit = 'day' | 'week' | 'month' | 'year';
 export type CardPaymentMode = 'full' | 'fixed';
 
 export interface PlannedCashFlowEvent {
@@ -140,6 +143,9 @@ export interface PlannedCashFlowEvent {
   startDate: string;
   recurrence: PlannedEventRecurrence;
   endDate: string | null;
+  /** For a custom recurrence, how many units apart occurrences fall. Absent from an event saved before custom repeats. */
+  repeatEvery?: number | null;
+  repeatUnit?: RepeatUnit | null;
   /**
    * For a card payment, the card it pays; for a transfer, the cash account it
    * leaves; for income or an expense, the cash account it lands in, or null

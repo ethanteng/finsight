@@ -42,7 +42,7 @@ function available(position: CashPosition) {
 
 const event = (overrides: Partial<PlannedCashFlowEvent>): PlannedCashFlowEvent => ({
   id: 'event', label: 'Event', kind: 'income', amount: 1000, startDate: '2026-10-15', recurrence: 'once', endDate: null,
-  accountId: null, toAccountId: null, paymentMode: null,
+  repeatEvery: null, repeatUnit: null, accountId: null, toAccountId: null, paymentMode: null,
   ...overrides,
 });
 

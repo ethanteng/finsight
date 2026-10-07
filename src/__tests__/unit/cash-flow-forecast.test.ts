@@ -42,7 +42,7 @@ function grocerySpending(from: string, to: string): number {
 
 const bonus: PlannedCashFlowEvent = {
   id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
-  accountId: null, toAccountId: null, paymentMode: null,
+  repeatEvery: null, repeatUnit: null, accountId: null, toAccountId: null, paymentMode: null,
 };
 
 describe('buildCashFlowModel', () => {

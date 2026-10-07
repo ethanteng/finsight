@@ -1344,6 +1344,53 @@ describe('CashFlowPageClient', () => {
     expect(screen.getByText('Paid to cards leaves out Marriott Amex ••1005: its payments don’t seem to come from your connected accounts.')).toBeInTheDocument();
   });
 
+  it('repeats a planned event every 6 months, or on a custom interval', async () => {
+    const calls = mockFetch((url, init) => {
+      if (url.endsWith('/api/cash-flow/events') && init?.method === 'POST') return { status: 201, body: { event: {} } };
+      return url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined;
+    });
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'Planned events' });
+    fireEvent.click(screen.getByRole('button', { name: 'Add planned event' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Club dues' } });
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '90' } });
+    expect(screen.getByRole('option', { name: 'Every 6 months' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Repeats'), { target: { value: 'custom' } });
+    const howMany = screen.getByLabelText('How many');
+    expect(howMany).toHaveValue('2');
+    expect(screen.getByLabelText('Unit')).toHaveValue('month');
+    fireEvent.change(howMany, { target: { value: '0' } });
+    expect(screen.getByRole('button', { name: 'Add to forecast' })).toBeDisabled();
+    fireEvent.change(howMany, { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('Unit'), { target: { value: 'week' } });
+    expect(screen.getByRole('option', { name: 'weeks' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add to forecast' }));
+
+    await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+    expect(JSON.parse(String(calls.find(call => call.init?.method === 'POST')!.init!.body))).toMatchObject({
+      label: 'Club dues', kind: 'expense', amount: 90, recurrence: 'custom', repeatEvery: 3, repeatUnit: 'week',
+    });
+  });
+
+  it('describes a custom repeat in the list, and edits it back', async () => {
+    const dues = {
+      id: 'dues', label: 'Club dues', kind: 'expense', amount: 90, startDate: '2026-11-01', recurrence: 'custom', endDate: null,
+      repeatEvery: 3, repeatUnit: 'week', accountId: null, paymentMode: null, nextDate: '2026-11-01', occurrencesInRange: 4,
+    } as const;
+    const twice = { ...dues, id: 'twice', label: 'Insurance', recurrence: 'semiannually', repeatEvery: null, repeatUnit: null } as const;
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ plannedEvents: [dues, twice] }) } : undefined));
+    render(<CashFlowPageClient />);
+    const panel = (await screen.findByRole('heading', { name: 'Planned events' })).closest('section')!;
+    expect(within(panel).getByText(/Every 3 weeks from Nov 1, 2026/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Every 6 months from Nov 1, 2026/)).toBeInTheDocument();
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Edit Club dues' }));
+    expect(screen.getByLabelText('Repeats')).toHaveValue('custom');
+    expect(screen.getByLabelText('How many')).toHaveValue('3');
+    expect(screen.getByLabelText('Unit')).toHaveValue('week');
+  });
+
   it('offers a transfer only with two cash accounts to move between', async () => {
     mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
     render(<CashFlowPageClient />);

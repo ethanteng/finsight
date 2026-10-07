@@ -126,7 +126,7 @@ Long lists show eight items. "Show more" adds eight at a time and "Show all" sho
 
 Planned events are stored in `planned_cash_flow_events`, are scoped to the user, and are capped at 100 per user. The cap is enforced under a per-user advisory lock, so simultaneous creates cannot pass it.
 
-Each event is `income`, `expense`, `transfer` or `card_payment`, has a start date, and recurs once, weekly, every two weeks, monthly, quarterly or annually, with an optional end date. Income, expenses and transfers carry a positive amount.
+Each event is `income`, `expense`, `transfer` or `card_payment`, has a start date, and recurs once, weekly, every two weeks, monthly, quarterly, every six months, annually or on a custom interval, with an optional end date. A custom interval is every 1 to 99 days, weeks, months or years (`repeatEvery`, `repeatUnit`); months step from the start date, like the monthly cadence. Card payments stay once or monthly. Income, expenses and transfers carry a positive amount.
 
 Income or an expense may name the cash account it lands in (`accountId`, checked against the user's own checking and savings accounts). One saved without an account lands in the primary account, described under Cash position. The form offers the choice only when there is more than one cash account, so a single-account user never ties an event to an account that may not stay primary.
 

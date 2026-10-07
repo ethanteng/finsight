@@ -49,7 +49,7 @@ function project(
 
 const plan = (overrides: Partial<PlannedCashFlowEvent>): PlannedCashFlowEvent => ({
   id: 'plan', label: 'Card plan', kind: 'card_payment', amount: 0, startDate: '2026-11-20', recurrence: 'once', endDate: null,
-  accountId: 'card', toAccountId: null, paymentMode: 'full',
+  repeatEvery: null, repeatUnit: null, accountId: 'card', toAccountId: null, paymentMode: 'full',
   ...overrides,
 });
 

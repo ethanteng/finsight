@@ -21,6 +21,7 @@ import type {
   CashFlowPositionAccount,
   PlannedEventKind,
   PlannedEventRecurrence,
+  RepeatUnit,
 } from '../../types/cash-flow';
 
 /** Ask the panel to open its form on a card payment for this card. */
@@ -64,11 +65,22 @@ interface FormState {
   /** The cash accounts a transfer moves money from and to. */
   fromAccountId: string;
   toAccountId: string;
+  /** A custom recurrence: every `repeatEvery` `repeatUnit`s. Kept as typed until saved. */
+  repeatEvery: string;
+  repeatUnit: RepeatUnit;
   paymentMode: CardPaymentMode;
 }
 
 const RECURRENCES = Object.keys(RECURRENCE_LABELS) as PlannedEventRecurrence[];
 const CARD_RECURRENCES: PlannedEventRecurrence[] = ['once', 'monthly'];
+const REPEAT_UNITS: RepeatUnit[] = ['day', 'week', 'month', 'year'];
+const REPEAT_EVERY_MAX = 99;
+
+/** The custom interval as a whole number in range, or null while it isn't one. */
+function repeatEveryValue(typed: string): number | null {
+  const every = Number(typed);
+  return /^\d+$/.test(typed.trim()) && every >= 1 && every <= REPEAT_EVERY_MAX ? every : null;
+}
 
 const KIND_LABELS: Record<PlannedEventKind, string> = {
   income: 'Money in',
@@ -80,10 +92,14 @@ const KIND_LABELS: Record<PlannedEventKind, string> = {
 const fieldClass =
   'mt-1.5 w-full rounded-xl border border-[#102319]/15 bg-white px-3.5 py-2.5 text-sm text-[#102319] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319]';
 
+/** A field set beside another, under a shared legend rather than its own label. */
+const inlineFieldClass = fieldClass.replace('mt-1.5 ', '');
+
 function emptyForm(today: string): FormState {
   return {
     id: null, label: '', labelIsAutomatic: false, kind: 'expense', amount: '', startDate: today, recurrence: 'once',
-    endDate: '', accountId: '', cashAccountId: '', fromAccountId: '', toAccountId: '', paymentMode: 'full',
+    endDate: '', accountId: '', cashAccountId: '', fromAccountId: '', toAccountId: '', repeatEvery: '2', repeatUnit: 'month',
+    paymentMode: 'full',
   };
 }
 
@@ -227,6 +243,8 @@ export default function PlannedEventsPanel({
       // A side no longer connected is left for the user to choose again.
       fromAccountId: event.kind === 'transfer' ? connected(event.accountId) : '',
       toAccountId: event.kind === 'transfer' ? connected(event.toAccountId) : '',
+      repeatEvery: event.repeatEvery ? String(event.repeatEvery) : '2',
+      repeatUnit: event.repeatUnit ?? 'month',
       paymentMode: event.paymentMode ?? 'full',
     });
   };
@@ -245,6 +263,7 @@ export default function PlannedEventsPanel({
         startDate: form.startDate,
         recurrence: form.recurrence,
         endDate: form.recurrence === 'once' ? null : form.endDate || null,
+        ...(form.recurrence === 'custom' && { repeatEvery: repeatEveryValue(form.repeatEvery), repeatUnit: form.repeatUnit }),
         // With one cash account there is nothing to choose, and an event saved
         // without one follows the primary account if more are connected later.
         ...(isCard
@@ -316,7 +335,7 @@ export default function PlannedEventsPanel({
           <h3 id="planned-events-heading" className="text-lg font-semibold text-[#102319]">Planned events</h3>
           <p className="mt-1 max-w-xl text-sm leading-6 text-[#5e6b63]">
             Add money you expect that your history can’t show: a bonus, a tuition bill, a planned purchase
-            {choosesAccount ? ', a move to savings' : ''}{cards.length > 0 ? ', or paying down a credit card' : ''}. Regular
+            {choosesAccount ? `,${cards.length > 0 ? '' : ' or'} a move to savings` : ''}{cards.length > 0 ? ', or paying down a credit card' : ''}. Regular
             paychecks and bills are already in the forecast.
           </p>
         </div>
@@ -433,6 +452,32 @@ export default function PlannedEventsPanel({
             </select>
           </label>
 
+          {form.recurrence === 'custom' && (
+            <fieldset className="text-sm font-semibold text-[#102319]">
+              <legend>Every</legend>
+              <div className="mt-1.5 grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                <input
+                  aria-label="How many"
+                  className={inlineFieldClass}
+                  inputMode="numeric"
+                  value={form.repeatEvery}
+                  onChange={event => update({ repeatEvery: event.target.value.replace(/[^0-9]/g, '').slice(0, 2) })}
+                  required
+                />
+                <select
+                  aria-label="Unit"
+                  className={inlineFieldClass}
+                  value={form.repeatUnit}
+                  onChange={event => update({ repeatUnit: event.target.value as RepeatUnit })}
+                >
+                  {REPEAT_UNITS.map(unit => (
+                    <option key={unit} value={unit}>{form.repeatEvery === '1' ? unit : `${unit}s`}</option>
+                  ))}
+                </select>
+              </div>
+            </fieldset>
+          )}
+
           {form.recurrence !== 'once' && (
             <label className="text-sm font-semibold text-[#102319]">
               Last date <span className="font-normal text-[#66736b]">(optional)</span>
@@ -499,7 +544,7 @@ export default function PlannedEventsPanel({
           <div className="flex gap-2 sm:col-span-2">
             <button
               type="submit"
-              disabled={saving || sameAccount}
+              disabled={saving || sameAccount || (form.recurrence === 'custom' && repeatEveryValue(form.repeatEvery) === null)}
               className="min-h-10 rounded-full bg-[#102319] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#173c2c] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
             >
               {saving ? 'Saving…' : form.id ? 'Save changes' : 'Add to forecast'}

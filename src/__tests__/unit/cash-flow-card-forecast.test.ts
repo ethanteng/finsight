@@ -37,7 +37,7 @@ function model(overrides: Partial<CashFlowModelInput> = {}) {
 
 const payoff: PlannedCashFlowEvent = {
   id: 'payoff', label: 'Pay off Rewards Card', kind: 'card_payment', amount: 0, startDate: '2026-10-25', recurrence: 'once',
-  endDate: null, accountId: 'card', toAccountId: null, paymentMode: 'full',
+  endDate: null, repeatEvery: null, repeatUnit: null, accountId: 'card', toAccountId: null, paymentMode: 'full',
 };
 
 const NEXT_12 = ['2026-10-01', addMonths('2026-10-01', 12)] as const;

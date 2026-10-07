@@ -21,7 +21,7 @@ import { ACCOUNTS, CARD_TERMS, accountsWithCardTerms, householdTransactions, int
 
 const bonus: PlannedCashFlowEvent = {
   id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
-  accountId: null, toAccountId: null, paymentMode: null,
+  repeatEvery: null, repeatUnit: null, accountId: null, toAccountId: null, paymentMode: null,
 };
 
 function context(
@@ -207,6 +207,17 @@ describe('cash flow forecast pack wiring', () => {
     });
   });
 
+  it('says a custom repeat in words', () => {
+    const everyThreeWeeks: PlannedCashFlowEvent = {
+      ...bonus, id: 'dues', label: 'Club dues', kind: 'expense', amount: 90, startDate: '2026-11-01',
+      recurrence: 'custom', repeatEvery: 3, repeatUnit: 'week',
+    };
+    const forecast = context({ plannedEvents: [everyThreeWeeks] });
+    expect(byId(cashFlowForecastFacts(forecast)).get('cash_flow_planned_event_1_amount')!.label)
+      .toContain('“Club dues”, every 3 weeks from 2026-11-01');
+    expect((compactCashFlowForecastDetails(forecast) as any).plannedEvents[0].recurrence).toBe('every 3 weeks');
+  });
+
   it('gives the model structure that points at facts instead of repeating amounts', () => {
     const forecast = context();
     const details = compactCashFlowForecastDetails(forecast) as any;
@@ -269,7 +280,7 @@ describe('grounding answers about the forecast', () => {
 describe('credit cards and cash position in the pack', () => {
   const payoff: PlannedCashFlowEvent = {
     id: 'payoff', label: 'Pay off Rewards Card', kind: 'card_payment', amount: 0, startDate: '2026-10-25', recurrence: 'once',
-    endDate: null, accountId: 'card', toAccountId: null, paymentMode: 'full',
+    endDate: null, repeatEvery: null, repeatUnit: null, accountId: 'card', toAccountId: null, paymentMode: 'full',
   };
   const extra: PlannedCashFlowEvent = { ...payoff, id: 'extra', label: 'Extra card payment', paymentMode: 'fixed', amount: 500, startDate: '2026-11-25' };
   const carrying = [...householdTransactions('2026-06-03', '2026-10-14'), ...interestCharges('2026-06-03', '2026-10-14')];

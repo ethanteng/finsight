@@ -28,8 +28,15 @@ export type CardPaymentMode = (typeof CARD_PAYMENT_MODES)[number];
 /** A card plan is a single payment or a monthly one; other cadences do not match a card's cycle. */
 export const CARD_PAYMENT_RECURRENCES = ['once', 'monthly'] as const;
 
-export const PLANNED_EVENT_RECURRENCES = ['once', 'weekly', 'biweekly', 'monthly', 'quarterly', 'annually'] as const;
+export const PLANNED_EVENT_RECURRENCES = [
+  'once', 'weekly', 'biweekly', 'monthly', 'quarterly', 'semiannually', 'annually', 'custom',
+] as const;
 export type PlannedEventRecurrence = (typeof PLANNED_EVENT_RECURRENCES)[number];
+
+/** The unit of a custom recurrence: "every 3 weeks", "every 10 days". */
+export const REPEAT_UNITS = ['day', 'week', 'month', 'year'] as const;
+export type RepeatUnit = (typeof REPEAT_UNITS)[number];
+export const REPEAT_EVERY_MAX = 99;
 
 export const PLANNED_EVENT_LABEL_MAX_LENGTH = 80;
 const ACCOUNT_ID_MAX_LENGTH = 200;
@@ -46,6 +53,9 @@ export interface PlannedCashFlowEvent {
   recurrence: PlannedEventRecurrence;
   /** Last day a recurring event can occur, inclusive. Always null for `once`. */
   endDate: CalendarDate | null;
+  /** For a custom recurrence, how many units apart occurrences fall; null for every other recurrence. */
+  repeatEvery: number | null;
+  repeatUnit: RepeatUnit | null;
   /**
    * For a card payment, the credit card it pays. For a transfer, the cash
    * account it leaves. For income or an expense, the cash account it lands in,
@@ -122,6 +132,17 @@ export function validatePlannedEventInput(raw: unknown): PlannedEventValidation 
     return { ok: false, error: 'A card payment happens once or every month' };
   }
 
+  let repeatEvery: number | null = null;
+  let repeatUnit: RepeatUnit | null = null;
+  if (recurrence === 'custom') {
+    if (!Number.isInteger(body.repeatEvery) || (body.repeatEvery as number) < 1 || (body.repeatEvery as number) > REPEAT_EVERY_MAX) {
+      return { ok: false, error: `Repeat every 1 to ${REPEAT_EVERY_MAX} days, weeks, months or years` };
+    }
+    if (!isOneOf(REPEAT_UNITS, body.repeatUnit)) return { ok: false, error: 'Choose days, weeks, months or years' };
+    repeatEvery = body.repeatEvery as number;
+    repeatUnit = body.repeatUnit;
+  }
+
   let endDate: CalendarDate | null = null;
   if (recurrence !== 'once' && body.endDate !== undefined && body.endDate !== null && body.endDate !== '') {
     if (!isCalendarDate(body.endDate)) return { ok: false, error: 'Enter a valid end date' };
@@ -138,6 +159,8 @@ export function validatePlannedEventInput(raw: unknown): PlannedEventValidation 
       startDate: body.startDate,
       recurrence,
       endDate,
+      repeatEvery,
+      repeatUnit,
       accountId,
       toAccountId,
       paymentMode,
@@ -154,8 +177,36 @@ function occurrenceAt(event: PlannedCashFlowEvent, index: number): CalendarDate 
     // day of shorter months and returns to the 31st afterwards.
     case 'monthly': return addMonths(event.startDate, index);
     case 'quarterly': return addMonths(event.startDate, 3 * index);
+    case 'semiannually': return addMonths(event.startDate, 6 * index);
     case 'annually': return addMonths(event.startDate, 12 * index);
+    case 'custom': {
+      // Saved without its interval only by a bug; once is the safe reading.
+      const every = event.repeatEvery ?? 0;
+      switch (event.repeatUnit) {
+        case 'day': return addDays(event.startDate, every * index);
+        case 'week': return addDays(event.startDate, 7 * every * index);
+        case 'month': return addMonths(event.startDate, every * index);
+        case 'year': return addMonths(event.startDate, 12 * every * index);
+        default: return event.startDate;
+      }
+    }
   }
+}
+
+/** True when the event can occur more than once. */
+function repeats(event: PlannedCashFlowEvent): boolean {
+  if (event.recurrence === 'custom') return Boolean(event.repeatEvery && event.repeatUnit);
+  return event.recurrence !== 'once';
+}
+
+/**
+ * The recurrence in words, for the model and for anything else that reads it
+ * as text: "monthly", "semiannually", "every 3 weeks".
+ */
+export function describeRecurrence(event: Pick<PlannedCashFlowEvent, 'recurrence' | 'repeatEvery' | 'repeatUnit'>): string {
+  if (event.recurrence !== 'custom') return event.recurrence;
+  const every = event.repeatEvery ?? 1;
+  return every === 1 ? `every ${event.repeatUnit}` : `every ${every} ${event.repeatUnit}s`;
 }
 
 /** The event's occurrences in `[from, toExclusive)`, oldest first. */
@@ -169,7 +220,7 @@ export function expandPlannedEvent(
     const date = occurrenceAt(event, index);
     if (date >= toExclusive || (event.endDate && date > event.endDate)) break;
     if (date >= from) dates.push(date);
-    if (event.recurrence === 'once') break;
+    if (!repeats(event)) break;
   }
   return dates;
 }

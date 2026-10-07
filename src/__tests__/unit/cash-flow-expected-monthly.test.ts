@@ -63,7 +63,7 @@ describe('expectedMonthly', () => {
     const built = model({
       plannedEvents: [{
         id: 'trip', label: 'Trip', kind: 'expense', amount: 3000, startDate: '2026-12-01',
-        recurrence: 'once', endDate: null, accountId: null, toAccountId: null, paymentMode: null,
+        recurrence: 'once', endDate: null, repeatEvery: null, repeatUnit: null, accountId: null, toAccountId: null, paymentMode: null,
       }],
     });
     const end = addMonths(built.forecastStart, 12);
@@ -119,7 +119,7 @@ describe('expectedMonthly', () => {
     // A payoff plan changes the forecast, not the usual month.
     const payoff: PlannedCashFlowEvent = {
       id: 'payoff', label: 'Pay off the card', kind: 'card_payment', amount: 0, startDate: '2026-10-25',
-      recurrence: 'once', endDate: null, accountId: 'card', toAccountId: null, paymentMode: 'full',
+      recurrence: 'once', endDate: null, repeatEvery: null, repeatUnit: null, accountId: 'card', toAccountId: null, paymentMode: 'full',
     };
     const planned = model({
       transactions: [...history, ...interestCharges(FROM, THROUGH)],
