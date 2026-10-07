@@ -1039,6 +1039,38 @@ describe('CashFlowPageClient', () => {
       expect(within(list).getByText('−$900 after')).toBeInTheDocument();
     });
 
+    it('names where a planned transfer goes, once when both accounts are in view', async () => {
+      const transfer = { fromAccountId: 'checking', toAccountId: 'savings', amount: 3000 };
+      const both_ = both({ upcoming: [
+        { date: '2026-11-01', label: 'Savings', kind: 'planned_transfer', amount: 0, balanceAfter: 15200, transfer },
+      ] });
+      const checking = checkingOnly({ upcoming: [
+        { date: '2026-11-01', label: 'Savings', kind: 'planned_transfer_out', amount: -3000, balanceAfter: 2200, transfer },
+      ] });
+      mockFetch(url => {
+        if (!url.includes('/api/cash-flow?')) return undefined;
+        return { status: 200, body: url.includes('accounts=checking') ? checking : both_ };
+      });
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'This month' });
+      fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+
+      // All accounts: the move leaves their total as it was, so it has no sign.
+      let list = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
+      expect(within(list).getAllByText('Savings')).toHaveLength(1);
+      expect(within(list).getByText('Nov 1, 2026 · Planned transfer from Everyday Checking ••1234 to High Yield Savings ••5678'))
+        .toBeInTheDocument();
+      expect(within(list).getByText('$3,000')).toBeInTheDocument();
+      expect(within(list).getByText('$15,200 after')).toBeInTheDocument();
+
+      // Checking alone: money leaving it, with its own balance after.
+      fireEvent.click(screen.getByRole('button', { name: /Everyday Checking/ }));
+      await waitFor(() => expect(screen.getByText('Nov 1, 2026 · Planned transfer to High Yield Savings ••5678')).toBeInTheDocument());
+      list = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
+      expect(within(list).getByText('−$3,000')).toBeInTheDocument();
+      expect(within(list).getByText('$2,200 after')).toBeInTheDocument();
+    });
+
     it.each([
       [{ in: 12.4, out: 85.2 }, 'Everything else isn’t listed: it’s spread evenly across the days, about $85 out and $12 in each day.'],
       [{ in: 43.86, out: 0 }, 'Everything else isn’t listed: it’s spread evenly across the days, about $44 in each day.'],
