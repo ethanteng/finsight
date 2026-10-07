@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarClock, ChevronRight, Waves } from 'lucide-react';
 import type {
   CashFlowAdjustment,
   CashFlowItemTransaction,
@@ -12,7 +12,7 @@ import type {
   ForecastAdjustmentKind,
 } from '../../types/cash-flow';
 import { sendCashFlowRequest } from '../../lib/cash-flow-api';
-import { CADENCE_LABELS, accountNamesById, formatCalendarDate, formatMoney } from '../../lib/cash-flow-format';
+import { CADENCE_LABELS, accountNamesById, formatCalendarDate, formatMoney, roundToTotal } from '../../lib/cash-flow-format';
 
 type Flow = 'income' | 'spending';
 
@@ -163,15 +163,84 @@ function CappedList<T>({ items, render, empty }: {
   );
 }
 
-function Group({ title, note, children }: { title: string; note?: React.ReactNode; children: React.ReactNode }) {
+function Group({ title, total, note, children }: {
+  title: string;
+  /** The group's monthly figure, beside its title. */
+  total?: string;
+  note?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="mt-5 first:mt-0">
-      <h5 className="text-xs font-extrabold uppercase tracking-[0.14em] text-[#49725a]">{title}</h5>
+    <div className="mt-6 first:mt-0">
+      <div className="flex items-baseline justify-between gap-3">
+        <h5 className="text-xs font-extrabold uppercase tracking-[0.14em] text-[#49725a]">{title}</h5>
+        {total && <span className="shrink-0 whitespace-nowrap text-xs font-bold tabular-nums text-[#102319]">{total}</span>}
+      </div>
       {note && <p className="mt-1 text-xs leading-5 text-[#66736b]">{note}</p>}
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+/** The colors that tie each half to its share of the bar above them. */
+const HALF_COLORS = { repeating: '#102319', spread: '#8fb8a0', interest: '#c46a4a' } as const;
+type HalfKind = keyof typeof HALF_COLORS;
+
+/** How the side's month splits between its halves, as one bar. */
+function SplitBar({ parts }: { parts: ReadonlyArray<{ kind: HalfKind; monthly: number }> }) {
+  const total = parts.reduce((sum, part) => sum + Math.max(0, part.monthly), 0);
+  if (total <= 0) return null;
+  return (
+    <div className="mb-3 flex h-2 overflow-hidden rounded-full bg-[#102319]/10" aria-hidden="true">
+      {parts.filter(part => part.monthly > 0).map(part => (
+        <span key={part.kind} style={{ width: `${(part.monthly / total) * 100}%`, backgroundColor: HALF_COLORS[part.kind] }} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One of a side's two halves: what repeats on a schedule, or everything else
+ * at the typical rate. Each says how it is projected and what it comes to.
+ */
+function Half({ kind, title, monthly, note, children }: {
+  kind: HalfKind;
+  title: string;
+  /** Whole dollars, rounded with the other halves so they add up to the side. */
+  monthly: number;
+  note: string;
+  children: React.ReactNode;
+}) {
+  const Icon = kind === 'repeating' ? CalendarClock : Waves;
+  return (
+    <div className="rounded-xl border border-[#102319]/10 bg-white/70 px-3 py-3 sm:px-3.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h6 className="flex items-center gap-1.5 text-sm font-bold text-[#102319]">
+          <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: HALF_COLORS[kind] }} aria-hidden="true" />
+          <Icon size={14} className="shrink-0 text-[#49725a]" aria-hidden="true" />
+          {title}
+        </h6>
+        <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[#102319]">
+          {formatMoney(monthly)}<span className="font-normal text-[#66736b]"> a month</span>
+        </span>
+      </div>
+      <p className="mt-0.5 text-xs leading-5 text-[#66736b]">{note}</p>
       <div className="mt-1">{children}</div>
     </div>
   );
 }
+
+/** How each half of a side is projected, in the user's terms. */
+const HALF_NOTES: Record<Flow, { repeating: string; spread: (days: number) => string }> = {
+  income: {
+    repeating: 'Paychecks and other income that arrive on a schedule. Each is projected on its own dates.',
+    spread: days => `Income with no fixed schedule. Your last ${days} days, spread evenly across every day ahead.`,
+  },
+  spending: {
+    repeating: 'Bills and subscriptions that come on a schedule. Each is projected on its own dates.',
+    spread: days => `Spending with no fixed schedule, like groceries, shopping and gas. Your last ${days} days, spread evenly across every day ahead.`,
+  },
+};
 
 function Column({ title, description, tone, children }: {
   title: string;
@@ -314,10 +383,24 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
     );
   };
 
-  const side = (flow: Flow) => {
+  // A side's usual month, split into its two halves, plus the card interest
+  // spending carries. The halves are rounded together, so the shown figures
+  // add up to the side's total.
+  const split = (flow: Flow) => {
     const regular = report.recurring.filter(item => item.flow === flow && item.status === 'active');
     const typical = typicalPayees.filter(payee => payee.flow === flow);
-    const monthly = flow === 'income' ? baseline.typicalMonthlyIncome : baseline.typicalMonthlySpending;
+    const repeating = (flow === 'income' ? baseline.recurringMonthlyIncome : baseline.recurringMonthlySpending)
+      // A report from before the field existed: the same items at their monthly rates.
+      ?? regular.reduce((sum, item) => sum + item.monthlyAmount, 0);
+    const spread = flow === 'income' ? baseline.typicalMonthlyIncome : baseline.typicalMonthlySpending;
+    const interest = flow === 'spending' ? baseline.cardInterestMonthly ?? 0 : 0;
+    const exact = [repeating, spread, interest];
+    const total = Math.round(exact.reduce((sum, part) => sum + part, 0));
+    const [repeatingShown, spreadShown, interestShown] = roundToTotal(exact, total);
+    return { regular, typical, total, repeating: repeatingShown, spread: spreadShown, interest: interestShown };
+  };
+
+  const side = (flow: Flow) => {
     const override = flow === 'income' ? baseline.monthlyIncomeOverride : baseline.monthlyExpenseOverride;
     if (!learned(flow)) {
       return (
@@ -326,26 +409,36 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
         </p>
       );
     }
-    const typicalShown = monthly >= 1;
+    const parts = split(flow);
     return (
       <>
-        <CappedList
-          items={regular}
-          render={regularRow}
-          empty={typicalShown ? undefined : `No ${flow === 'income' ? 'income' : 'spending'} found in your history yet.`}
+        <SplitBar parts={[
+          { kind: 'repeating', monthly: parts.repeating },
+          { kind: 'spread', monthly: parts.spread },
+          { kind: 'interest', monthly: parts.interest },
+        ]}
         />
-        {typicalShown && (
-          <div className="mt-3 rounded-xl border border-[#102319]/10 bg-white/60 px-3.5 py-2.5">
-            <p className="text-sm text-[#5e6b63]">
-              <span className="font-semibold text-[#102319]">Other {flow}</span>: about{' '}
-              <strong className="text-[#102319]">{formatMoney(monthly)}</strong> a month, spread evenly, from your last {basisDays} days
-            </p>
-            <CappedList items={typical} render={typicalRow} />
-          </div>
-        )}
+        <div className="space-y-2.5">
+          <Half kind="repeating" title="Repeating" monthly={parts.repeating} note={HALF_NOTES[flow].repeating}>
+            <CappedList items={parts.regular} render={regularRow} empty="Nothing repeats on a schedule yet." />
+          </Half>
+          <Half kind="spread" title="Everything else" monthly={parts.spread} note={HALF_NOTES[flow].spread(basisDays)}>
+            <CappedList items={parts.typical} render={typicalRow} empty={`Nothing else in your last ${basisDays} days.`} />
+          </Half>
+          {parts.interest > 0 && (
+            <div className="flex items-baseline justify-between gap-3 rounded-xl border border-dashed border-[#102319]/15 px-3.5 py-2.5 text-xs leading-5 text-[#66736b]">
+              <span className="min-w-0">
+                <span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full align-[-1px]" style={{ backgroundColor: HALF_COLORS.interest }} aria-hidden="true" />
+                <span className="font-bold text-[#102319]">Card interest</span>: projected from each card’s APR at your usual payment pace.
+              </span>
+              <span className="shrink-0 whitespace-nowrap font-bold tabular-nums text-[#102319]">{formatMoney(parts.interest)} a month</span>
+            </div>
+          )}
+        </div>
       </>
     );
   };
+  const sideTotal = (flow: Flow) => (learned(flow) ? `about ${formatMoney(split(flow).total)} a month` : undefined);
 
   // The Left out column: one-offs and stopped items on sides learned from
   // transactions, and what the user left out themselves.
@@ -380,8 +473,8 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <Column title="Counted in the forecast" description="Projected forward from your history." tone="in">
-          <Group title="Money in">{side('income')}</Group>
-          <Group title="Money out">{side('spending')}</Group>
+          <Group title="Money in" total={sideTotal('income')}>{side('income')}</Group>
+          <Group title="Money out" total={sideTotal('spending')}>{side('spending')}</Group>
           {showTransfers && transfers && (
             <Group
               title="Transfers"

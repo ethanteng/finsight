@@ -576,6 +576,33 @@ describe('CashFlowPageClient', () => {
       expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'spending', key: 'safeway' });
     });
 
+    it('splits each side into what repeats and everything else, adding up to the side', async () => {
+      const body = report({
+        baseline: {
+          ...report().baseline,
+          typicalMonthlySpending: 1825.4,
+          recurringMonthlySpending: 2015.49,
+          recurringMonthlyIncome: 5416.67,
+          cardInterestMonthly: 9.8,
+        },
+      });
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body } : undefined));
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      const moneyOut = within(section).getByRole('heading', { name: 'Money out' }).closest('div')!.parentElement!;
+      // $2,015.49 + $1,825.40 + $9.80 is $3,850.69. Rounded together to the $3,851 total, the largest
+      // remainders round up: $10 interest, $2,016 repeating, $1,825 everything else.
+      expect(moneyOut).toHaveTextContent('about $3,851 a month');
+      const half = (title: string) => within(moneyOut).getByRole('heading', { name: title }).parentElement!.parentElement!;
+      expect(half('Repeating')).toHaveTextContent('$2,016 a month');
+      expect(half('Repeating')).toHaveTextContent('Bills and subscriptions that come on a schedule. Each is projected on its own dates.');
+      expect(within(half('Repeating')).getByText('Oak Street Apartments')).toBeInTheDocument();
+      expect(half('Everything else')).toHaveTextContent('$1,825 a month');
+      expect(half('Everything else')).toHaveTextContent('Your last 90 days, spread evenly across every day ahead.');
+      expect(within(half('Everything else')).getByText('Safeway')).toBeInTheDocument();
+      expect(moneyOut).toHaveTextContent('Card interest: projected from each card’s APR at your usual payment pace.$10 a month');
+    });
+
     it('still offers typical income leave-out when spending is overridden', async () => {
       const body = report({
         baseline: {
@@ -590,7 +617,7 @@ describe('CashFlowPageClient', () => {
       const calls = adjusting(body);
       render(<CashFlowPageClient />);
       const section = await basis();
-      expect(within(section).getByText('Other income')).toBeInTheDocument();
+      expect(within(section).getByRole('heading', { name: 'Everything else' })).toBeInTheDocument();
       fireEvent.click(within(section).getByRole('button', { name: 'Leave out: Venmo' }));
       await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
       expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'income', key: 'venmo' });
@@ -816,8 +843,8 @@ describe('CashFlowPageClient', () => {
       const calls = adjusting(body);
       render(<CashFlowPageClient />);
       const section = await basis();
-      expect(within(section).getByText((_, element) =>
-        element?.tagName === 'P' && /^Other income: about \$3,211 a month, spread evenly/.test(element.textContent ?? ''))).toBeInTheDocument();
+      const everythingElse = within(section).getByRole('heading', { name: 'Everything else' }).parentElement!;
+      expect(everythingElse).toHaveTextContent('$3,211 a month');
       expect(within(section).getByText('Your monthly spending of $6,000 from the Finances page is used instead.')).toBeInTheDocument();
       fireEvent.click(within(section).getByRole('button', { name: 'Leave out: ACME CORP CONSULTING' }));
       await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));

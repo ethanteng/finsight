@@ -259,6 +259,14 @@ export interface CashFlowReport {
     typicalBasisDays: number;
     typicalMonthlyIncome: number;
     typicalMonthlySpending: number;
+    /**
+     * What repeats on a schedule, a month of each regular item at its monthly
+     * rate; with the typical rate and, for spending, the card interest, the
+     * expected month. Absent from an older report.
+     */
+    recurringMonthlyIncome?: number;
+    recurringMonthlySpending?: number;
+    cardInterestMonthly?: number;
     incomeSource: 'transactions' | 'override';
     spendingSource: 'transactions' | 'override';
     monthlyIncomeOverride: number | null;

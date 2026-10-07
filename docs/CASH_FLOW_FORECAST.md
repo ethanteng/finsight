@@ -112,7 +112,7 @@ Changes affect only the forecast. Past months stay as they happened, because tho
 
 The columns:
 
-- **Counted in the forecast:** money in and money out, each with its regular items and the payees behind its typical rate (`typicalPayees`, largest first, up to 25 a direction), then recurring transfers. A side the user overrode on Finances shows the override instead, since nothing learned on that side is used.
+- **Counted in the forecast:** money in and money out, then recurring transfers. Each side is the usual month in two halves with their monthly totals: **Repeating** (the regular items, each projected on its own dates; `baseline.recurringMonthlyIncome` / `recurringMonthlySpending`) and **Everything else** (the typical rate over the basis, with the payees behind it, `typicalPayees`, largest first, up to 25 a direction). Spending adds a **Card interest** line (`cardInterestMonthly`) when the usual pace projects any. A bar shows the split, and the halves are rounded together so they add up to the side's total, which is the expected month (`expectedMonthly`). A side the user overrode on Finances shows the override instead, since nothing learned on that side is used.
   - With more than one account, each regular item and recurring transfer names the account it is expected in, or the card a charge is made on (`accountId` in the report), so the user can check where it lands.
 - **Left out:** one-offs, stopped items, and what the user left out. The column is always shown, empty groups included, so the user can see that nothing is left out and what would be. The one-off group states the actual thresholds the engine applied (`oneOffThresholds`: at least $1,000 and twice a typical week, by direction).
 

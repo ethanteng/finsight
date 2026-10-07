@@ -137,6 +137,23 @@ describe('expectedMonthly', () => {
     expect(expectedMonthly(overridden).spending).toBe(5000);
   });
 
+  it('publishes the usual month in its parts: what repeats, everything else, and card interest', () => {
+    const carrying = model({
+      transactions: [...history, ...interestCharges(FROM, THROUGH)],
+      accounts: accountsWithCardTerms(),
+    });
+    const { baseline } = buildCashFlowReport(carrying, { granularity: 'month', horizonMonths: 6 });
+    const expected = expectedMonthly(carrying);
+    // Rent and the streaming charge repeat; the stopped gym does not.
+    expect(baseline.recurringMonthlySpending).toBeCloseTo(2000 + 15.49, 2);
+    expect(baseline.recurringMonthlyIncome).toBeCloseTo(2500 * PAYCHECKS_A_MONTH, 2);
+    expect(baseline.cardInterestMonthly).toBeGreaterThan(0);
+    // The parts are each rounded to cents, so their sum is good to the cent.
+    expect(baseline.recurringMonthlySpending + baseline.typicalMonthlySpending + baseline.cardInterestMonthly)
+      .toBeCloseTo(expected.spending!, 1);
+    expect(baseline.recurringMonthlyIncome + baseline.typicalMonthlyIncome).toBeCloseTo(expected.income!, 1);
+  });
+
   it('has no learned figure while the forecast is unavailable, but keeps an override', () => {
     const short = model({ transactions: householdTransactions('2026-09-20', THROUGH) });
     expect(short.forecast).toEqual({ available: false, reason: 'insufficient_history' });
