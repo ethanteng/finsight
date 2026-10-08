@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, CalendarClock, ChevronRight, Waves } from 'lucide-react';
+import {
+  ArrowDownLeft, ArrowLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, CalendarClock, ChevronRight, CreditCard, Waves,
+} from 'lucide-react';
 import type {
   CashFlowAdjustment,
   CashFlowItemTransaction,
@@ -163,27 +165,65 @@ function CappedList<T>({ items, render, empty }: {
   );
 }
 
-function Group({ title, total, note, children }: {
+function Group({ title, note, children }: {
   title: string;
-  /** The group's monthly figure, beside its title. */
-  total?: string;
   note?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="mt-6 first:mt-0">
-      <div className="flex items-baseline justify-between gap-3">
-        <h5 className="text-xs font-extrabold uppercase tracking-[0.14em] text-[#49725a]">{title}</h5>
-        {total && <span className="shrink-0 whitespace-nowrap text-xs font-bold tabular-nums text-[#102319]">{total}</span>}
-      </div>
+      <h5 className="text-xs font-extrabold uppercase tracking-[0.14em] text-[#49725a]">{title}</h5>
       {note && <p className="mt-1 text-xs leading-5 text-[#66736b]">{note}</p>}
       <div className="mt-1.5">{children}</div>
     </div>
   );
 }
 
-/** The colors that tie each half to its share of the bar above them. */
-const HALF_COLORS = { repeating: '#102319', spread: '#8fb8a0', interest: '#c46a4a' } as const;
+/**
+ * What sets each kind of counted flow apart at a glance: its own color and
+ * icon, so money in, money out and transfers never read as the same list.
+ * In and out match the cash flow chart's income and spending colors.
+ */
+const FLOW_SECTIONS = {
+  in: { Icon: ArrowDownLeft, accent: '#2b8f5d', frame: 'border-[#2b8f5d]/30', header: 'border-[#2b8f5d]/20 bg-[#2b8f5d]/10' },
+  out: { Icon: ArrowUpRight, accent: '#c46a4a', frame: 'border-[#c46a4a]/30', header: 'border-[#c46a4a]/20 bg-[#c46a4a]/10' },
+  transfers: { Icon: ArrowLeftRight, accent: '#4f6d8a', frame: 'border-[#4f6d8a]/30', header: 'border-[#4f6d8a]/20 bg-[#4f6d8a]/10' },
+} as const;
+
+/** One kind of flow the forecast counts, framed under a header in its own color. */
+function FlowSection({ tone, title, total, note, children }: {
+  tone: keyof typeof FLOW_SECTIONS;
+  title: string;
+  /** The section's monthly figure, beside its title. */
+  total?: string;
+  note?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const { Icon, accent, frame, header } = FLOW_SECTIONS[tone];
+  return (
+    <div className={`overflow-hidden rounded-2xl border bg-white/80 ${frame}`}>
+      <div className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b px-3 py-2.5 sm:px-4 ${header}`}>
+        <h5 className="flex items-center gap-2 whitespace-nowrap text-base font-bold text-[#102319]">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-white" style={{ backgroundColor: accent }} aria-hidden="true">
+            <Icon size={15} />
+          </span>
+          {title}
+        </h5>
+        {total && <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[#102319]">{total}</span>}
+      </div>
+      <div className="px-1.5 py-2.5 sm:p-3">
+        {note && <p className="mb-2 text-xs leading-5 text-[#5e6b63]">{note}</p>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The colors that tie each part of a side to its share of the bar above them.
+ * Card interest's differs from money out's, so it stands apart within it.
+ */
+const HALF_COLORS = { repeating: '#102319', spread: '#8fb8a0', interest: '#b7791f' } as const;
 type HalfKind = keyof typeof HALF_COLORS;
 
 /** How the side's month splits between its halves, as one bar. */
@@ -199,25 +239,28 @@ function SplitBar({ parts }: { parts: ReadonlyArray<{ kind: HalfKind; monthly: n
   );
 }
 
+const HALF_ICONS = { repeating: CalendarClock, spread: Waves, interest: CreditCard } as const;
+
 /**
- * One of a side's two halves: what repeats on a schedule, or everything else
- * at the typical rate. Each says how it is projected and what it comes to.
+ * One part of a side: what repeats on a schedule, everything else at the
+ * typical rate, or the card interest spending carries. Each says how it is
+ * projected and what it comes to.
  */
 function Half({ kind, title, monthly, note, children }: {
   kind: HalfKind;
   title: string;
-  /** Whole dollars, rounded with the other halves so they add up to the side. */
+  /** Whole dollars, rounded with the other parts so they add up to the side. */
   monthly: number;
   note: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
-  const Icon = kind === 'repeating' ? CalendarClock : Waves;
+  const Icon = HALF_ICONS[kind];
   return (
-    <div className="rounded-xl border border-[#102319]/10 bg-white/70 px-3 py-3 sm:px-3.5">
+    <div className={`rounded-xl border px-2.5 py-3 sm:px-3.5 ${kind === 'interest' ? 'border-[#b7791f]/35 bg-[#b7791f]/[0.07]' : 'border-[#102319]/10 bg-white/70'}`}>
       <div className="flex items-baseline justify-between gap-3">
         <h6 className="flex items-center gap-1.5 text-sm font-bold text-[#102319]">
           <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: HALF_COLORS[kind] }} aria-hidden="true" />
-          <Icon size={14} className="shrink-0 text-[#49725a]" aria-hidden="true" />
+          <Icon size={14} className={`shrink-0 ${kind === 'interest' ? 'text-[#8a5a12]' : 'text-[#49725a]'}`} aria-hidden="true" />
           {title}
         </h6>
         <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[#102319]">
@@ -225,7 +268,7 @@ function Half({ kind, title, monthly, note, children }: {
         </span>
       </div>
       <p className="mt-0.5 text-xs leading-5 text-[#66736b]">{note}</p>
-      <div className="mt-1">{children}</div>
+      {children && <div className="mt-1">{children}</div>}
     </div>
   );
 }
@@ -249,7 +292,7 @@ function Column({ title, description, tone, children }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className={`min-w-0 rounded-2xl border p-4 sm:p-5 ${tone === 'in' ? 'border-[#28704d]/20 bg-[#c9f2df]/25' : 'border-[#102319]/10 bg-[#f3f2e9]/70'}`}>
+    <div className={`min-w-0 rounded-2xl border p-3 sm:p-5 ${tone === 'in' ? 'border-[#28704d]/20 bg-[#c9f2df]/25' : 'border-[#102319]/10 bg-[#f3f2e9]/70'}`}>
       <h4 className="text-base font-bold text-[#102319]">{title}</h4>
       <p className="mt-0.5 text-xs leading-5 text-[#66736b]">{description}</p>
       <div className="mt-4">{children}</div>
@@ -432,13 +475,7 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
             <CappedList items={parts.typical} render={typicalRow} empty={`Nothing else in your last ${basisDays} days.`} />
           </Half>
           {parts.interest > 0 && (
-            <div className="flex items-baseline justify-between gap-3 rounded-xl border border-dashed border-[#102319]/15 px-3.5 py-2.5 text-xs leading-5 text-[#66736b]">
-              <span className="min-w-0">
-                <span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full align-[-1px]" style={{ backgroundColor: HALF_COLORS.interest }} aria-hidden="true" />
-                <span className="font-bold text-[#102319]">Card interest</span>: projected from each card’s APR at your usual payment pace.
-              </span>
-              <span className="shrink-0 whitespace-nowrap font-bold tabular-nums text-[#102319]">{formatMoney(parts.interest)} a month</span>
-            </div>
+            <Half kind="interest" title="Card interest" monthly={parts.interest} note="Projected from each card’s APR at your usual payment pace." />
           )}
         </div>
       </>
@@ -479,43 +516,46 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <Column title="Counted in the forecast" description="Projected forward from your history." tone="in">
-          <Group title="Money in" total={sideTotal('income')}>{side('income')}</Group>
-          <Group title="Money out" total={sideTotal('spending')}>{side('spending')}</Group>
-          {showTransfers && transfers && (
-            <Group
-              title="Transfers"
-              note="Money moving to or from accounts that aren’t connected here, like investments. It changes your cash position, but isn’t income or spending."
-            >
-              <CappedList
-                items={transfers.recurring}
-                render={item => (
-                  <ItemRow
-                    key={item.id}
-                    name={item.label}
-                    detail={`${CADENCE_LABELS[item.cadence]}${item.nextDate ? ` · next ${formatCalendarDate(item.nextDate)}` : ''}${inAccount(item.accountId)}`}
-                    amount={`${item.direction === 'in' ? '+' : '−'}${formatMoney(item.amount, true)}`}
-                    transactions={item.transactions}
-                    transactionCount={item.transactionCount}
-                    action={(
-                      <MoveButton
-                        label="Leave out"
-                        item={item.label}
-                        toward="out"
-                        disabled={busy}
-                        onClick={() => adjust({ kind: 'exclude_transfer', flow: item.direction === 'in' ? 'income' : 'spending', key: item.payeeKey })}
-                      />
-                    )}
-                  />
+          <div className="space-y-4">
+            <FlowSection tone="in" title="Money in" total={sideTotal('income')}>{side('income')}</FlowSection>
+            <FlowSection tone="out" title="Money out" total={sideTotal('spending')}>{side('spending')}</FlowSection>
+            {showTransfers && transfers && (
+              <FlowSection
+                tone="transfers"
+                title="Transfers"
+                note="Money moving to or from accounts that aren’t connected here, like investments. It changes your cash position, but isn’t income or spending."
+              >
+                <CappedList
+                  items={transfers.recurring}
+                  render={item => (
+                    <ItemRow
+                      key={item.id}
+                      name={item.label}
+                      detail={`${CADENCE_LABELS[item.cadence]}${item.nextDate ? ` · next ${formatCalendarDate(item.nextDate)}` : ''}${inAccount(item.accountId)}`}
+                      amount={`${item.direction === 'in' ? '+' : '−'}${formatMoney(item.amount, true)}`}
+                      transactions={item.transactions}
+                      transactionCount={item.transactionCount}
+                      action={(
+                        <MoveButton
+                          label="Leave out"
+                          item={item.label}
+                          toward="out"
+                          disabled={busy}
+                          onClick={() => adjust({ kind: 'exclude_transfer', flow: item.direction === 'in' ? 'income' : 'spending', key: item.payeeKey })}
+                        />
+                      )}
+                    />
+                  )}
+                />
+                {Math.round(transfers.typicalMonthlyNet) !== 0 && (
+                  <p className="mt-1 text-xs leading-5 text-[#66736b]">
+                    Plus about {formatMoney(Math.abs(transfers.typicalMonthlyNet))} a month
+                    {transfers.typicalMonthlyNet < 0 ? ' out' : ' in'} in other transfers, spread evenly.
+                  </p>
                 )}
-              />
-              {Math.round(transfers.typicalMonthlyNet) !== 0 && (
-                <p className="mt-1 text-xs leading-5 text-[#66736b]">
-                  Plus about {formatMoney(Math.abs(transfers.typicalMonthlyNet))} a month
-                  {transfers.typicalMonthlyNet < 0 ? ' out' : ' in'} in other transfers, spread evenly.
-                </p>
-              )}
-            </Group>
-          )}
+              </FlowSection>
+            )}
+          </div>
         </Column>
 
         <Column title="Left out" description="Not projected. Move anything back in." tone="out">
