@@ -212,6 +212,24 @@ describe('retirement plan from stated figures', () => {
     expect(field('lifeExpectancy')).toMatchObject({ defaultNote: '95 if left blank' });
   });
 
+  it('names retiring now when the known age is already past 65', async () => {
+    const execution = await runStatedRetirementPlan(
+      {
+        ...NO_HOLDINGS,
+        userProfileValues: { age: 70 },
+      },
+      plan({}),
+      fakeRunner() as QuickPlanRunner
+    );
+    const retirementAge = statedRetirementPlanInputRequest(execution)!
+      .fields.find((field) => field.id === 'retirementAge')!;
+
+    expect(retirementAge).toMatchObject({
+      required: false,
+      defaultNote: '70 if left blank (retiring now)',
+    });
+  });
+
   it('assumes the conventional retirement age and says so', async () => {
     const runner = fakeRunner();
     const execution = await runStatedRetirementPlan(NO_HOLDINGS, plan({

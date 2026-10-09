@@ -945,7 +945,8 @@ const STATED_RETIREMENT_PLAN_INPUT_REQUEST: InputRequestSpec = {
       kind: 'age',
       ...RANGES.retirementAge,
       sentence: 'I plan to retire at {value}.',
-      defaultNote: `${CONVENTIONAL_RETIREMENT_AGE} if left blank`,
+      // resolveVariant uses max(currentAge, 65), so blank is "now" once past 65.
+      defaultNote: `${CONVENTIONAL_RETIREMENT_AGE}, or now if you are already past it`,
     },
     {
       id: 'annualSpending',
@@ -1004,7 +1005,24 @@ const STATED_RETIREMENT_PLAN_INPUT_REQUEST: InputRequestSpec = {
 /** The form for a stated plan waiting on figures, or null for one that ran or failed otherwise. */
 export function statedRetirementPlanInputRequest(execution: StatedRetirementPlanExecution): InputRequest | null {
   if (execution.status !== 'unavailable' || !execution.missingFields?.length) return null;
-  return buildInputRequest(STATED_RETIREMENT_PLAN_INPUT_REQUEST, execution.missingFields, execution.knownInputs);
+  const request = buildInputRequest(
+    STATED_RETIREMENT_PLAN_INPUT_REQUEST,
+    execution.missingFields,
+    execution.knownInputs
+  );
+  if (!request) return null;
+  // When age is already known and past the conventional planning age, blank
+  // means retiring now — say the concrete age rather than "65".
+  const knownAge = execution.knownInputs?.find((input) => input.key === 'currentAge')?.value;
+  if (typeof knownAge !== 'number' || knownAge < CONVENTIONAL_RETIREMENT_AGE) return request;
+  return {
+    ...request,
+    fields: request.fields.map((field) =>
+      field.id === 'retirementAge' && field.value === undefined && !field.required
+        ? { ...field, defaultNote: `${knownAge} if left blank (retiring now)` }
+        : field
+    ),
+  };
 }
 
 export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
