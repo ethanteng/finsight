@@ -37,6 +37,7 @@ import {
 import { presetStandInReason, type PresetStandInReason } from './preset-stand-in';
 import { CONVENTIONAL_RETIREMENT_AGE } from '../openai/retirement-inputs';
 import { COAST_FIRE_CALCULATOR_ID } from './coast-fire-scenario';
+import { balanceBasis, type BalanceBasis } from '../openai/linked-data';
 
 export const STATED_RETIREMENT_PLAN_CALCULATOR_ID = 'stated_retirement_plan' as const;
 export const STATED_RETIREMENT_PLAN_VERSION = 1 as const;
@@ -115,9 +116,10 @@ export interface StatedRetirementPlan {
 }
 
 /**
- * Where a value came from: the user's words, the connected investment total
- * (an account whose provider reports a balance but no holdings), an age the
- * user told Linc earlier, or the public calculator's named default.
+ * Where a value came from: the user's words, the investment total or current
+ * spending Linc holds (`basis` says whether linked accounts -- a balance with
+ * no holdings itemized -- or the user's own entries), an age the user told
+ * Linc earlier, or the public calculator's named default.
  */
 export type StatedRetirementAssumptionOrigin = 'user' | 'snapshot' | 'profile' | 'default';
 
@@ -127,6 +129,12 @@ export interface StatedRetirementAssumption {
   value: number | string;
   origin: StatedRetirementAssumptionOrigin;
   source?: string;
+  /**
+   * For a `snapshot` value: whether it came from linked accounts, from figures
+   * the user entered on the Finances page, or both. Absent on executions
+   * recorded before it, which were all read as linked.
+   */
+  basis?: BalanceBasis;
 }
 
 export interface StatedRetirementAlternative {
@@ -358,7 +366,7 @@ function resolveVariant(
   const missing: string[] = [];
   const take = <T extends number | string>(
     field: StatedRetirementPlanField,
-    fallback?: { value: T; origin: Exclude<StatedRetirementAssumptionOrigin, 'user'> }
+    fallback?: { value: T; origin: Exclude<StatedRetirementAssumptionOrigin, 'user'>; basis?: BalanceBasis }
   ): T | undefined => {
     const stated = overrides[field] as T | undefined;
     const source = overrides.sources[field];
@@ -367,7 +375,13 @@ function resolveVariant(
       return stated;
     }
     if (fallback) {
-      assumptions.push({ key: field, label: LABELS[field], value: fallback.value, origin: fallback.origin });
+      assumptions.push({
+        key: field,
+        label: LABELS[field],
+        value: fallback.value,
+        origin: fallback.origin,
+        ...(fallback.basis && { basis: fallback.basis }),
+      });
       return fallback.value;
     }
     const prompt = MISSING_INPUT_PROMPTS[field];
@@ -380,11 +394,14 @@ function resolveVariant(
     profileAge >= RANGES.currentAge.minimum && profileAge <= RANGES.currentAge.maximum
     ? profileAge
     : undefined;
-  const connectedTotal = snapshot.financialSummary?.financialOverview?.totalInvestments;
-  const knownAssets = typeof connectedTotal === 'number' && Number.isFinite(connectedTotal) &&
-    connectedTotal >= RANGES.investableAssets.minimum && connectedTotal <= RANGES.investableAssets.maximum
-    ? connectedTotal
+  const investmentTotal = snapshot.financialSummary?.financialOverview?.totalInvestments;
+  const knownAssets = typeof investmentTotal === 'number' && Number.isFinite(investmentTotal) &&
+    investmentTotal >= RANGES.investableAssets.minimum && investmentTotal <= RANGES.investableAssets.maximum
+    ? investmentTotal
     : undefined;
+  const assetsBasis = balanceBasis(snapshot.linkedData, 'investments') ?? 'linked';
+  // A spending override is the figure the user set on the Finances page.
+  const spendingBasis: BalanceBasis = snapshot.expectedMonthly?.spendingSource === 'override' ? 'entered' : 'linked';
 
   // Already null where nothing linked could say what the user spends.
   const monthlySpending = snapshot.expectedMonthly?.spending;
@@ -398,7 +415,7 @@ function resolveVariant(
 
   const investableAssets = take<number>(
     'investableAssets',
-    knownAssets !== undefined ? { value: knownAssets, origin: 'snapshot' } : undefined
+    knownAssets !== undefined ? { value: knownAssets, origin: 'snapshot', basis: assetsBasis } : undefined
   );
   const currentAge = take<number>(
     'currentAge',
@@ -414,7 +431,7 @@ function resolveVariant(
   // level at all, and the engine answers with what the mix sustained.
   const annualSpending = take<number>(
     'annualSpending',
-    knownSpending !== undefined ? { value: knownSpending, origin: 'snapshot' } : undefined
+    knownSpending !== undefined ? { value: knownSpending, origin: 'snapshot', basis: spendingBasis } : undefined
   );
 
   const annualContributions = take<number>('annualContributions', { value: 0, origin: 'default' })!;
@@ -802,11 +819,16 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
     : '';
   const assets = assumptionOf(primary, 'investableAssets');
   const unsupported = execution.standInFor === 'unsupported_holdings';
+  const notItemized = unsupported ? '' : ', so they cannot be modeled directly';
   const assetsNotice = assets?.origin !== 'snapshot'
     ? ''
-    : unsupported
-      ? ` The amount invested is your connected investment total of ${money(Number(assets.value))}.`
-      : ` The amount invested is your connected investment total of ${money(Number(assets.value))}; its holdings are not itemized, so they cannot be modeled directly.`;
+    : assets.basis === 'entered'
+      ? ` The amount invested is the ${money(Number(assets.value))} of investments you entered; a balance alone has no holdings to model directly.`
+      : assets.basis === 'linked_and_entered'
+        ? ` The amount invested is your investment total of ${money(Number(assets.value))}: your linked investment accounts plus ` +
+          `the investment balances you entered${unsupported ? '' : '; neither has holdings itemized'}${notItemized}.`
+        : ` The amount invested is your connected investment total of ${money(Number(assets.value))}` +
+          `${unsupported ? '' : '; its holdings are not itemized'}${notItemized}.`;
   const age = assumptionOf(primary, 'currentAge');
   const ageNotice = age?.origin === 'profile' ? ` Your age, ${age.value}, is the one you told me earlier.` : '';
   const comparison = execution.scenarios.length > 1
@@ -828,10 +850,13 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
     ? ' You did not give a spending level, so instead of a verdict this shows what the mix sustained: the most it ' +
       'could pay out each year, in today\'s dollars, in a bad stretch of history and in a typical one. Tell me what ' +
       'you expect to spend and I will test that.'
-    : spending?.origin === 'snapshot'
-      ? ` The spending level is what you spend now according to your linked accounts, ${money(Number(spending.value))} ` +
-        'a year; I assumed retirement costs the same.'
-      : '';
+    : spending?.origin !== 'snapshot'
+      ? ''
+      : spending.basis === 'entered'
+        ? ` The spending level is the monthly spending you set on the Finances page, ${money(Number(spending.value))} ` +
+          'a year; I assumed retirement costs the same.'
+        : ` The spending level is what you spend now according to your linked accounts, ${money(Number(spending.value))} ` +
+          'a year; I assumed retirement costs the same.';
 
   const standIn = unsupported
     ? `none of your linked holdings map to a return series I can simulate, so this ran the ${primary.allocation.label} ` +
@@ -862,7 +887,7 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
   supportedOverrides: [
     { id: 'current_age', label: 'Current age', description: 'Age today.', valueType: 'age', minimum: 18, maximum: 90 },
     { id: 'retirement_age', label: 'Retirement age', description: 'Age withdrawals begin.', valueType: 'age', minimum: 30, maximum: 95 },
-    { id: 'investable_assets', label: 'Invested today', description: 'Defaults to the connected investment total when holdings are not itemized.', valueType: 'currency', minimum: 1_000, maximum: 100_000_000 },
+    { id: 'investable_assets', label: 'Invested today', description: 'Defaults to the investment total from linked accounts with no holdings itemized and balances the user entered.', valueType: 'currency', minimum: 1_000, maximum: 100_000_000 },
     { id: 'annual_spending', label: 'Annual retirement spending', description: 'In today\'s dollars.', valueType: 'currency', minimum: 1_000, maximum: 10_000_000 },
     { id: 'annual_contributions', label: 'Annual saving until retirement', description: 'In today\'s dollars.', valueType: 'currency', minimum: 0, maximum: 5_000_000 },
     { id: 'social_security_annual', label: 'Annual Social Security', description: 'Inflation-adjusted income that reduces withdrawals once it starts.', valueType: 'currency', minimum: 0, maximum: 250_000 },

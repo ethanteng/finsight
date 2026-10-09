@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import type { FinancialContextSnapshot } from '../openai/types';
 import type { CanonicalFact, CanonicalFactUnit } from '../openai/canonical-facts';
 import type { ScenarioCalculatorDefinition } from './calculator-registry';
+import { balanceBasis, type BalanceBasis } from '../openai/linked-data';
 
 export const HOME_AFFORDABILITY_CALCULATOR_ID = 'home_affordability' as const;
 export const HOME_AFFORDABILITY_SCENARIO_VERSION = 1 as const;
@@ -280,6 +281,13 @@ function roundPercent(value: number): number {
   return Number(value.toFixed(6));
 }
 
+/** Where purchase cash read from the snapshot came from, as the assumption ledger names it. */
+const CASH_BALANCE_SOURCES: Record<BalanceBasis, string> = {
+  linked: 'Connected cash balances',
+  entered: 'Cash balances the user entered',
+  linked_and_entered: 'Connected cash balances plus cash balances the user entered',
+};
+
 /** One side of the baseline month, and where it came from. */
 function monthlyBaseline(
   side: 'income' | 'expenses',
@@ -499,11 +507,12 @@ function resolveVariant(
     );
   }
 
-  // With no cash account linked, a zero total is an empty connection, not an
-  // empty bank account: read as cash, it made every purchase "limited by
-  // upfront cash" for someone who had linked only a card.
+  // With no cash account linked or entered, a zero total is an empty
+  // connection, not an empty bank account: read as cash, it made every
+  // purchase "limited by upfront cash" for someone who had linked only a card.
   const reportedCash = finiteNumber(snapshot.financialSummary?.financialOverview?.totalCash);
-  const overviewCash = snapshot.linkedData?.cash === 0 && (reportedCash === undefined || reportedCash === 0)
+  const cashBasis = balanceBasis(snapshot.linkedData, 'cash');
+  const overviewCash = cashBasis === null && (reportedCash === undefined || reportedCash === 0)
     ? undefined
     : reportedCash;
   const availableCash = overrides.availableCashAmount !== undefined
@@ -518,7 +527,7 @@ function resolveVariant(
       availableCash,
       'usd',
       overrides.availableCashAmount !== undefined ? 'user' : 'snapshot',
-      overrides.sources.availableCashAmount ?? 'Connected cash balances'
+      overrides.sources.availableCashAmount ?? CASH_BALANCE_SOURCES[cashBasis ?? 'linked']
     );
   }
 

@@ -14,7 +14,14 @@ import { mergeAssetAllocation } from '../services/asset-class';
 import { MAX_UNMODELED_REASON_FACTS } from './canonical-facts';
 import { getActiveModel, getActiveNumericGenerationSetting } from './model-config';
 import { cashFlowForecastFacts, withoutUnlinkedIncome } from './cash-flow-forecast-context';
-import { describeLinkedDataForModel, emptyPortfolio, incomeLinked, linkedOverview } from './linked-data';
+import {
+  balanceBasisNote,
+  describeLinkedDataForModel,
+  emptyPortfolio,
+  incomeLinked,
+  linkedOverview,
+  netWorthReviewerNote,
+} from './linked-data';
 
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
@@ -168,15 +175,19 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
   // cash is not zero and that it is.
   const overview = snapshot.financialSummary?.financialOverview;
   if (overview) {
-    const { shown, netWorthLeavesOut } = linkedOverview(snapshot.linkedData, overview);
+    const linked = snapshot.linkedData;
+    const { shown, netWorthLeavesOut } = linkedOverview(linked, overview);
+    const netWorthNote = netWorthReviewerNote(linked, netWorthLeavesOut);
     const totals = [
-      snapshot.linkedData?.accounts === 0 ? 'no linked accounts; balance totals are not available (not zero)' : null,
-      shown.has('netWorth')
-        ? `netWorth=${overview.netWorth}${netWorthLeavesOut.length > 0 ? ` (linked accounts only; no ${netWorthLeavesOut.join(', no ')} linked)` : ''}`
+      linked?.accounts === 0 && !linked.entered?.accounts
+        ? 'no linked accounts; balance totals are not available (not zero)'
         : null,
-      shown.has('totalCash') ? `totalCash=${overview.totalCash}` : null,
-      shown.has('totalInvestments') ? `totalInvestments=${overview.totalInvestments}` : null,
-      shown.has('totalDebt') ? `totalDebt=${overview.totalDebt}` : null,
+      shown.has('netWorth') ? `netWorth=${overview.netWorth}${netWorthNote ? ` (${netWorthNote})` : ''}` : null,
+      shown.has('totalCash') ? `totalCash=${overview.totalCash}${balanceBasisNote(linked, 'cash')}` : null,
+      shown.has('totalInvestments')
+        ? `totalInvestments=${overview.totalInvestments}${balanceBasisNote(linked, 'investments')}`
+        : null,
+      shown.has('totalDebt') ? `totalDebt=${overview.totalDebt}${balanceBasisNote(linked, 'debt')}` : null,
       `homeValue=${overview.homeValue ?? 'null'}`,
     ].filter((item): item is string => item !== null);
     parts.push(`Financial overview: ${totals.join(', ')}`);
@@ -205,7 +216,7 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
   const invSnapshot = snapshot.investments;
   if (invPortfolio && !emptyPortfolio(snapshot.linkedData, invPortfolio.totalValue)) {
     parts.push(
-      `Investment portfolio: totalValue=${invPortfolio.totalValue}, holdingsCount=${invPortfolio.holdingsCount}`
+      `Investment portfolio: totalValue=${invPortfolio.totalValue}${balanceBasisNote(snapshot.linkedData, 'investments')}, holdingsCount=${invPortfolio.holdingsCount}`
     );
     const allocation = mergeAssetAllocation(invPortfolio.assetAllocation);
     if (allocation.length) {

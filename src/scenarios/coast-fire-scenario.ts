@@ -47,6 +47,7 @@ import {
 } from '../services/retirement-quickplan';
 import { presetStandInReason } from './preset-stand-in';
 import { CONVENTIONAL_RETIREMENT_AGE } from '../openai/retirement-inputs';
+import { balanceBasis, type BalanceBasis } from '../openai/linked-data';
 
 export const COAST_FIRE_CALCULATOR_ID = 'coast_fire' as const;
 export const COAST_FIRE_SCENARIO_VERSION = 1 as const;
@@ -129,8 +130,9 @@ export interface CoastFireScenarioPlan {
 }
 
 /**
- * Where a value came from. `snapshot` is the connected investment total,
- * `profile` an age the user told Linc earlier, `default` the public
+ * Where a value came from. `snapshot` is the investment total or current
+ * spending Linc holds (`basis` says whether linked accounts or the user's own
+ * entries), `profile` an age the user told Linc earlier, `default` the public
  * calculator's named default.
  */
 export type CoastFireAssumptionOrigin = 'user' | 'snapshot' | 'profile' | 'default';
@@ -142,6 +144,12 @@ export interface CoastFireAssumption {
   unit: CanonicalFactUnit;
   origin: CoastFireAssumptionOrigin;
   source?: string;
+  /**
+   * For a `snapshot` value: whether it came from linked accounts, from figures
+   * the user entered on the Finances page, or both. Absent on executions
+   * recorded before it, which were all read as linked.
+   */
+  basis?: BalanceBasis;
 }
 
 /** When contributions get savings to the point where they could coast. */
@@ -395,10 +403,11 @@ function currentAnnualSpending(snapshot: FinancialContextSnapshot): number | und
   return annual >= range.minimum && annual <= range.maximum ? annual : undefined;
 }
 
-function connectedInvestmentTotal(snapshot: FinancialContextSnapshot): number | undefined {
+/** The investment total Linc holds, from linked accounts, balances the user entered, or both. */
+function knownInvestmentTotal(snapshot: FinancialContextSnapshot): { value: number; basis: BalanceBasis } | undefined {
   const total = snapshot.financialSummary?.financialOverview?.totalInvestments;
   return typeof total === 'number' && Number.isFinite(total) && total > 0 && total <= OVERRIDE_RANGES.currentSavings.maximum
-    ? total
+    ? { value: total, basis: balanceBasis(snapshot.linkedData, 'investments') ?? 'linked' }
     : undefined;
 }
 
@@ -424,7 +433,7 @@ function resolveVariant(
   const missing: string[] = [];
   const take = (
     field: CoastFireOverrideField,
-    fallback?: { value: number; origin: Exclude<CoastFireAssumptionOrigin, 'user'> }
+    fallback?: { value: number; origin: Exclude<CoastFireAssumptionOrigin, 'user'>; basis?: BalanceBasis }
   ): number | undefined => {
     const stated = overrides[field];
     const source = overrides.sources[field];
@@ -433,7 +442,13 @@ function resolveVariant(
       return stated;
     }
     if (fallback) {
-      assumptions.push({ key: field, ...ASSUMPTION_LABELS[field], value: fallback.value, origin: fallback.origin });
+      assumptions.push({
+        key: field,
+        ...ASSUMPTION_LABELS[field],
+        value: fallback.value,
+        origin: fallback.origin,
+        ...(fallback.basis && { basis: fallback.basis }),
+      });
       return fallback.value;
     }
     const prompt = MISSING_INPUT_PROMPTS[field];
@@ -442,8 +457,10 @@ function resolveVariant(
   };
 
   const knownAge = profileAge(snapshot);
-  const connectedTotal = connectedInvestmentTotal(snapshot);
+  const investmentTotal = knownInvestmentTotal(snapshot);
   const knownSpending = currentAnnualSpending(snapshot);
+  // A spending override is the figure the user set on the Finances page.
+  const spendingBasis: BalanceBasis = snapshot.expectedMonthly?.spendingSource === 'override' ? 'entered' : 'linked';
   const currentAge = take('currentAge', knownAge !== undefined ? { value: knownAge, origin: 'profile' } : undefined);
   // The conventional planning age, while it is still ahead of them. Past it,
   // there is no coasting to work out, so it is asked for instead.
@@ -455,13 +472,13 @@ function resolveVariant(
   );
   const currentSavings = take(
     'currentSavings',
-    connectedTotal !== undefined ? { value: connectedTotal, origin: 'snapshot' } : undefined
+    investmentTotal !== undefined ? { ...investmentTotal, origin: 'snapshot' } : undefined
   );
-  // What they spend now, when linked accounts say; I assume retirement costs
-  // the same and say so.
+  // What they spend now, when linked accounts or their own monthly figure
+  // say; I assume retirement costs the same and say so.
   const annualRetirementSpending = take(
     'annualRetirementSpending',
-    knownSpending !== undefined ? { value: knownSpending, origin: 'snapshot' } : undefined
+    knownSpending !== undefined ? { value: knownSpending, origin: 'snapshot', basis: spendingBasis } : undefined
   );
   const annualRetirementIncome = take('annualRetirementIncome', { value: 0, origin: 'default' });
   const realReturnRate = take('realReturnRatePercent', {
@@ -1027,19 +1044,26 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
     ? `${money(m.annualRetirementIncome)} a year of retirement income from ${m.retirementAge}`
     : 'no retirement income counted';
   const savings = assumptionOf(primary, 'currentSavings');
-  const savingsNotice = savings?.origin === 'snapshot'
-    ? ` Your savings figure is your connected investment total of ${money(savings.value)}, which counts every linked investment account, not only retirement accounts.`
-    : '';
+  const savingsNotice = savings?.origin !== 'snapshot'
+    ? ''
+    : savings.basis === 'entered'
+      ? ` Your savings figure is the ${money(savings.value)} of investments you entered, which counts every investment balance you entered, not only retirement accounts.`
+      : savings.basis === 'linked_and_entered'
+        ? ` Your savings figure is your investment total of ${money(savings.value)}: every linked investment account plus the investment balances you entered, not only retirement accounts.`
+        : ` Your savings figure is your connected investment total of ${money(savings.value)}, which counts every linked investment account, not only retirement accounts.`;
   const age = assumptionOf(primary, 'currentAge');
   const ageNotice = age?.origin === 'profile' ? ` Your age, ${age.value}, is the one you told me earlier.` : '';
   const retirementAgeNotice = assumptionOf(primary, 'retirementAge')?.origin === 'default'
     ? ` You did not name a retirement age, so I used ${CONVENTIONAL_RETIREMENT_AGE}.`
     : '';
   const spending = assumptionOf(primary, 'annualRetirementSpending');
-  const spendingNotice = spending?.origin === 'snapshot'
-    ? ` Retirement spending is what you spend now according to your linked accounts, ${money(spending.value)} a year; ` +
-      'I assumed retirement costs the same.'
-    : '';
+  const spendingNotice = spending?.origin !== 'snapshot'
+    ? ''
+    : spending.basis === 'entered'
+      ? ` Retirement spending is the monthly spending you set on the Finances page, ${money(spending.value)} a year; ` +
+        'I assumed retirement costs the same.'
+      : ` Retirement spending is what you spend now according to your linked accounts, ${money(spending.value)} a year; ` +
+        'I assumed retirement costs the same.';
   const defaults = [
     assumptionOf(primary, 'realReturnRatePercent')?.origin === 'default'
       ? `a growth rate, so I used ${rate(DEFAULT_COAST_FIRE_REAL_RETURN_PERCENT)}`
@@ -1090,7 +1114,7 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
   supportedOverrides: [
     { id: 'current_age', label: 'Current age', description: 'Age today.', valueType: 'age', minimum: 18, maximum: 90 },
     { id: 'retirement_age', label: 'Retirement age', description: 'Age at which the target must be reached.', valueType: 'age', minimum: 30, maximum: 95 },
-    { id: 'current_savings', label: 'Invested retirement savings', description: 'Invested today; defaults to the connected investment total.', valueType: 'currency', minimum: 0, maximum: 100_000_000 },
+    { id: 'current_savings', label: 'Invested retirement savings', description: 'Invested today; defaults to the investment total from linked accounts and balances the user entered.', valueType: 'currency', minimum: 0, maximum: 100_000_000 },
     { id: 'annual_retirement_spending', label: 'Annual retirement spending', description: 'In today\'s dollars.', valueType: 'currency', minimum: 1_000, maximum: 10_000_000 },
     { id: 'annual_retirement_income', label: 'Annual retirement income', description: 'Income starting at retirement that reduces what the portfolio must cover.', valueType: 'currency', minimum: 0, maximum: 10_000_000 },
     { id: 'real_return_rate_percent', label: 'Growth after inflation', description: 'Percentage points; 5% is 5.', valueType: 'percentage', minimum: 0, maximum: 12 },
