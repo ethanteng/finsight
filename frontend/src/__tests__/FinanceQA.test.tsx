@@ -281,6 +281,183 @@ describe('FinanceQA decision workspace', () => {
     expect(screen.getByRole('button', { name: /Ask follow-up/i })).toBeInTheDocument();
   });
 
+  it('keeps "Use these next time?" when history reloads the turn that just answered', async () => {
+    // storedStructuredResponse restores input_request but not save_offer. The
+    // post-answer history reload re-selects the new turn without the offer; the
+    // live card must stay so the user can still save.
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('/test/current-tier')) {
+        return Promise.resolve({ ok: true, json: async () => ({ backendTier: 'premium' }) });
+      }
+      if (url.includes('/ask/display-real')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({
+            answer: 'Your Coast FIRE number is $400,000.',
+            threadId: 'thread-coast',
+            conversationId: 'conversation-coast',
+            structuredResponse: {
+              summary: 'Your Coast FIRE number is $400,000.',
+              save_offer: {
+                calculatorId: 'coast_fire',
+                items: [
+                  { key: 'retirementAge', label: 'Retirement age', value: 55, display: '55' },
+                ],
+              },
+            },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, headers: new Headers(), json: async () => ({}) });
+    });
+
+    const { rerender } = render(<FinanceQA newDecisionNonce={1} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'What is my Coast FIRE number?' } });
+    fireEvent.submit(document.getElementById('finance-qa-form')!);
+
+    expect(await screen.findByRole('heading', { name: 'Use these next time?' })).toBeInTheDocument();
+
+    rerender(<FinanceQA
+      newDecisionNonce={1}
+      selectedPrompt={{
+        id: 'conversation-coast',
+        question: 'What is my Coast FIRE number?',
+        answer: 'Your Coast FIRE number is $400,000.',
+        threadId: 'thread-coast',
+        structuredResponse: { summary: 'Your Coast FIRE number is $400,000.' },
+        timestamp: Date.now(),
+      }}
+    />);
+
+    expect(screen.getByRole('heading', { name: 'Use these next time?' })).toBeInTheDocument();
+    expect(screen.getByText('55')).toBeInTheDocument();
+  });
+
+  it('keeps the follow-up save offer when a stale history reload for the prior turn races in', async () => {
+    let askCount = 0;
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('/test/current-tier')) {
+        return Promise.resolve({ ok: true, json: async () => ({ backendTier: 'premium' }) });
+      }
+      if (url.includes('/ask/display-real')) {
+        askCount += 1;
+        const conversationId = askCount === 1 ? 'conversation-a' : 'conversation-b';
+        const retirementAge = askCount === 1 ? 55 : 60;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({
+            answer: `Answer ${askCount}.`,
+            threadId: 'thread-coast',
+            conversationId,
+            structuredResponse: {
+              summary: `Answer ${askCount}.`,
+              save_offer: {
+                calculatorId: 'coast_fire',
+                items: [
+                  { key: 'retirementAge', label: 'Retirement age', value: retirementAge, display: String(retirementAge) },
+                ],
+              },
+            },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, headers: new Headers(), json: async () => ({}) });
+    });
+
+    const { rerender } = render(<FinanceQA newDecisionNonce={1} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'What is my Coast FIRE number?' } });
+    fireEvent.submit(document.getElementById('finance-qa-form')!);
+    expect(await screen.findByRole('heading', { name: 'Use these next time?' })).toBeInTheDocument();
+    expect(screen.getByText('55')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'What if I retire at 60?' } });
+    fireEvent.submit(document.getElementById('finance-qa-form')!);
+    expect(await screen.findByText('Answer 2.')).toBeInTheDocument();
+    expect(screen.getByText('60')).toBeInTheDocument();
+
+    // Stale reload for the first turn lands after the follow-up answered.
+    rerender(<FinanceQA
+      newDecisionNonce={1}
+      selectedPrompt={{
+        id: 'conversation-a',
+        question: 'What is my Coast FIRE number?',
+        answer: 'Answer 1.',
+        threadId: 'thread-coast',
+        structuredResponse: { summary: 'Answer 1.' },
+        timestamp: Date.now(),
+      }}
+    />);
+    expect(screen.queryByRole('heading', { name: 'Use these next time?' })).not.toBeInTheDocument();
+
+    // The follow-up's history selection must still restore its live offer.
+    rerender(<FinanceQA
+      newDecisionNonce={1}
+      selectedPrompt={{
+        id: 'conversation-b',
+        question: 'What if I retire at 60?',
+        answer: 'Answer 2.',
+        threadId: 'thread-coast',
+        structuredResponse: { summary: 'Answer 2.' },
+        timestamp: Date.now(),
+      }}
+    />);
+    expect(screen.getByRole('heading', { name: 'Use these next time?' })).toBeInTheDocument();
+    expect(screen.getByText('60')).toBeInTheDocument();
+  });
+
+  it('does not resurrect a save offer when opening a different past turn', async () => {
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('/test/current-tier')) {
+        return Promise.resolve({ ok: true, json: async () => ({ backendTier: 'premium' }) });
+      }
+      if (url.includes('/ask/display-real')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({
+            answer: 'Your Coast FIRE number is $400,000.',
+            threadId: 'thread-coast',
+            conversationId: 'conversation-coast',
+            structuredResponse: {
+              summary: 'Your Coast FIRE number is $400,000.',
+              save_offer: {
+                calculatorId: 'coast_fire',
+                items: [
+                  { key: 'retirementAge', label: 'Retirement age', value: 55, display: '55' },
+                ],
+              },
+            },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, headers: new Headers(), json: async () => ({}) });
+    });
+
+    const { rerender } = render(<FinanceQA newDecisionNonce={1} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'What is my Coast FIRE number?' } });
+    fireEvent.submit(document.getElementById('finance-qa-form')!);
+    expect(await screen.findByRole('heading', { name: 'Use these next time?' })).toBeInTheDocument();
+
+    rerender(<FinanceQA
+      newDecisionNonce={1}
+      selectedPrompt={{
+        id: 'conversation-older',
+        question: 'How is my emergency fund?',
+        answer: 'You have six months of expenses.',
+        structuredResponse: { summary: 'You have six months of expenses.' },
+        timestamp: Date.now(),
+      }}
+    />);
+
+    expect(screen.queryByRole('heading', { name: 'Use these next time?' })).not.toBeInTheDocument();
+    expect(screen.getByText('You have six months of expenses.')).toBeInTheDocument();
+  });
+
   it('delivers a streamed answer, which is the path production takes', async () => {
     // The client always sends Accept: text/event-stream, so SSE is the real
     // path and the JSON branch is the fallback. The staleness guard sits inside

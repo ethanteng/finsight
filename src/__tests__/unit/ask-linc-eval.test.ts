@@ -3,7 +3,7 @@ import { runAskLincEvalSet, summarizeAskLincEval } from '../../evals/ask-linc-ev
 describe('Ask Linc evaluation set', () => {
   it('meets every deterministic correctness target through real pipeline scenarios', async () => {
     const summary = await summarizeAskLincEval(runAskLincEvalSet());
-    expect(summary.total).toBe(11);
+    expect(summary.total).toBe(12);
     expect(summary.score).toBe(1);
     expect(summary.results.filter(result => !result.passed)).toEqual([]);
   });

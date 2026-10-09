@@ -5,6 +5,11 @@ import { isProviderIdentifierLabel } from '../services/holding-label';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 import { questionMentionsSecurity } from './security-question-match';
+import {
+  STATED_FIGURE_DEFINITIONS,
+  STATED_FIGURE_KEYS,
+  savedOn,
+} from '../services/stated-figures';
 import { cashFlowForecastFacts, expectedMonthlyFacts, EXPECTED_MONTHLY_SURPLUS, EXPECTED_SAVINGS_RATE, withoutUnlinkedIncome } from './cash-flow-forecast-context';
 import {
   balanceBasisNote,
@@ -1001,6 +1006,22 @@ export function buildCanonicalFactPack(
   // answer that reasons from the user's age was reading supplied context, and
   // without the facts here that reasoning reads to a reviewer -- and to the
   // grounding check -- as a number nobody supplied.
+  // The plan the user saved in Your numbers: their own figures, kept between
+  // decisions, so an answer may plan with them and repeat them. Always
+  // present when saved (they are few), each labelled with when it was saved.
+  for (const key of STATED_FIGURE_KEYS) {
+    const figure = snapshot.statedFigures?.[key];
+    const definition = STATED_FIGURE_DEFINITIONS[key];
+    if (!figure || typeof figure.value !== 'number' || definition.kind === 'choice') continue;
+    addProfileFact(
+      `saved_${key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)}`,
+      `${definition.label}, as the user saved it in Your numbers on ${savedOn(figure.savedAt)}`,
+      figure.value,
+      definition.kind === 'age' ? 'age' : 'usd',
+      `statedFigures.${key}`
+    );
+  }
+
   const profile = snapshot.userProfileValues;
   if (profile) {
     addProfileFact('profile_age', 'User-stated age', profile.age, 'age', 'userProfile.age');

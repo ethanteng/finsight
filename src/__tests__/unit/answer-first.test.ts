@@ -199,6 +199,27 @@ describe('the fact pack never quotes an empty connection', () => {
       .toBe('Net worth across linked accounts and balances the user entered (no credit cards or loans linked or entered)');
   });
 
+  it('publishes the plan saved in Your numbers as the user\'s own figures, dated', () => {
+    const pack = buildCanonicalFactPack(snapshot({
+      linkedData: NOTHING_LINKED,
+      statedFigures: {
+        retirementAge: { value: 60, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+        annualRetirementSpending: { value: 80_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'answer' },
+        allocation: { value: 'growth', savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+      },
+    }), 'When can I retire?', needs());
+    const fact = (id: string) => pack.facts.find((item) => item.id === id);
+
+    expect(fact('saved_retirement_age')).toMatchObject({
+      value: 60,
+      unit: 'age',
+      label: 'Age you plan to retire, as the user saved it in Your numbers on Sep 14, 2026',
+      provenance: { kind: 'user_input', source: 'statedFigures.retirementAge' },
+    });
+    expect(fact('saved_annual_retirement_spending')).toMatchObject({ value: 80_000, unit: 'usd' });
+    expect(pack.facts.some((item) => item.id.startsWith('saved_allocation'))).toBe(false);
+  });
+
   it('behaves as it always has without the record', () => {
     const pack = buildCanonicalFactPack(snapshot(), 'What is my net worth?', needs());
     expect(pack.facts.find((fact) => fact.id === 'net_worth')).toMatchObject({ label: 'Net worth', value: 0 });

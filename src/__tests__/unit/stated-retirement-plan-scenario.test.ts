@@ -230,6 +230,30 @@ describe('retirement plan from stated figures', () => {
     });
   });
 
+  it('does not prefill the form with a saved retirement age the user has already reached', async () => {
+    const execution = await runStatedRetirementPlan(
+      {
+        ...NO_HOLDINGS,
+        userProfileValues: { age: 60 },
+        statedFigures: {
+          retirementAge: { value: 55, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          annualRetirementSpending: { value: 70_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          socialSecurityStartAge: { value: 67, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+        },
+      },
+      plan({}),
+      fakeRunner() as QuickPlanRunner
+    );
+    const request = statedRetirementPlanInputRequest(execution)!;
+    const field = (id: string) => request.fields.find((item) => item.id === id);
+
+    expect(field('retirementAge')?.value).toBeUndefined();
+    expect(field('retirementAge')?.valueNote).toBeUndefined();
+    expect(field('annualSpending')).toMatchObject({ value: 70_000, valueNote: 'From Your numbers' });
+    // Claiming age alone is not a benefit; the completed path would ignore it too.
+    expect(field('socialSecurityStartAge')?.value).toBeUndefined();
+  });
+
   it('assumes the conventional retirement age and says so', async () => {
     const runner = fakeRunner();
     const execution = await runStatedRetirementPlan(NO_HOLDINGS, plan({
@@ -296,6 +320,37 @@ describe('retirement plan from stated figures', () => {
     expect(describeStatedRetirementPlanExecution(linkedOnly)).toContain(
       'The amount invested is your connected investment total of $800,000; its holdings are not itemized, so they cannot be modeled directly.'
     );
+  });
+
+  it('plans with the figures saved in Your numbers, and says so', async () => {
+    const runner = fakeRunner();
+    const execution = await runStatedRetirementPlan(
+      {
+        ...NO_HOLDINGS,
+        statedFigures: {
+          retirementAge: { value: 62, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          annualRetirementSpending: { value: 60_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          socialSecurityAnnual: { value: 28_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          allocation: { value: 'growth', savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+        },
+      },
+      plan({ currentAge: 45, investableAssets: 800_000 }),
+      runner as QuickPlanRunner
+    );
+
+    expect(runner.mock.calls[0][0]).toMatchObject({
+      retirementAge: 62,
+      annualSpending: 60_000,
+      socialSecurityAnnual: 28_000,
+      allocation: 'growth',
+    });
+    const disclosure = describeStatedRetirementPlanExecution(execution)!;
+    expect(disclosure).toContain(
+      'From Your numbers: retiring at 62, spending $60,000 a year in retirement, $28,000 a year of Social Security, ' +
+      'and the Growth preset, saved Sep 14, 2026.'
+    );
+    expect(disclosure).not.toContain('You did not name a mix');
+    expect(disclosure).not.toContain('You did not name a retirement age');
   });
 
   it('answers with what the mix sustained when nobody knows the spending level', async () => {

@@ -141,6 +141,14 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
     );
   }
 
+  // The plan the user saved is in the fact pack on every question; the
+  // reviewer has to see it too, or a saved retirement age reads as invented.
+  const saved = Object.entries(snapshot.statedFigures ?? {})
+    .map(([key, figure]) => `${key}=${figure?.value}`);
+  if (saved.length > 0) {
+    parts.push(`Saved plan (Your numbers, the user's own figures): ${saved.join(', ')}`);
+  }
+
   // Same omission, different field. The question context pack hands the primary
   // model `financialSummary.quality`, so an answer may legitimately say that
   // some connections are not reporting and that the totals are therefore

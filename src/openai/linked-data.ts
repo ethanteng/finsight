@@ -93,6 +93,32 @@ export function describeLinkedData(args: {
 }
 
 /**
+ * The record for a stored snapshot row: its account list, the months its
+ * transaction summary covers, and how many holdings it itemizes. A row that
+ * carries data but no account list is one coverage cannot be read from, not
+ * proof that nothing is linked, so it gives no record (undefined) and keeps
+ * the behavior that predates it. No row at all is nothing linked.
+ */
+export function linkedDataFromSnapshot(snapshot: {
+  accounts?: unknown;
+  transactionsSummary?: unknown;
+  investmentPortfolio?: unknown;
+  financialOverview?: unknown;
+} | null | undefined): LinkedData | undefined {
+  if (!snapshot) return { ...NOTHING_LINKED };
+  const accounts = Array.isArray(snapshot.accounts) ? snapshot.accounts as (AccountLike & AccountOrigin)[] : [];
+  const byMonth = (snapshot.transactionsSummary as { byMonth?: Record<string, unknown> } | null)?.byMonth;
+  const transactionMonths = byMonth ? Object.keys(byMonth).length : 0;
+  const holdingCount = (snapshot.investmentPortfolio as { holdingCount?: number } | null)?.holdingCount ?? 0;
+  const overview = snapshot.financialOverview as Record<string, unknown> | null;
+  const carriesData = transactionMonths > 0 || holdingCount > 0 || ['totalCash', 'totalInvestments', 'totalDebt']
+    .some((key) => typeof overview?.[key] === 'number' && overview[key] !== 0);
+  return accounts.length === 0 && carriesData
+    ? undefined
+    : describeLinkedData({ accounts, holdingCount, transactionMonths });
+}
+
+/**
  * Whether income can be read from the user's own transactions. Only a cash
  * account receives a paycheck, so a linked card alone says nothing about it,
  * and neither does a cash balance the user entered.

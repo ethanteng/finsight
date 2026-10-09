@@ -44,6 +44,13 @@ import {
   type InputRequestSpec,
   type KnownInput,
 } from '../openai/input-request';
+import {
+  describeSavedFigures,
+  savedChoice,
+  savedNumber,
+  type StatedFigureKey,
+} from '../services/stated-figures';
+import type { SavableFigure, SaveOfferKey } from '../openai/save-offer';
 
 export const STATED_RETIREMENT_PLAN_CALCULATOR_ID = 'stated_retirement_plan' as const;
 export const STATED_RETIREMENT_PLAN_VERSION = 1 as const;
@@ -125,9 +132,10 @@ export interface StatedRetirementPlan {
  * Where a value came from: the user's words, the investment total or current
  * spending Linc holds (`basis` says whether linked accounts -- a balance with
  * no holdings itemized -- or the user's own entries), an age the user told
- * Linc earlier, or the public calculator's named default.
+ * Linc earlier, a figure from the plan they saved in Your numbers, or the
+ * public calculator's named default.
  */
-export type StatedRetirementAssumptionOrigin = 'user' | 'snapshot' | 'profile' | 'default';
+export type StatedRetirementAssumptionOrigin = 'user' | 'snapshot' | 'profile' | 'saved' | 'default';
 
 export interface StatedRetirementAssumption {
   key: StatedRetirementPlanField;
@@ -141,6 +149,8 @@ export interface StatedRetirementAssumption {
    * recorded before it, which were all read as linked.
    */
   basis?: BalanceBasis;
+  /** For a `saved` value: when the user saved it in Your numbers. */
+  savedAt?: string;
 }
 
 export interface StatedRetirementAlternative {
@@ -246,6 +256,17 @@ const LABELS: Record<StatedRetirementPlanField, string> = {
   socialSecurityStartAge: 'Social Security start age',
   lifeExpectancy: 'Planning horizon age',
   allocation: 'Preset asset mix',
+};
+
+/** How a figure taken from Your numbers is named in the disclosure. */
+const SAVED_PHRASES: Partial<Record<StatedRetirementPlanField, (value: number | string) => string>> = {
+  retirementAge: (value) => `retiring at ${value}`,
+  annualSpending: (value) => `spending ${money(Number(value))} a year in retirement`,
+  annualContributions: (value) => `saving ${money(Number(value))} a year until then`,
+  socialSecurityAnnual: (value) => `${money(Number(value))} a year of Social Security`,
+  socialSecurityStartAge: (value) => `Social Security from ${value}`,
+  lifeExpectancy: (value) => `planning through age ${value}`,
+  allocation: (value) => `the ${QUICKPLAN_ALLOCATIONS[value as QuickPlanAllocationId]?.label ?? value} preset`,
 };
 
 /**
@@ -377,7 +398,12 @@ function resolveVariant(
   const missingFields: StatedRetirementPlanField[] = [];
   const take = <T extends number | string>(
     field: StatedRetirementPlanField,
-    fallback?: { value: T; origin: Exclude<StatedRetirementAssumptionOrigin, 'user'>; basis?: BalanceBasis }
+    fallback?: {
+      value: T;
+      origin: Exclude<StatedRetirementAssumptionOrigin, 'user'>;
+      basis?: BalanceBasis;
+      savedAt?: string;
+    }
   ): T | undefined => {
     const stated = overrides[field] as T | undefined;
     const source = overrides.sources[field];
@@ -392,6 +418,7 @@ function resolveVariant(
         value: fallback.value,
         origin: fallback.origin,
         ...(fallback.basis && { basis: fallback.basis }),
+        ...(fallback.savedAt && { savedAt: fallback.savedAt }),
       });
       return fallback.value;
     }
@@ -403,6 +430,13 @@ function resolveVariant(
     return undefined;
   };
 
+  // The plan the user saved in Your numbers stands in after anything they
+  // said in this decision and before what accounts or defaults would give.
+  const saved = (key: StatedFigureKey) => {
+    const figure = savedNumber(snapshot.statedFigures, key);
+    return figure && { value: figure.value, origin: 'saved' as const, savedAt: figure.savedAt };
+  };
+  const savedMix = savedChoice(snapshot.statedFigures, 'allocation');
   const profileAge = snapshot.userProfileValues?.age;
   const knownAge = typeof profileAge === 'number' && Number.isInteger(profileAge) &&
     profileAge >= RANGES.currentAge.minimum && profileAge <= RANGES.currentAge.maximum
@@ -451,35 +485,108 @@ function resolveVariant(
         known.push({ key: field, value: stated, origin: 'user' });
       }
     }
+    // What Your numbers holds for the rest, unless the user said otherwise here.
+    // Same filters as the completed path: a saved retirement age already reached,
+    // a horizon that would not outlast retirement, or a claiming age with no
+    // benefit must not prefill the form (submitting them would re-state junk).
+    const savedFor: Partial<Record<StatedRetirementPlanField, StatedFigureKey>> = {
+      retirementAge: 'retirementAge',
+      annualSpending: 'annualRetirementSpending',
+      annualContributions: 'annualContribution',
+      socialSecurityAnnual: 'socialSecurityAnnual',
+      socialSecurityStartAge: 'socialSecurityStartAge',
+      lifeExpectancy: 'planThroughAge',
+    };
+    const usableSavedRetirementAge = (() => {
+      const figure = saved('retirementAge');
+      if (!figure) return undefined;
+      if (currentAge !== undefined && figure.value <= currentAge) return undefined;
+      return figure.value;
+    })();
+    const knownNumber = (field: StatedRetirementPlanField): number | undefined => {
+      const held = known.find((input) => input.key === field)?.value;
+      return typeof held === 'number' ? held : undefined;
+    };
+    for (const [field, key] of Object.entries(savedFor) as Array<[StatedRetirementPlanField, StatedFigureKey]>) {
+      const figure = saved(key);
+      if (!figure || known.some((input) => input.key === field)) continue;
+      if (field === 'retirementAge' && usableSavedRetirementAge === undefined) continue;
+      if (field === 'lifeExpectancy') {
+        const retirementAgeForHorizon =
+          knownNumber('retirementAge') ??
+          (overrides.retirementAge !== undefined && overrides.sources.retirementAge
+            ? overrides.retirementAge
+            : undefined) ??
+          usableSavedRetirementAge;
+        if (retirementAgeForHorizon !== undefined && figure.value <= retirementAgeForHorizon) continue;
+      }
+      if (field === 'socialSecurityStartAge') {
+        const benefit =
+          knownNumber('socialSecurityAnnual') ??
+          (overrides.socialSecurityAnnual !== undefined && overrides.sources.socialSecurityAnnual
+            ? overrides.socialSecurityAnnual
+            : undefined) ??
+          saved('socialSecurityAnnual')?.value;
+        if (!(typeof benefit === 'number' && benefit > 0)) continue;
+      }
+      known.push({ key: field, value: figure.value, origin: 'saved' });
+    }
+    if (savedMix && !known.some((input) => input.key === 'allocation')) {
+      known.push({ key: 'allocation', value: savedMix.value, origin: 'saved' });
+    }
     if (knownSpending !== undefined && !known.some((input) => input.key === 'annualSpending')) {
       known.push({ key: 'annualSpending', value: knownSpending, origin: 'snapshot', basis: spendingBasis });
     }
     return { missing, missingFields, known };
   }
-  // The conventional planning age, or now for someone already past it.
-  const retirementAge = take<number>('retirementAge', {
-    value: Math.max(currentAge!, CONVENTIONAL_RETIREMENT_AGE),
-    origin: 'default',
-  })!;
-  // What the user spends now, when their accounts say; otherwise no spending
-  // level at all, and the engine answers with what the mix sustained.
+  // A saved retirement age the user has already reached is no plan for the
+  // future; then the conventional planning age, or now for someone past it.
+  const savedRetirementAge = saved('retirementAge');
+  const retirementAge = take<number>(
+    'retirementAge',
+    savedRetirementAge && savedRetirementAge.value > currentAge!
+      ? savedRetirementAge
+      : { value: Math.max(currentAge!, CONVENTIONAL_RETIREMENT_AGE), origin: 'default' }
+  )!;
+  // The spending the user planned for, then what they spend now when their
+  // accounts say; otherwise no spending level at all, and the engine answers
+  // with what the mix sustained.
   const annualSpending = take<number>(
     'annualSpending',
-    knownSpending !== undefined ? { value: knownSpending, origin: 'snapshot', basis: spendingBasis } : undefined
+    saved('annualRetirementSpending') ??
+      (knownSpending !== undefined ? { value: knownSpending, origin: 'snapshot', basis: spendingBasis } : undefined)
   );
 
-  const annualContributions = take<number>('annualContributions', { value: 0, origin: 'default' })!;
-  const socialSecurityAnnual = take<number>('socialSecurityAnnual', { value: 0, origin: 'default' })!;
+  const annualContributions = take<number>(
+    'annualContributions',
+    saved('annualContribution') ?? { value: 0, origin: 'default' }
+  )!;
+  const socialSecurityAnnual = take<number>(
+    'socialSecurityAnnual',
+    saved('socialSecurityAnnual') ?? { value: 0, origin: 'default' }
+  )!;
   // A claiming age with no benefit behind it is only the form's default, and
   // listing it would narrate money this plan does not contain.
   const socialSecurityStartAge = socialSecurityAnnual > 0
-    ? take<number>('socialSecurityStartAge', { value: DEFAULT_SOCIAL_SECURITY_START_AGE, origin: 'default' })!
+    ? take<number>(
+      'socialSecurityStartAge',
+      saved('socialSecurityStartAge') ?? { value: DEFAULT_SOCIAL_SECURITY_START_AGE, origin: 'default' }
+    )!
     : DEFAULT_SOCIAL_SECURITY_START_AGE;
-  const lifeExpectancy = take<number>('lifeExpectancy', {
-    value: Math.max(DEFAULT_LIFE_EXPECTANCY, retirementAge! + 1),
-    origin: 'default',
-  })!;
-  const allocation = take<QuickPlanAllocationId>('allocation', { value: DEFAULT_ALLOCATION_ID, origin: 'default' })!;
+  // A saved horizon the retirement would already run past is not used.
+  const savedHorizon = saved('planThroughAge');
+  const lifeExpectancy = take<number>(
+    'lifeExpectancy',
+    savedHorizon && savedHorizon.value > retirementAge
+      ? savedHorizon
+      : { value: Math.max(DEFAULT_LIFE_EXPECTANCY, retirementAge + 1), origin: 'default' }
+  )!;
+  const allocation = take<QuickPlanAllocationId>(
+    'allocation',
+    savedMix && savedMix.value in QUICKPLAN_ALLOCATIONS
+      ? { value: savedMix.value as QuickPlanAllocationId, origin: 'saved', savedAt: savedMix.savedAt }
+      : { value: DEFAULT_ALLOCATION_ID, origin: 'default' }
+  )!;
 
   return {
     request: {
@@ -901,6 +1008,13 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
         : ` The spending level is what you spend now according to your linked accounts, ${money(Number(spending.value))} ` +
           'a year; I assumed retirement costs the same.';
 
+  const savedNotice = describeSavedFigures(primary.assumptions.flatMap((assumption) => {
+    const phrase = assumption.origin === 'saved' && assumption.savedAt
+      ? SAVED_PHRASES[assumption.key]?.(assumption.value)
+      : undefined;
+    return phrase ? [{ phrase, savedAt: assumption.savedAt! }] : [];
+  }));
+
   const standIn = unsupported
     ? `none of your linked holdings map to a return series I can simulate, so this ran the ${primary.allocation.label} ` +
       `preset (${primary.allocation.description}) in their place`
@@ -911,7 +1025,7 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
     `${primary.history.horizonYears}-year stretch of US market returns and inflation that began between ` +
     `${readableMonth(primary.history.firstStartMonth)} and ${readableMonth(primary.history.lastStartMonth)}.` +
     `${comparison}${retirementAgeNotice}${spendingNotice}${socialSecurity}${saving}${horizon}${mixDefault}` +
-    `${assetsNotice}${ageNotice}${comparisonNotice} ` +
+    `${assetsNotice}${ageNotice}${savedNotice}${comparisonNotice} ` +
     'Fund fees, taxes and account types are not modeled. Change any of these and I will re-run it.';
 }
 
@@ -1025,6 +1139,32 @@ export function statedRetirementPlanInputRequest(execution: StatedRetirementPlan
   };
 }
 
+/** Where each figure the user states would be kept in Your numbers. */
+const SAVE_KEYS: Partial<Record<StatedRetirementPlanField, SaveOfferKey>> = {
+  retirementAge: 'retirementAge',
+  annualSpending: 'annualRetirementSpending',
+  annualContributions: 'annualContribution',
+  socialSecurityAnnual: 'socialSecurityAnnual',
+  socialSecurityStartAge: 'socialSecurityStartAge',
+  lifeExpectancy: 'planThroughAge',
+  allocation: 'allocation',
+  investableAssets: 'investedBalance',
+};
+
+/**
+ * What the main case took from the user's own words, for "Use these next
+ * time?". A comparison's values are what-ifs and are never offered.
+ */
+export function statedRetirementPlanSavableFigures(execution: StatedRetirementPlanExecution): SavableFigure[] {
+  if (execution.status !== 'completed') return [];
+  const [primary] = execution.scenarios;
+  if (!primary) return [];
+  return primary.assumptions.flatMap((assumption) => {
+    const key = assumption.origin === 'user' ? SAVE_KEYS[assumption.key] : undefined;
+    return key ? [{ key, value: assumption.value }] : [];
+  });
+}
+
 export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
   StatedRetirementPlan,
   StatedRetirementPlanExecution,
@@ -1079,6 +1219,7 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
   execute: (snapshot, plan) => runStatedRetirementPlan(snapshot, plan),
   unavailable: (startedAt, reason) => unavailable(startedAt, reason),
   inputRequest: statedRetirementPlanInputRequest,
+  savableFigures: statedRetirementPlanSavableFigures,
   compactEvidence: compactStatedRetirementPlanExecution,
   canonicalFacts: statedRetirementPlanCanonicalFacts,
   describeAssumptions: describeStatedRetirementPlanExecution,

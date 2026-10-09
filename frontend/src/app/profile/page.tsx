@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import PlaidLinkButton, { PlaidLinkButtonRef, resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import SnapTradeConnections from '../../components/SnapTradeConnections';
 import PlaidConnections from '../../components/PlaidConnections';
@@ -1348,6 +1349,16 @@ export default function ProfilePage() {
 
         <main className="mx-auto max-w-[1200px] p-5 py-10 sm:px-6 md:py-12">
           <div className="authenticated-intro mb-10"><h2>Keep your financial context current.</h2><p>Manage the accounts and household details that ground every Ask Linc answer.</p></div>
+          {/* The figures no linked account can give -- what is invested before
+              anything is linked, what retirement will cost -- live together on
+              their own page, so they can be filled in once and changed later. */}
+          <div className="bg-gray-800 rounded-lg p-6 mb-6 flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h2 className="text-xl font-semibold mb-1">Your numbers</h2>
+              <p className="text-sm text-gray-400">Your age, what you have, what you spend and your retirement plan: the figures Linc plans with when no linked account says them.</p>
+            </div>
+            <Link href="/your-numbers" className="shrink-0 rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Open Your numbers</Link>
+          </div>
           {/* Remembered Personal Context Section */}
           <UserProfile userId={userEmail ? 'user' : undefined} />
 

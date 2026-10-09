@@ -867,6 +867,12 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   if (inputRequest) {
     structuredResponse = { ...structuredResponse, input_request: inputRequest };
   }
+  // A calculation that ran on figures the user stated offers to keep them for
+  // the next decision. Only the offer: nothing is saved without their click.
+  const saveOffer = scenarioCalculatorRegistry.saveOffer(scenarioExecutions, snapshot);
+  if (saveOffer) {
+    structuredResponse = { ...structuredResponse, save_offer: saveOffer };
+  }
 
   // When something the question needed is missing and the user is the one who
   // can supply it, ask for it. Appended after validation because it is

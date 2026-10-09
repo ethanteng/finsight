@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChartNoAxesCombined, ChevronRight, Landmark, LogOut, Menu, MessageSquareText, Newspaper, Plus, Settings, WalletCards, X } from 'lucide-react';
+import { ChartNoAxesCombined, ChevronRight, ListChecks, Landmark, LogOut, Menu, MessageSquareText, Newspaper, Plus, Settings, WalletCards, X } from 'lucide-react';
 import BetaBadge from '../../components/authenticated/BetaBadge';
 import FinanceQA from '../../components/FinanceQA';
 import FinancialOverview from '../../components/FinancialOverview';
@@ -270,6 +270,7 @@ export default function AppPageClient() {
           <Link href="/app" className="mt-4 flex items-center gap-3 rounded-xl bg-white/10 px-4 py-3 font-medium"><MessageSquareText size={18} />Decisions</Link>
           <Link href="/finances" className="flex items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><WalletCards size={18} />Finances</Link>
           <Link href="/cash-flow" className="flex items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><ChartNoAxesCombined size={18} />Cash flow<BetaBadge tone="dark" /></Link>
+          <Link href="/your-numbers" className="flex items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><ListChecks size={18} />Your numbers</Link>
           <Link href="/profile" className="flex items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><Settings size={18} />Accounts & context</Link>
           {hasMarketNewsAccess && <button onClick={() => setShowMarketNewsModal(true)} className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><Newspaper size={18} />Market context</button>}
         </nav>

@@ -2,6 +2,7 @@ import type { FinancialContextSnapshot } from '../openai/types';
 import type { ContextPackId } from '../openai/context-packs';
 import type { CanonicalFact } from '../openai/canonical-facts';
 import type { InputRequest } from '../openai/input-request';
+import { buildSaveOffer, type SavableFigure, type SaveOffer } from '../openai/save-offer';
 import { retirementScenarioCalculator } from './retirement-scenario';
 import { homeAffordabilityScenarioCalculator } from './home-affordability-scenario';
 import { coastFireScenarioCalculator } from './coast-fire-scenario';
@@ -94,6 +95,12 @@ export interface ScenarioCalculatorDefinition<
    * for calculators that never ask.
    */
   inputRequest?(execution: Execution): InputRequest | null;
+  /**
+   * The figures a completed run took from the user's own words in its main
+   * case, under the Your numbers key each would be saved as. Absent for
+   * calculators whose inputs Your numbers does not keep.
+   */
+  savableFigures?(execution: Execution): SavableFigure[];
 }
 
 type AnyScenarioCalculator = ScenarioCalculatorDefinition<any, any, any>;
@@ -311,6 +318,26 @@ export class ScenarioCalculatorRegistry {
       const request = this.require<unknown, ScenarioExecutionBase, ScenarioExecutionBase>(id)
         .inputRequest?.(execution);
       if (request) return request;
+    }
+    return null;
+  }
+
+  /**
+   * "Use these next time?" for the first calculator that ran on figures the
+   * user stated and has not saved, or null when there are none.
+   */
+  saveOffer(
+    executions: ScenarioExecutionRecord | undefined,
+    snapshot: Pick<FinancialContextSnapshot, 'statedFigures' | 'linkedData'>
+  ): SaveOffer | null {
+    if (!executions) return null;
+    for (const id of this.ids()) {
+      const execution = executions[id];
+      if (!execution) continue;
+      const figures = this.require<unknown, ScenarioExecutionBase, ScenarioExecutionBase>(id)
+        .savableFigures?.(execution) ?? [];
+      const offer = figures.length > 0 ? buildSaveOffer(id, figures, snapshot) : null;
+      if (offer) return offer;
     }
     return null;
   }

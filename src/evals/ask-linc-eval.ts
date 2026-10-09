@@ -388,6 +388,44 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
   });
   const coastAskForm = coastAsk.structuredResponse.input_request;
 
+  // A new decision from someone who saved their plan in Your numbers: they
+  // state only their age and savings, and the rest comes from what they
+  // saved, named with its date. The savings they stated are offered for
+  // keeping; nothing is saved by the answer itself.
+  const savedPlanQuestion = 'Have I reached Coast FIRE? I am 38 and have $500,000 invested.';
+  const savedPlanVariant = (values: Record<string, number>) => ({
+    overrides: {
+      ...Object.fromEntries(coastFields.map(field => [field, values[field] ?? null])),
+      sources: Object.fromEntries(coastFields.map(field => [field, values[field] !== undefined ? savedPlanQuestion : null])),
+    },
+  });
+  const savedPlanSnapshot = baseSnapshot();
+  savedPlanSnapshot.retirementAnalysisNeedsInfo = coastSnapshot.retirementAnalysisNeedsInfo;
+  savedPlanSnapshot.linkedData = { accounts: 0, cash: 0, credit: 0, loans: 0, investments: 0, holdings: 0, transactionMonths: 0 };
+  savedPlanSnapshot.financialSummary!.financialOverview = { netWorth: 0, totalCash: 0, totalInvestments: 0, totalDebt: 0, homeValue: null } as any;
+  savedPlanSnapshot.financialSummary!.investmentPortfolio = { totalValue: 0, holdingCount: 0, securityCount: 0, assetAllocation: [] } as any;
+  savedPlanSnapshot.statedFigures = {
+    retirementAge: { value: 55, savedAt: '2026-09-14T10:00:00.000Z', source: 'answer' },
+    annualRetirementSpending: { value: 80_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'answer' },
+  };
+  const savedPlan = await runAskLincAnalysis({
+    question: savedPlanQuestion,
+    enableValidation: false,
+    evaluation: {
+      snapshot: savedPlanSnapshot,
+      contextPlan: {
+        ...coastPlan,
+        scenarioPlans: scenarioCalculatorRegistry.parsePlans({
+          coast_fire: { requested: true, primary: savedPlanVariant({ currentAge: 38, currentSavings: 500_000 }), comparison: savedPlanVariant({}) },
+        }),
+      },
+      skipToneConfig: true,
+      model: () => jsonResponse('Not yet: you are short of the Coast FIRE number on the plan you saved.'),
+    },
+  });
+  const savedPlanSummary = savedPlan.structuredResponse.summary;
+  const savedPlanFacts = savedPlan.showTheMathData!.evidenceManifest.facts;
+
   // Assumptions are allowed, but only from something real: with no cash flow
   // linked and no earlier figure, there is nothing to read spending from.
   const retirementInputs = resolveRetirementInputs({
@@ -520,6 +558,16 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
         coastAskForm.fields.some(field => field.id === 'retirementAge' && field.value === 55) &&
         !coastAsk.showTheMathData!.evidenceManifest.facts.some(fact => fact.id.endsWith('_coast_fire_number')),
       detail: 'A Coast FIRE question missing figures runs nothing, asks for them in words, and carries a form for exactly those, with the retirement age already stated filled in.',
+    },
+    {
+      id: 'saved-plan-carries-into-a-new-decision',
+      category: 'calculator_follow_up',
+      passed: savedPlanSummary.includes('From Your numbers: retiring at 55 and spending $80,000 a year in retirement, saved Sep 14, 2026.') &&
+        savedPlanFacts.some(fact => fact.id === 'saved_retirement_age' && fact.value === 55) &&
+        savedPlanFacts.some(fact => fact.id.endsWith('_coast_fire_number')) &&
+        !savedPlan.structuredResponse.input_request &&
+        JSON.stringify(savedPlan.structuredResponse.save_offer?.items.map(item => item.key)) === JSON.stringify(['investedBalance']),
+      detail: 'A new decision plans with the figures saved in Your numbers, names them with their date, and offers to keep only the newly stated savings.',
     },
     {
       id: 'retirement-never-invents-spending',

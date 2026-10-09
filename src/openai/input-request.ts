@@ -66,7 +66,7 @@ export interface InputRequest {
 export interface KnownInput {
   key: string;
   value: number | string;
-  origin: 'user' | 'profile' | 'snapshot';
+  origin: 'user' | 'profile' | 'snapshot' | 'saved';
   basis?: BalanceBasis;
 }
 
@@ -93,6 +93,7 @@ export interface InputRequestSpec {
 function describeOrigin(input: KnownInput): string {
   if (input.origin === 'user') return 'From what you said earlier';
   if (input.origin === 'profile') return 'From what you told me before';
+  if (input.origin === 'saved') return 'From Your numbers';
   if (input.basis === 'entered') return 'From what you entered on the Finances page';
   if (input.basis === 'linked_and_entered') return 'From your linked accounts and what you entered';
   return 'From your linked accounts';

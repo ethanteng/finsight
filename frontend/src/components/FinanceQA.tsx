@@ -8,10 +8,12 @@ import { useAnalytics } from './Analytics';
 import { trackContentsquareEvent } from '@/lib/contentsquare';
 import Feedback from './Feedback';
 import InputRequestCard from './InputRequestCard';
+import SaveOfferCard from './SaveOfferCard';
 import { ShowTheMathContent, DatabaseSourceSection, downloadShowTheMathAsText, type ShowTheMathData } from './ShowTheMathModal';
 import { formatKeyNumberValue, formatProvenance, type DisplayKeyNumber } from '@/lib/formatKeyNumber';
 import { relativeTurnTime } from '@/lib/relative-time';
 import type { DisplayStructuredResponse, StructuredPromptHistory } from '@/lib/structured-answer';
+import type { DisplaySaveOffer } from '@/lib/your-numbers';
 import { useVisibleAnswerMeasurement } from '@/lib/use-visible-answer-measurement';
 
 type PromptHistory = StructuredPromptHistory;
@@ -64,6 +66,12 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   // thread after "New decision" lands during analysis.
   const askEpochRef = useRef(0);
   const prevSelectedTurnIdRef = useRef<string | null>(null);
+  // Tracks the turn the live answer on screen belongs to, so a history reload
+  // that re-selects that turn can keep a save_offer history deliberately omits.
+  const conversationIdRef = useRef<string | null>(null);
+  // The offer itself, keyed by turn id: surviving a follow-up's history race
+  // needs more than comparing conversationIdRef, which a stale reload can move.
+  const liveSaveOfferRef = useRef<{ conversationId: string; offer: DisplaySaveOffer } | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState('');
   const [structuredResponse, setStructuredResponse] = useState<DisplayStructuredResponse | null>(null);
@@ -116,6 +124,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   const startNewDecision = useCallback(() => {
     askEpochRef.current += 1;
     prevSelectedTurnIdRef.current = null;
+    conversationIdRef.current = null;
+    liveSaveOfferRef.current = null;
     setLoading(false);
     setProgressMessage(null);
     setQuestion('');
@@ -149,7 +159,11 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
       prevSelectedTurnIdRef.current = turnId;
       setQuestion(selectedPrompt.question);
       setAnswer(selectedPrompt.answer);
+      // Compare before adopting the selection: history omits save_offer, and the
+      // post-answer reload re-selects the turn whose live offer is already on screen.
+      const priorConversationId = conversationIdRef.current;
       setConversationId(selectedPrompt.id);
+      conversationIdRef.current = selectedPrompt.id;
       setAnsweredAt(selectedPrompt.timestamp);
       // Opening a past turn resumes its line of questioning, so a follow-up
       // continues where that decision left off. Turns written before threads
@@ -158,7 +172,27 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
       // Rows written before threads, or by a client that predates them, may still
       // have no threadId in storage. The row's own id is the effective thread key.
       setThreadId(selectedPrompt.threadId ?? selectedPrompt.id);
-      setStructuredResponse(selectedPrompt.structuredResponse ?? null);
+      // History restores input_request but not save_offer (live-only). When the
+      // sidebar re-selects the turn that just answered, keep the live offer so
+      // "Use these next time?" does not vanish after the post-answer reload —
+      // including when a stale reload for an earlier turn ran between a
+      // follow-up's answer and its own history selection.
+      setStructuredResponse((prev) => {
+        const next = selectedPrompt.structuredResponse ?? null;
+        const live = liveSaveOfferRef.current;
+        if (next && !next.save_offer && live && selectedPrompt.id === live.conversationId) {
+          return { ...next, save_offer: live.offer };
+        }
+        if (
+          next &&
+          prev?.save_offer &&
+          !next.save_offer &&
+          selectedPrompt.id === priorConversationId
+        ) {
+          return { ...next, save_offer: prev.save_offer };
+        }
+        return next;
+      });
       setShowTheMathData(null);
       setError('');
       setActiveView('answer');
@@ -216,6 +250,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
     setShowTheMathData(null);
     setShowTheMathError(null);
     setConversationId(null);
+    conversationIdRef.current = null;
+    liveSaveOfferRef.current = null;
     setAnsweredAt(null);
     setActiveView('answer');
     setSelectedSourceKey(null);
@@ -294,7 +330,16 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
                   setAnsweredAt(Date.now());
                   setStreamingAnswer('');
                   if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
-                  if (data.conversationId) setConversationId(data.conversationId);
+                  if (data.conversationId) {
+                    setConversationId(data.conversationId);
+                    conversationIdRef.current = data.conversationId;
+                    if (data.structuredResponse?.save_offer) {
+                      liveSaveOfferRef.current = {
+                        conversationId: data.conversationId,
+                        offer: data.structuredResponse.save_offer,
+                      };
+                    }
+                  }
                   if (data.threadId) setThreadId(data.threadId);
                   if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
                   trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier });
@@ -345,7 +390,16 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
           setAnswer(data.answer);
           setAnsweredAt(Date.now());
           if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
-          if (data.conversationId) setConversationId(data.conversationId);
+          if (data.conversationId) {
+            setConversationId(data.conversationId);
+            conversationIdRef.current = data.conversationId;
+            if (data.structuredResponse?.save_offer) {
+              liveSaveOfferRef.current = {
+                conversationId: data.conversationId,
+                offer: data.structuredResponse.save_offer,
+              };
+            }
+          }
           if (data.threadId) setThreadId(data.threadId);
           if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
           trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier });
@@ -483,6 +537,17 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
                     key={conversationId ?? 'pending'}
                     request={structuredResponse.input_request}
                     onSubmit={(message) => submitInputRequest(structuredResponse.input_request!.calculatorId, message)}
+                  />
+                )}
+                {structuredResponse?.save_offer && !loading && (
+                  <SaveOfferCard
+                    key={conversationId ?? 'pending'}
+                    offer={structuredResponse.save_offer}
+                    onSaved={(count) => trackEvent('save_offer_saved', {
+                      calculator_id: structuredResponse.save_offer!.calculatorId,
+                      figure_count: count,
+                      user_tier: userTier,
+                    })}
                   />
                 )}
                 {structuredResponse?.insights && structuredResponse.insights.length > 0 && <section aria-labelledby="takeaways-heading"><h3 id="takeaways-heading" className="mb-3 flex items-center gap-2 font-semibold text-[#102319]"><Lightbulb size={18} className="text-[#49725a]" />Takeaways</h3><ul className="grid gap-3 sm:grid-cols-2">{structuredResponse.insights.map((insight, index) => <li key={index} className="flex gap-3 rounded-2xl border border-[#397052]/10 bg-[#eef4ea] p-4 text-sm leading-6 text-[#365e4c]"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#d9e8d4] text-xs font-semibold text-[#28543a]">{index + 1}</span><span>{insight}</span></li>)}</ul></section>}
