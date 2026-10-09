@@ -65,16 +65,24 @@ router.put('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     const source: StatedFigureSource = req.body?.source === 'answer' ? 'answer' : 'page';
 
     const prisma = getPrismaClient();
-    // Read, apply and write in one transaction, so two saves at once (the page
-    // and an answer) cannot each drop the other's figure.
+    // Read-modify-write under a row lock: a plain transaction is not enough
+    // under read-committed, so two saves at once (the page and an answer)
+    // could each read the same JSON and the later write would drop the earlier
+    // figure. Ensure the row exists, lock it, then apply.
     const result = await prisma.$transaction(async (tx) => {
-      const row = await tx.statedFigures.findUnique({ where: { userId }, select: { figures: true } });
-      const update = applyStatedFigureUpdate(parseStatedFigures(row?.figures), changes, source);
-      if (Object.keys(update.rejected).length > 0) return update;
       await tx.statedFigures.upsert({
         where: { userId },
-        create: { userId, figures: update.figures as object },
-        update: { figures: update.figures as object },
+        create: { userId, figures: {} },
+        update: {},
+      });
+      const locked = await tx.$queryRaw<Array<{ figures: unknown }>>`
+        SELECT figures FROM stated_figures WHERE "userId" = ${userId} FOR UPDATE
+      `;
+      const update = applyStatedFigureUpdate(parseStatedFigures(locked[0]?.figures), changes, source);
+      if (Object.keys(update.rejected).length > 0) return update;
+      await tx.statedFigures.update({
+        where: { userId },
+        data: { figures: update.figures as object },
       });
       return update;
     });
