@@ -14,6 +14,7 @@ import {
   type RetirementQuickPlanResult,
 } from '../../services/retirement-quickplan';
 import { validateCanonicalFactPack } from '../../openai/canonical-facts';
+import { NOTHING_LINKED } from '../../openai/linked-data';
 
 const NUMERIC = [
   'currentAge',
@@ -223,6 +224,41 @@ describe('retirement plan from stated figures', () => {
     expect(runner.mock.calls[0][0]).toMatchObject({ annualSpending: 66_000 });
     expect(describeStatedRetirementPlanExecution(execution))
       .toContain('The spending level is what you spend now according to your linked accounts, $66,000 a year; I assumed retirement costs the same.');
+  });
+
+  it('calls the user\'s own entered balance and spending figure theirs, not linked', async () => {
+    const runner = fakeRunner();
+    const execution = await runStatedRetirementPlan(
+      {
+        ...NO_HOLDINGS,
+        linkedData: { ...NOTHING_LINKED, entered: { accounts: 1, cash: 0, credit: 0, loans: 0, investments: 1 } },
+        financialSummary: { financialOverview: { totalInvestments: 800_000 } },
+        expectedMonthly: { spending: 5_500, income: null, incomeSource: 'transactions', spendingSource: 'override' },
+      },
+      plan({ currentAge: 45, retirementAge: 60 }),
+      runner as QuickPlanRunner
+    ) as CompletedStatedRetirementPlanExecution;
+
+    expect(runner.mock.calls[0][0]).toMatchObject({ investableAssets: 800_000, annualSpending: 66_000 });
+    expect(execution.scenarios[0].assumptions.find((item) => item.key === 'investableAssets'))
+      .toMatchObject({ origin: 'snapshot', basis: 'entered' });
+    const disclosure = describeStatedRetirementPlanExecution(execution)!;
+    expect(disclosure).toContain('The amount invested is the $800,000 of investments you entered');
+    expect(disclosure).toContain('The spending level is the monthly spending you set on the Finances page, $66,000 a year');
+    expect(disclosure).not.toMatch(/connected investment total|according to your linked accounts/);
+
+    const linkedOnly = await runStatedRetirementPlan(
+      {
+        ...NO_HOLDINGS,
+        linkedData: { ...NOTHING_LINKED, accounts: 1, investments: 1 },
+        financialSummary: { financialOverview: { totalInvestments: 800_000 } },
+      },
+      plan({ currentAge: 45, retirementAge: 60, annualSpending: 70_000 }),
+      runner as QuickPlanRunner
+    );
+    expect(describeStatedRetirementPlanExecution(linkedOnly)).toContain(
+      'The amount invested is your connected investment total of $800,000; its holdings are not itemized, so they cannot be modeled directly.'
+    );
   });
 
   it('answers with what the mix sustained when nobody knows the spending level', async () => {

@@ -80,7 +80,8 @@ function money(value: number): string {
  * concretely what it would change about the answer they just read.
  */
 function noHoldingsAsk(
-  executions: FinancialContextSnapshot['scenarioExecutions']
+  executions: FinancialContextSnapshot['scenarioExecutions'],
+  linked: LinkedData | undefined
 ): MissingInputAsk | null {
   const stated = executions?.[STATED_RETIREMENT_PLAN_CALCULATOR_ID] as StatedRetirementPlanExecution | undefined;
   const coastFire = executions?.[COAST_FIRE_CALCULATOR_ID] as CoastFireScenarioExecution | undefined;
@@ -128,13 +129,19 @@ function noHoldingsAsk(
   if (stated?.status === 'unavailable' || coastFire?.status === 'unavailable') {
     return null;
   }
+  // An investment balance the user entered is already the amount invested;
+  // asking for it again would tell them Linc ignored it.
+  const statedFigures = (linked?.entered?.investments ?? 0) > 0
+    ? 'what you expect to spend a year in retirement, your age and when you want to retire, and I will test ' +
+      'the investment balance you entered on a preset mix in the meantime.'
+    : 'roughly how much you have invested, what you expect to spend a year in retirement, your age and when ' +
+      'you want to retire, and I will test it on a preset mix in the meantime.';
   return {
     id: 'retirement_no_holdings',
     message: 'I have not run a historical retirement projection because no investment holdings are linked yet. ' +
       'That projection runs your actual mix of stocks, bonds and cash through a century of real market ' +
       'history, so it needs the holdings themselves, not just a total. Link an investment account and ask ' +
-      'again — or tell me roughly how much you have invested, what you expect to spend a year in retirement, ' +
-      'your age and when you want to retire, and I will test it on a preset mix in the meantime.',
+      `again — or tell me ${statedFigures}`,
   };
 }
 
@@ -166,6 +173,10 @@ type AskNeeds = Pick<QuestionNeeds, 'needsRetirement' | 'needsHomeValue'> &
  * the user cannot act on, or when the question is general rather than about
  * their money. Debt is never raised: no linked card or loan is as likely to
  * mean no debt as unlinked debt.
+ *
+ * A balance the user entered by hand is not linked: it has no transactions or
+ * holdings behind it. Linking is still the upgrade, and where the answer used
+ * an entered balance the note says linking replaces it.
  */
 function linkingAsk(
   linked: LinkedData | undefined,
@@ -196,16 +207,24 @@ function linkingAsk(
   if (needs.needsInvestments && linked.investments === 0) {
     return {
       id: 'link_for_investments',
-      message: 'Link your brokerage and retirement accounts, and I will look at what you actually hold: your real ' +
-        'mix of stocks and bonds, what each fund charges, and where you are concentrated.',
+      message: (linked.entered?.investments ?? 0) > 0
+        ? 'Link your brokerage and retirement accounts in place of the balance you entered, and I will look at ' +
+          'what you actually hold: your real mix of stocks and bonds, what each fund charges, and where you are ' +
+          'concentrated.'
+        : 'Link your brokerage and retirement accounts, and I will look at what you actually hold: your real ' +
+          'mix of stocks and bonds, what each fund charges, and where you are concentrated.',
     };
   }
   if (linked.accounts === 0) {
     return {
       id: 'link_anything',
-      message: 'Link your accounts and I will answer this from your real numbers instead of what you have told ' +
-        'me and general rules of thumb: your actual balances, what comes in and goes out each month, and what ' +
-        'you hold.',
+      message: (linked.entered?.accounts ?? 0) > 0
+        ? 'Link your accounts and I will answer this from live numbers instead of the balances you entered and ' +
+          'general rules of thumb: balances that stay current, what comes in and goes out each month, and what ' +
+          'you hold.'
+        : 'Link your accounts and I will answer this from your real numbers instead of what you have told ' +
+          'me and general rules of thumb: your actual balances, what comes in and goes out each month, and what ' +
+          'you hold.',
     };
   }
   return null;
@@ -227,7 +246,7 @@ export function collectMissingInputAsks(
     if (retirementAsk) {
       asks.push({ id: 'retirement_inputs', message: retirementAsk });
     } else if (needsInfo?.unavailableCode === 'no_holdings') {
-      const ask = noHoldingsAsk(snapshot.scenarioExecutions);
+      const ask = noHoldingsAsk(snapshot.scenarioExecutions, snapshot.linkedData);
       if (ask) asks.push(ask);
     } else if (needsInfo?.unavailableCode === 'no_supported_simulation') {
       // A preset may have stood in already; then this is the reason it did,

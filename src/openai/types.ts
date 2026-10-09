@@ -109,6 +109,9 @@ export interface FinancialContextSnapshot {
    * describes an empty connection, not the user, so it is never quoted as a
    * fact about them. Absent on paths that predate it, which then behave as
    * they always have. See `openai/linked-data.ts`.
+   *
+   * The counts are of linked accounts only. A balance the user entered by
+   * hand is counted under `entered` instead.
    */
   linkedData?: {
     accounts: number;
@@ -122,6 +125,20 @@ export interface FinancialContextSnapshot {
     holdings: number;
     /** Calendar months the transaction summary has any activity in. */
     transactionMonths: number;
+    /**
+     * Balances the user entered by hand on the Finances page, by kind. They
+     * are the user's own figures, not linked data: nothing reports
+     * transactions or holdings behind them, so an answer calls them what the
+     * user entered and never a linked or connected account. Absent when the
+     * user entered none.
+     */
+    entered?: {
+      accounts: number;
+      cash: number;
+      credit: number;
+      loans: number;
+      investments: number;
+    };
   };
   bankingTransactions: TransactionSummaryItem[];
   investments?: InvestmentSnapshot;

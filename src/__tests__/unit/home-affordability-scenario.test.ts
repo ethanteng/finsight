@@ -842,6 +842,25 @@ describe('home affordability scenario runner', () => {
       expect(scenario.metrics.upfrontCashNeeded).toBeGreaterThan(0);
     });
 
+    it('uses cash the user entered on the Finances page, and names it as theirs', async () => {
+      const execution = await runHomeAffordabilityScenario(unlinked({
+        linkedData: { ...NOTHING_LINKED, entered: { accounts: 1, cash: 1, credit: 0, loans: 0, investments: 0 } },
+        financialSummary: {
+          financialOverview: { netWorth: 180_000, totalCash: 180_000, totalInvestments: 0, totalDebt: 0, homeValue: null },
+        },
+      }), home()) as any;
+
+      const [scenario] = execution.scenarios;
+      expect(scenario.assumptions).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: 'available_cash',
+          value: 180_000,
+          origin: 'snapshot',
+          source: 'Cash balances the user entered',
+        }),
+      ]));
+    });
+
     it('runs the whole assessment on the take-home pay, spending and cash the user states', async () => {
       const execution = await runHomeAffordabilityScenario(unlinked(), home({
         availableCashAmount: 200_000,

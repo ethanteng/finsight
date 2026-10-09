@@ -36,6 +36,8 @@ function snapshot(overrides: Record<string, unknown> = {}) {
 }
 
 const linked = (overrides: Partial<typeof NOTHING_LINKED>) => ({ ...NOTHING_LINKED, ...overrides });
+const entered = (overrides: Partial<NonNullable<typeof NOTHING_LINKED['entered']>>) =>
+  ({ accounts: 0, cash: 0, credit: 0, loans: 0, investments: 0, ...overrides });
 
 describe('linked data', () => {
   it('counts linked accounts by kind with the shared classifier', () => {
@@ -54,6 +56,26 @@ describe('linked data', () => {
     expect(record).toEqual({ accounts: 5, cash: 1, credit: 1, loans: 1, investments: 2, holdings: 12, transactionMonths: 4 });
   });
 
+  it('counts a balance the user entered by hand apart from what is linked', () => {
+    const record = describeLinkedData({
+      accounts: [
+        { type: 'credit', subtype: 'credit card' },
+        // Each of the three ways a snapshot marks a hand-entered balance.
+        { type: 'investment', subtype: 'brokerage', source: 'manual' },
+        { type: 'depository', subtype: 'checking', account_id: 'manual-abc' },
+        { type: 'loan', subtype: 'mortgage', institution: 'Manual' },
+      ],
+      transactionMonths: 3,
+    });
+
+    expect(record).toEqual({
+      accounts: 1, cash: 0, credit: 1, loans: 0, investments: 0, holdings: 0, transactionMonths: 3,
+      entered: { accounts: 3, cash: 1, credit: 0, loans: 1, investments: 1 },
+    });
+    // A cash balance the user typed in has no paycheck behind it.
+    expect(incomeLinked(record)).toBe(false);
+  });
+
   it('reads income only from a cash account, and spending from a card too', () => {
     const cardOnly = linked({ accounts: 1, credit: 1, transactionMonths: 3 });
     expect(spendingLinked(cardOnly)).toBe(true);
@@ -67,6 +89,21 @@ describe('linked data', () => {
     expect(describeLinkedDataForModel(linked({ accounts: 1, cash: 1, transactionMonths: 3 })))
       .toMatch(/no credit cards, no loans or a mortgage, no investment or retirement accounts/);
     expect(describeLinkedDataForModel(undefined)).toBeNull();
+  });
+
+  it('tells the model a balance the user entered is theirs, and not linked', () => {
+    const enteredOnly = describeLinkedDataForModel(linked({ entered: entered({ accounts: 1, investments: 1 }) }))!;
+    expect(enteredOnly).toContain('The user has not linked any accounts yet.');
+    expect(enteredOnly).toContain('The user entered their investment balances by hand; they are not linked.');
+    expect(enteredOnly).toContain('never a linked or connected account');
+    expect(enteredOnly).not.toContain('There are no balances');
+
+    const mixed = describeLinkedDataForModel(linked({
+      accounts: 1, cash: 1, transactionMonths: 3, entered: entered({ accounts: 1, investments: 1 }),
+    }))!;
+    // Investments are covered by the entered balance, so they are not called missing.
+    expect(mixed).toContain('but no credit cards, no loans or a mortgage.');
+    expect(mixed).toContain('The user entered their investment balances by hand');
   });
 });
 
@@ -95,6 +132,71 @@ describe('the fact pack never quotes an empty connection', () => {
     expect(pack.facts.some((fact) => fact.id === 'total_debt')).toBe(false);
     expect(pack.facts.find((fact) => fact.id === 'net_worth')?.label)
       .toBe('Net worth across linked accounts only (no investment accounts, no credit cards or loans linked)');
+  });
+
+  it('publishes balances the user entered, labelled as theirs rather than linked', () => {
+    const data = snapshot({
+      linkedData: linked({ entered: entered({ accounts: 1, investments: 1 }) }),
+      financialSummary: {
+        computedAt: '2026-10-01T00:00:00.000Z',
+        financialOverview: { netWorth: 500_000, totalCash: 0, totalInvestments: 500_000, totalDebt: 0, homeValue: null },
+        investmentPortfolio: { totalValue: 500_000, holdingCount: 0, assetAllocation: [] },
+      },
+    });
+    const facts = buildCanonicalFactPack(data, 'What is my net worth?', needs()).facts;
+    const fact = (id: string) => facts.find((item) => item.id === id);
+
+    expect(fact('total_investments')).toMatchObject({ value: 500_000, label: 'Total investments (entered by the user, not linked)' });
+    expect(fact('portfolio_value')?.label).toBe('Portfolio value (entered by the user, not linked)');
+    expect(fact('net_worth')?.label)
+      .toBe('Net worth from balances the user entered, with nothing linked (no cash accounts, no credit cards or loans entered)');
+    expect(fact('total_cash')).toBeUndefined();
+    expect(fact('total_debt')).toBeUndefined();
+  });
+
+  it('names the home value as part of net worth, not as money the user entered', () => {
+    const withHome = (linkedData: Record<string, unknown>) => buildCanonicalFactPack(snapshot({
+      linkedData,
+      financialSummary: {
+        computedAt: '2026-10-01T00:00:00.000Z',
+        financialOverview: { netWorth: 510_000, totalCash: 10_000, totalInvestments: 0, totalDebt: 0, homeValue: 500_000 },
+      },
+    }), 'What is my net worth?', needs()).facts.find((fact) => fact.id === 'net_worth')?.label;
+
+    expect(withHome(linked({ entered: entered({ accounts: 1, cash: 1 }) }))).toBe(
+      'Net worth from balances the user entered and the home value, with nothing linked ' +
+      '(no investment accounts, no credit cards or loans entered)'
+    );
+    expect(withHome(linked({ accounts: 1, cash: 1, transactionMonths: 3 }))).toBe(
+      'Net worth across linked accounts and the home value only (no investment accounts, no credit cards or loans linked)'
+    );
+    expect(buildSnapshotSummaryForValidation(snapshot({
+      linkedData: linked({ entered: entered({ accounts: 1, cash: 1 }) }),
+      financialSummary: {
+        computedAt: '2026-10-01T00:00:00.000Z',
+        financialOverview: { netWorth: 510_000, totalCash: 10_000, totalInvestments: 0, totalDebt: 0, homeValue: 500_000 },
+      },
+    }))).toContain('netWorth=510000 (balances the user entered and the home value, nothing linked;');
+  });
+
+  it('says which totals mix linked accounts with balances the user entered', () => {
+    const data = snapshot({
+      linkedData: linked({
+        accounts: 2, cash: 1, investments: 1, transactionMonths: 3,
+        entered: entered({ accounts: 1, investments: 1 }),
+      }),
+      financialSummary: {
+        computedAt: '2026-10-01T00:00:00.000Z',
+        financialOverview: { netWorth: 112_000, totalCash: 12_000, totalInvestments: 100_000, totalDebt: 0, homeValue: null },
+      },
+    });
+    const facts = buildCanonicalFactPack(data, 'What is my net worth?', needs()).facts;
+    const label = (id: string) => facts.find((item) => item.id === id)?.label;
+
+    expect(label('total_cash')).toBe('Total cash');
+    expect(label('total_investments')).toBe('Total investments (linked accounts plus balances the user entered)');
+    expect(label('net_worth'))
+      .toBe('Net worth across linked accounts and balances the user entered (no credit cards or loans linked or entered)');
   });
 
   it('behaves as it always has without the record', () => {
@@ -176,6 +278,20 @@ describe('the reviewer is shown the same totals as the answer', () => {
     expect(summary).not.toMatch(/totalInvestments=|totalDebt=|Investment portfolio:/);
   });
 
+  it('shows the balances the user entered, labelled as theirs', () => {
+    const summary = buildSnapshotSummaryForValidation(snapshot({
+      linkedData: linked({ entered: entered({ accounts: 1, investments: 1 }) }),
+      financialSummary: {
+        computedAt: '2026-10-01T00:00:00.000Z',
+        financialOverview: { netWorth: 500_000, totalCash: 0, totalInvestments: 500_000, totalDebt: 0, homeValue: null },
+      },
+    }));
+
+    expect(summary).toContain('Financial overview: netWorth=500000 (balances the user entered, nothing linked; ' +
+      'no cash accounts, no credit cards or loans entered), totalInvestments=500000 (entered by the user, not linked), homeValue=null');
+    expect(summary).not.toContain('balance totals are not available');
+  });
+
   it('shows no balances when nothing is linked', () => {
     const summary = buildSnapshotSummaryForValidation(snapshot({ linkedData: NOTHING_LINKED }));
     expect(summary).toContain('Financial overview: no linked accounts; balance totals are not available (not zero), homeValue=null');
@@ -221,6 +337,33 @@ describe('the closing note says what linking would change', () => {
     const [note] = ask({ linkedData: linked({ accounts: 1, cash: 1, transactionMonths: 3 }) }, ['investment_details']);
     expect(note.id).toBe('link_for_investments');
     expect(note.message).toContain('what each fund charges');
+  });
+
+  it('offers linking in place of an investment balance the user entered', () => {
+    const [note] = ask({ linkedData: linked({ entered: entered({ accounts: 1, investments: 1 }) }) }, ['investment_details']);
+    expect(note.id).toBe('link_for_investments');
+    expect(note.message).toContain('in place of the balance you entered');
+  });
+
+  it('offers live numbers in place of the balances the user entered', () => {
+    const [note] = ask({ linkedData: linked({ entered: entered({ accounts: 1, cash: 1 }) }) }, [], true);
+    expect(note.id).toBe('link_anything');
+    expect(note.message).toContain('instead of the balances you entered');
+  });
+
+  it('asks for cash flow when only a cash balance was entered, since it has no transactions', () => {
+    const [note] = ask({ linkedData: linked({ entered: entered({ accounts: 1, cash: 1 }) }) }, ['monthly_cash_flow']);
+    expect(note.id).toBe('link_for_cash_flow');
+  });
+
+  it('does not ask again for an investment balance the user entered', () => {
+    const [note] = ask({
+      linkedData: linked({ entered: entered({ accounts: 1, investments: 1 }) }),
+      retirementAnalysisNeedsInfo: { missingParams: [], detectedParams: {}, unavailableCode: 'no_holdings' },
+    }, ['retirement_analysis'], true);
+    expect(note.id).toBe('retirement_no_holdings');
+    expect(note.message).toContain('test the investment balance you entered on a preset mix');
+    expect(note.message).not.toContain('how much you have invested');
   });
 
   it('covers a question about the user\'s own money that needed no pack, when nothing is linked', () => {

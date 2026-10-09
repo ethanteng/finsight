@@ -22,6 +22,16 @@ This holds for every user: linked or not, partly linked, arriving from a calcula
 - **Prompt.** A short "What the User Has Linked" block says what is not linked, and the reviewer gets the same statement. The reviewer's overview shows the same totals as the fact pack (`linkedOverview`), so it is never told both that a zero is not the user's and that it is.
 - **Uncertain snapshots.** A snapshot that carries data but no account list keeps the behavior that predates the record. The record only claims "nothing linked" when that is plainly true.
 
+### Balances the user entered
+
+A balance entered by hand on the Finances page (a manual account) is not linked. It is the user's own figure, so a total built on it describes the user, but nothing reports transactions or holdings behind it. `describeLinkedData` counts these accounts under `linkedData.entered`, by kind, and leaves them out of the linked counts. It recognizes them the same way snapshot persistence does: `source: 'manual'`, a `manual-` account id, or the institution "Manual".
+
+- **Fact pack and reviewer.** A total of a kind that is linked or entered is shown, so a user with only entered balances still sees their totals. Where an entered balance is part of a total, the label says so: "Total investments (entered by the user, not linked)", or "(linked accounts plus balances the user entered)". Net worth names what it is built from, including the home value whenever one is known, and what it leaves out ("Net worth from balances the user entered and the home value, with nothing linked (no investment accounts entered)").
+- **Prompt.** The "What the User Has Linked" block says which balances the user entered, and tells the model to call them that and never a linked or connected account.
+- **Cash flow.** An entered cash balance has no paycheck behind it, so it never makes income readable, even beside a linked card.
+- **Calculators.** Coast FIRE and the stated retirement plan still fall back to the investment total when the user does not state their savings, and record whether it came from linked accounts, entered balances or both (`basis` on the assumption). The disclosure then says "the $500,000 of investments you entered" rather than "your connected investment total". A monthly spending figure the user set on the Finances page is described as theirs, not as what linked accounts show. Home affordability reads entered cash as available purchase cash and names its source as "Cash balances the user entered".
+- **Closing note.** An entered balance does not stop the note: linking is still the upgrade. Where one was used, the note says linking replaces it ("in place of the balance you entered", "instead of the balances you entered"), and the no-holdings retirement note does not ask again for an amount the user already entered.
+
 ### The answer prompt (`src/openai/financial-reasoning-prompt.ts`)
 
 An "Answer first" section replaces the old instruction to "explain what is missing instead of estimating it". Grounding is unchanged: the model still may not estimate, compute, or cite a number that is not a fact.

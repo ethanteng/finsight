@@ -10,6 +10,7 @@ import {
 } from '../../scenarios/coast-fire-scenario';
 import { calculateCoastFire } from '../../services/coast-fire';
 import { validateCanonicalFactPack } from '../../openai/canonical-facts';
+import { NOTHING_LINKED } from '../../openai/linked-data';
 import type { RetirementQuickPlanRequest, RetirementQuickPlanResult } from '../../services/retirement-quickplan';
 
 /** The historical engine's answer, shaped like the quick plan's, at a fixed survival rate. */
@@ -210,6 +211,43 @@ describe('Coast FIRE calculator', () => {
     expect(disclosure).toContain('Your age, 38, is the one you told me earlier.');
     // Neither rate was stated, so both defaults are named.
     expect(disclosure).toContain('You did not give a growth rate, so I used 5%, or a withdrawal rate, so I used 4%.');
+  });
+
+  it('calls an investment balance the user entered theirs, not a connected total', async () => {
+    const enteredOnly = await runCoastFireScenario({
+      linkedData: { ...NOTHING_LINKED, entered: { accounts: 1, cash: 0, credit: 0, loans: 0, investments: 1 } },
+      financialSummary: { financialOverview: { totalInvestments: 500_000 } },
+    }, plan({ currentAge: 38, retirementAge: 55, annualRetirementSpending: 80_000 })) as CompletedCoastFireScenarioExecution;
+
+    expect(enteredOnly.scenarios[0].metrics.currentSavings).toBe(500_000);
+    expect(enteredOnly.scenarios[0].assumptions.find((item) => item.key === 'currentSavings'))
+      .toMatchObject({ origin: 'snapshot', basis: 'entered' });
+    const disclosure = describeCoastFireScenarioExecution(enteredOnly)!;
+    expect(disclosure).toContain('Your savings figure is the $500,000 of investments you entered');
+    expect(disclosure).not.toMatch(/connected|linked investment account/);
+
+    const both = await runCoastFireScenario({
+      linkedData: {
+        ...NOTHING_LINKED,
+        accounts: 1,
+        investments: 1,
+        entered: { accounts: 1, cash: 0, credit: 0, loans: 0, investments: 1 },
+      },
+      financialSummary: { financialOverview: { totalInvestments: 650_000 } },
+    }, plan({ currentAge: 38, retirementAge: 55, annualRetirementSpending: 80_000 })) as CompletedCoastFireScenarioExecution;
+    expect(describeCoastFireScenarioExecution(both))
+      .toContain('your investment total of $650,000: every linked investment account plus the investment balances you entered');
+  });
+
+  it('calls a spending figure the user set on the Finances page theirs, not linked', async () => {
+    const execution = await runCoastFireScenario(
+      { expectedMonthly: { spending: 6_000, income: null, incomeSource: 'transactions', spendingSource: 'override' } },
+      plan({ currentAge: 38, currentSavings: 500_000 })
+    ) as CompletedCoastFireScenarioExecution;
+
+    const disclosure = describeCoastFireScenarioExecution(execution)!;
+    expect(disclosure).toContain('Retirement spending is the monthly spending you set on the Finances page, $72,000 a year');
+    expect(disclosure).not.toContain('according to your linked accounts');
   });
 
   it('assumes the conventional retirement age and current spending, and says so', async () => {

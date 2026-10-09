@@ -6,7 +6,15 @@ import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 import { questionMentionsSecurity } from './security-question-match';
 import { cashFlowForecastFacts, expectedMonthlyFacts, EXPECTED_MONTHLY_SURPLUS, EXPECTED_SAVINGS_RATE, withoutUnlinkedIncome } from './cash-flow-forecast-context';
-import { emptyPortfolio, incomeLinked, linkedOverview, spendingLinked } from './linked-data';
+import {
+  balanceBasisNote,
+  emptyPortfolio,
+  incomeLinked,
+  linkedOverview,
+  netWorthFactLabel,
+  netWorthIncludesHome,
+  spendingLinked,
+} from './linked-data';
 
 export type CanonicalFactUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
@@ -296,27 +304,27 @@ export function buildCanonicalFactPack(
   if (overview) {
     // A zero from a kind of account nobody linked describes an empty
     // connection, not the user, and quoting it produced "your net worth is $0"
-    // for people who had simply not linked anything yet.
-    const { shown, netWorthLeavesOut } = linkedOverview(snapshot.linkedData, overview);
+    // for people who had simply not linked anything yet. A balance the user
+    // entered by hand is theirs, and its label says so.
+    const linked = snapshot.linkedData;
+    const { shown, netWorthLeavesOut } = linkedOverview(linked, overview);
     if (shown.has('netWorth')) {
       addSnapshotFact(
         'net_worth',
-        netWorthLeavesOut.length > 0
-          ? `Net worth across linked accounts only (no ${netWorthLeavesOut.join(', no ')} linked)`
-          : 'Net worth',
+        netWorthFactLabel(linked, netWorthLeavesOut, netWorthIncludesHome(overview)),
         overview.netWorth,
         'usd',
         'financialSummary.financialOverview.netWorth'
       );
     }
     if (shown.has('totalCash')) {
-      addSnapshotFact('total_cash', 'Total cash', overview.totalCash, 'usd', 'financialSummary.financialOverview.totalCash');
+      addSnapshotFact('total_cash', `Total cash${balanceBasisNote(linked, 'cash')}`, overview.totalCash, 'usd', 'financialSummary.financialOverview.totalCash');
     }
     if (shown.has('totalInvestments')) {
-      addSnapshotFact('total_investments', 'Total investments', overview.totalInvestments, 'usd', 'financialSummary.financialOverview.totalInvestments');
+      addSnapshotFact('total_investments', `Total investments${balanceBasisNote(linked, 'investments')}`, overview.totalInvestments, 'usd', 'financialSummary.financialOverview.totalInvestments');
     }
     if (shown.has('totalDebt')) {
-      addSnapshotFact('total_debt', 'Total debt', overview.totalDebt, 'usd', 'financialSummary.financialOverview.totalDebt');
+      addSnapshotFact('total_debt', `Total debt${balanceBasisNote(linked, 'debt')}`, overview.totalDebt, 'usd', 'financialSummary.financialOverview.totalDebt');
     }
     addSnapshotFact('home_value', 'Home value', overview.homeValue, 'usd', 'financialSummary.financialOverview.homeValue', true, homeMidpointAsOf);
   }
@@ -570,10 +578,10 @@ export function buildCanonicalFactPack(
   const holdingCountSource = portfolio?.holdingCount !== undefined || portfolio?.holdingsCount !== undefined
     ? 'financialSummary.investmentPortfolio.holdingCount'
     : 'investments.holdingCount';
-  // With no investment account linked, a zero portfolio is an empty
-  // connection; see the aggregates above.
+  // With no investment account linked or entered, a zero portfolio is an
+  // empty connection; see the aggregates above.
   if (!emptyPortfolio(snapshot.linkedData, portfolioValue)) {
-    addSnapshotFact('portfolio_value', 'Portfolio value', portfolioValue, 'usd', portfolioValueSource);
+    addSnapshotFact('portfolio_value', `Portfolio value${balanceBasisNote(snapshot.linkedData, 'investments')}`, portfolioValue, 'usd', portfolioValueSource);
     addSnapshotFact('portfolio_holding_count', 'Portfolio holding count', holdingCount, 'count', holdingCountSource);
   }
   // Merge before emitting: the fact id is case-folded, so "etf" and "ETF" rows
