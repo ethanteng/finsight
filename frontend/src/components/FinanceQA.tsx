@@ -65,6 +65,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   // thread after "New decision" lands during analysis.
   const askEpochRef = useRef(0);
   const prevSelectedTurnIdRef = useRef<string | null>(null);
+  // Tracks the turn the live answer on screen belongs to, so a history reload
+  // that re-selects that turn can keep a save_offer history deliberately omits.
+  const conversationIdRef = useRef<string | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState('');
   const [structuredResponse, setStructuredResponse] = useState<DisplayStructuredResponse | null>(null);
@@ -117,6 +120,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   const startNewDecision = useCallback(() => {
     askEpochRef.current += 1;
     prevSelectedTurnIdRef.current = null;
+    conversationIdRef.current = null;
     setLoading(false);
     setProgressMessage(null);
     setQuestion('');
@@ -150,7 +154,11 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
       prevSelectedTurnIdRef.current = turnId;
       setQuestion(selectedPrompt.question);
       setAnswer(selectedPrompt.answer);
+      // Compare before adopting the selection: history omits save_offer, and the
+      // post-answer reload re-selects the turn whose live offer is already on screen.
+      const priorConversationId = conversationIdRef.current;
       setConversationId(selectedPrompt.id);
+      conversationIdRef.current = selectedPrompt.id;
       setAnsweredAt(selectedPrompt.timestamp);
       // Opening a past turn resumes its line of questioning, so a follow-up
       // continues where that decision left off. Turns written before threads
@@ -159,7 +167,21 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
       // Rows written before threads, or by a client that predates them, may still
       // have no threadId in storage. The row's own id is the effective thread key.
       setThreadId(selectedPrompt.threadId ?? selectedPrompt.id);
-      setStructuredResponse(selectedPrompt.structuredResponse ?? null);
+      // History restores input_request but not save_offer (live-only). When the
+      // sidebar re-selects the turn that just answered, keep the live offer so
+      // "Use these next time?" does not vanish after the post-answer reload.
+      setStructuredResponse((prev) => {
+        const next = selectedPrompt.structuredResponse ?? null;
+        if (
+          next &&
+          prev?.save_offer &&
+          !next.save_offer &&
+          selectedPrompt.id === priorConversationId
+        ) {
+          return { ...next, save_offer: prev.save_offer };
+        }
+        return next;
+      });
       setShowTheMathData(null);
       setError('');
       setActiveView('answer');
@@ -295,7 +317,10 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
                   setAnsweredAt(Date.now());
                   setStreamingAnswer('');
                   if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
-                  if (data.conversationId) setConversationId(data.conversationId);
+                  if (data.conversationId) {
+                    setConversationId(data.conversationId);
+                    conversationIdRef.current = data.conversationId;
+                  }
                   if (data.threadId) setThreadId(data.threadId);
                   if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
                   trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier });
@@ -346,7 +371,10 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
           setAnswer(data.answer);
           setAnsweredAt(Date.now());
           if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
-          if (data.conversationId) setConversationId(data.conversationId);
+          if (data.conversationId) {
+            setConversationId(data.conversationId);
+            conversationIdRef.current = data.conversationId;
+          }
           if (data.threadId) setThreadId(data.threadId);
           if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
           trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier });
