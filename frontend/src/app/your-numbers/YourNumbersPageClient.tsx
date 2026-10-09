@@ -68,7 +68,14 @@ function textFor(field: Field, value: number | string | null | undefined): strin
 }
 
 function savedNote(savedAt: string, source: 'page' | 'answer'): string {
-  const date = new Date(savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // UTC, matching the server's savedOn wording so a figure saved near midnight
+  // does not show as a different calendar day on the page than in an answer.
+  const date = new Date(savedAt).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
   return source === 'answer' ? `Saved ${date} from an answer` : `Saved ${date}`;
 }
 
