@@ -860,6 +860,13 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   for (const disclosure of scenarioCalculatorRegistry.assumptionDisclosures(scenarioExecutions)) {
     structuredResponse = appendNotice(structuredResponse, disclosure);
   }
+  // A calculator waiting on figures only the user has also hands the client a
+  // form for them. Its disclosure above still asks in words, for any client
+  // that does not render the form.
+  const inputRequest = scenarioCalculatorRegistry.inputRequest(scenarioExecutions);
+  if (inputRequest) {
+    structuredResponse = { ...structuredResponse, input_request: inputRequest };
+  }
 
   // When something the question needed is missing and the user is the one who
   // can supply it, ask for it. Appended after validation because it is
@@ -879,8 +886,15 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   if (!outputValidation.safe) {
     logFlaggedOutput(displayText, outputValidation.flagged || 'unknown', { userId });
     recordLlmAnalysisFailure(Date.now() - pipelineStartedAt);
+    // The form is application-owned (calculator fields, not model prose), so
+    // keep it when the written answer is replaced with the safety fallback.
     return {
-      structuredResponse: { summary: outputValidation.sanitized, insights: [], suggested_actions: [] },
+      structuredResponse: {
+        summary: outputValidation.sanitized,
+        insights: [],
+        suggested_actions: [],
+        ...(inputRequest && { input_request: inputRequest }),
+      },
       displayText: outputValidation.sanitized
     };
   }

@@ -7,6 +7,7 @@ import LincAvatar from './LincAvatar';
 import { useAnalytics } from './Analytics';
 import { trackContentsquareEvent } from '@/lib/contentsquare';
 import Feedback from './Feedback';
+import InputRequestCard from './InputRequestCard';
 import { ShowTheMathContent, DatabaseSourceSection, downloadShowTheMathAsText, type ShowTheMathData } from './ShowTheMathModal';
 import { formatKeyNumberValue, formatProvenance, type DisplayKeyNumber } from '@/lib/formatKeyNumber';
 import { relativeTurnTime } from '@/lib/relative-time';
@@ -186,9 +187,23 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
     startNewDecision();
   }, [newDecisionNonce, startNewDecision]);
 
-  const askQuestion = async (e: React.FormEvent) => {
+  const askQuestion = (e: React.FormEvent) => {
     e.preventDefault();
-    const questionToAsk = question.trim() || PLACEHOLDER_QUESTIONS[placeholderIndex];
+    void submitQuestion(question.trim() || PLACEHOLDER_QUESTIONS[placeholderIndex]);
+  };
+
+  /**
+   * A form under the answer sends its figures as the next question in the
+   * decision: the composer shows exactly what was sent, and the server reads
+   * it like anything else the user types.
+   */
+  const submitInputRequest = (calculatorId: string, message: string) => {
+    trackEvent('input_request_submitted', { calculator_id: calculatorId, user_tier: userTier });
+    setQuestion(message);
+    void submitQuestion(message);
+  };
+
+  const submitQuestion = async (questionToAsk: string) => {
     const epoch = ++askEpochRef.current;
     const isStale = () => epoch !== askEpochRef.current;
 
@@ -463,6 +478,13 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
                   </section>
                 )}
                 <div className="decision-answer prose prose-slate max-w-none text-[#48574e] prose-headings:text-[#102319] prose-a:text-[#397052]">{structuredResponse ? <MarkdownRenderer>{structuredResponse.summary}</MarkdownRenderer> : streamingAnswer ? <><MarkdownRenderer>{streamingAnswer}</MarkdownRenderer><span className="inline-block h-4 w-1.5 animate-pulse bg-[#102319]" /></> : answer ? <MarkdownRenderer>{answer}</MarkdownRenderer> : <div className="space-y-3" aria-label="Answer loading"><div className="h-4 w-11/12 animate-pulse rounded bg-[#dfe6d4]" /><div className="h-4 w-4/5 animate-pulse rounded bg-[#dfe6d4]" /><div className="h-4 w-2/3 animate-pulse rounded bg-[#dfe6d4]" /></div>}</div>
+                {structuredResponse?.input_request && !loading && (
+                  <InputRequestCard
+                    key={conversationId ?? 'pending'}
+                    request={structuredResponse.input_request}
+                    onSubmit={(message) => submitInputRequest(structuredResponse.input_request!.calculatorId, message)}
+                  />
+                )}
                 {structuredResponse?.insights && structuredResponse.insights.length > 0 && <section aria-labelledby="takeaways-heading"><h3 id="takeaways-heading" className="mb-3 flex items-center gap-2 font-semibold text-[#102319]"><Lightbulb size={18} className="text-[#49725a]" />Takeaways</h3><ul className="grid gap-3 sm:grid-cols-2">{structuredResponse.insights.map((insight, index) => <li key={index} className="flex gap-3 rounded-2xl border border-[#397052]/10 bg-[#eef4ea] p-4 text-sm leading-6 text-[#365e4c]"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#d9e8d4] text-xs font-semibold text-[#28543a]">{index + 1}</span><span>{insight}</span></li>)}</ul></section>}
                 {structuredResponse?.suggested_actions && structuredResponse.suggested_actions.length > 0 && <section aria-labelledby="action-items-heading"><h3 id="action-items-heading" className="mb-3 flex items-center gap-2 font-semibold text-[#102319]"><ListChecks size={18} className="text-[#466f9d]" />Action items</h3><ol className="grid gap-3 sm:grid-cols-2">{structuredResponse.suggested_actions.map((action, index) => <li key={index} className="flex gap-3 rounded-2xl border border-[#466f9d]/10 bg-[#e2edff] p-4 text-sm leading-6 text-[#254b75]"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/70 text-xs font-semibold text-[#254b75]">{index + 1}</span><span>{action}</span></li>)}</ol></section>}
                 {conversationId && answer && !loading && <Feedback conversationId={conversationId} onFeedbackSubmitted={(score) => trackEvent('feedback_submitted', { score, user_tier: userTier })} />}

@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import {
   coastFireContributionPath,
+  coastFireInputRequest,
   coastFireScenarioCanonicalFacts,
   describeCoastFireScenarioExecution,
   parseCoastFireScenarioPlan,
@@ -191,6 +192,53 @@ describe('Coast FIRE calculator', () => {
     const ask = describeCoastFireScenarioExecution(execution)!;
     expect(ask).toContain('To work out your Coast FIRE number I need your current age');
     expect(ask).toContain('no linked accounts needed');
+  });
+
+  it('hands the client a form for the missing figures, showing what it already holds', async () => {
+    const execution = await runCoastFireScenario({
+      linkedData: { ...NOTHING_LINKED, entered: { accounts: 1, cash: 0, credit: 0, loans: 0, investments: 1 } },
+      financialSummary: { financialOverview: { totalInvestments: 500_000 } },
+    }, plan({ retirementAge: 55 }));
+
+    expect(execution).toMatchObject({
+      status: 'unavailable',
+      missingFields: ['currentAge', 'annualRetirementSpending'],
+      knownInputs: [
+        { key: 'retirementAge', value: 55, origin: 'user' },
+        { key: 'currentSavings', value: 500_000, origin: 'snapshot', basis: 'entered' },
+      ],
+    });
+    const request = coastFireInputRequest(execution)!;
+    const field = (id: string) => request.fields.find((item) => item.id === id)!;
+
+    expect(request).toMatchObject({ calculatorId: 'coast_fire', question: 'What is my Coast FIRE number?' });
+    expect(request.fields.filter((item) => item.required).map((item) => item.id))
+      .toEqual(['currentAge', 'annualRetirementSpending']);
+    expect(field('retirementAge')).toMatchObject({ value: 55, valueNote: 'From what you said earlier' });
+    expect(field('currentSavings')).toMatchObject({ value: 500_000, valueNote: 'From what you entered on the Finances page' });
+    // A default is named as what a blank means, never shown as a figure the user gave.
+    expect(field('realReturnRatePercent')).toMatchObject({ defaultNote: '5% if left blank' });
+    expect(field('realReturnRatePercent')).not.toHaveProperty('value');
+    // Each sentence carries the wording the planner is told to read.
+    expect(field('annualRetirementSpending').sentence)
+      .toBe('I expect to spend {value} a year once I stop working, in today\'s dollars.');
+  });
+
+  it('does not insist on a retirement age while the age itself is unknown', async () => {
+    const execution = await runCoastFireScenario(EMPTY_SNAPSHOT, plan({}));
+    const request = coastFireInputRequest(execution)!;
+
+    expect((execution as any).missingFields).toContain('retirementAge');
+    // Blank only means 65 under that age; past it the field becomes needed.
+    expect(request.fields.find((item) => item.id === 'retirementAge')).toMatchObject({
+      required: false,
+      defaultNote: '65 if you are under 65',
+      requireWhen: { fieldId: 'currentAge', minimum: 65 },
+    });
+  });
+
+  it('has no form for a run that completed', async () => {
+    expect(coastFireInputRequest(await runCoastFireScenario(EMPTY_SNAPSHOT, plan(STATED)))).toBeNull();
   });
 
   it('fills age and savings from what Linc already holds, and says so', async () => {

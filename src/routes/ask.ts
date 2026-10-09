@@ -16,6 +16,7 @@ import {
   parseStructuredResponse,
   type AskLincResponse,
 } from '../openai/structured-response';
+import { parseInputRequest } from '../openai/input-request';
 
 const router = Router();
 
@@ -29,7 +30,11 @@ function storedStructuredResponse(stored: unknown): AskLincResponse | null {
   const candidate = (stored as { structuredResponse?: unknown }).structuredResponse;
   if (!candidate || typeof candidate !== 'object') return null;
   if (typeof (candidate as { summary?: unknown }).summary !== 'string') return null;
-  return parseStructuredResponse(JSON.stringify(candidate));
+  const response = parseStructuredResponse(JSON.stringify(candidate));
+  // The parser reads model replies and keeps none of the server's own fields,
+  // so a saved form is checked and put back on its own.
+  const inputRequest = parseInputRequest((candidate as { input_request?: unknown }).input_request);
+  return inputRequest ? { ...response, input_request: inputRequest } : response;
 }
 
 /**

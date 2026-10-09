@@ -48,6 +48,12 @@ import {
 import { presetStandInReason } from './preset-stand-in';
 import { CONVENTIONAL_RETIREMENT_AGE } from '../openai/retirement-inputs';
 import { balanceBasis, type BalanceBasis } from '../openai/linked-data';
+import {
+  buildInputRequest,
+  type InputRequest,
+  type InputRequestSpec,
+  type KnownInput,
+} from '../openai/input-request';
 
 export const COAST_FIRE_CALCULATOR_ID = 'coast_fire' as const;
 export const COAST_FIRE_SCENARIO_VERSION = 1 as const;
@@ -230,6 +236,10 @@ export interface UnavailableCoastFireScenarioExecution {
    * asks for it rather than reporting a failure.
    */
   missingInputs?: string[];
+  /** The same figures by field, for the form that asks for them. */
+  missingFields?: CoastFireOverrideField[];
+  /** What was already known when they were found missing, so the form can show it. */
+  knownInputs?: KnownInput[];
 }
 
 export type CoastFireScenarioExecution =
@@ -428,9 +438,10 @@ interface ResolvedCoastFireVariant {
 function resolveVariant(
   snapshot: FinancialContextSnapshot,
   overrides: PlannedCoastFireOverrides
-): ResolvedCoastFireVariant | { missing: string[] } {
+): ResolvedCoastFireVariant | { missing: string[]; missingFields: CoastFireOverrideField[]; known: KnownInput[] } {
   const assumptions: CoastFireAssumption[] = [];
   const missing: string[] = [];
+  const missingFields: CoastFireOverrideField[] = [];
   const take = (
     field: CoastFireOverrideField,
     fallback?: { value: number; origin: Exclude<CoastFireAssumptionOrigin, 'user'>; basis?: BalanceBasis }
@@ -452,7 +463,10 @@ function resolveVariant(
       return fallback.value;
     }
     const prompt = MISSING_INPUT_PROMPTS[field];
-    if (prompt) missing.push(prompt);
+    if (prompt) {
+      missing.push(prompt);
+      missingFields.push(field);
+    }
     return undefined;
   };
 
@@ -495,7 +509,19 @@ function resolveVariant(
     ? take('annualContribution')
     : undefined;
 
-  if (missing.length > 0) return { missing };
+  if (missing.length > 0) {
+    // Defaults are not shown as known: the form names them as what a blank
+    // field means, so they never come back as something the user said.
+    const known: KnownInput[] = assumptions
+      .filter((assumption) => assumption.origin !== 'default')
+      .map((assumption) => ({
+        key: assumption.key,
+        value: assumption.value,
+        origin: assumption.origin as KnownInput['origin'],
+        ...(assumption.basis && { basis: assumption.basis }),
+      }));
+    return { missing, missingFields, known };
+  }
   return {
     inputs: {
       currentAge: currentAge!,
@@ -699,7 +725,7 @@ function scenarioId(variant: ResolvedCoastFireVariant): string {
 function unavailable(
   startedAt: number,
   reason: string,
-  missingInputs?: string[]
+  missing?: { prompts: string[]; fields: CoastFireOverrideField[]; known: KnownInput[] }
 ): UnavailableCoastFireScenarioExecution {
   return {
     version: COAST_FIRE_SCENARIO_VERSION,
@@ -708,7 +734,11 @@ function unavailable(
     computedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt,
     reason,
-    ...(missingInputs && missingInputs.length > 0 && { missingInputs }),
+    ...(missing && missing.prompts.length > 0 && {
+      missingInputs: missing.prompts,
+      missingFields: missing.fields,
+      ...(missing.known.length > 0 && { knownInputs: missing.known }),
+    }),
   };
 }
 
@@ -740,7 +770,7 @@ export async function runCoastFireScenario(
       return unavailable(
         startedAt,
         `Missing ${joinList(variant.missing)}.`,
-        variant.missing
+        { prompts: variant.missing, fields: variant.missingFields, known: variant.known }
       );
     }
     try {
@@ -1096,6 +1126,110 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
     'Change any of these and I will re-run it.';
 }
 
+/**
+ * The Coast FIRE form: every input the calculation reads, each with the
+ * sentence it is sent in. The wording is what the planner is told to look for
+ * ("annual spending once retired, in today's dollars"), so a submitted form
+ * reads back as exactly the figures it held.
+ */
+const COAST_FIRE_INPUT_REQUEST: InputRequestSpec = {
+  calculatorId: COAST_FIRE_CALCULATOR_ID,
+  title: 'Your Coast FIRE figures',
+  question: 'What is my Coast FIRE number?',
+  submitLabel: 'Work out my Coast FIRE number',
+  fields: [
+    {
+      id: 'currentAge',
+      label: 'Your age',
+      kind: 'age',
+      ...OVERRIDE_RANGES.currentAge,
+      sentence: 'I am {value} years old.',
+    },
+    {
+      id: 'currentSavings',
+      label: 'Invested for retirement today',
+      kind: 'usd',
+      ...OVERRIDE_RANGES.currentSavings,
+      sentence: 'I have {value} invested for retirement today.',
+    },
+    {
+      id: 'annualRetirementSpending',
+      label: 'What you expect to spend a year once you stop working',
+      kind: 'usd_per_year',
+      ...OVERRIDE_RANGES.annualRetirementSpending,
+      sentence: 'I expect to spend {value} a year once I stop working, in today\'s dollars.',
+    },
+    {
+      id: 'retirementAge',
+      label: 'Age you plan to retire',
+      kind: 'age',
+      ...OVERRIDE_RANGES.retirementAge,
+      sentence: 'I plan to retire at {value}.',
+      defaultNote: `${CONVENTIONAL_RETIREMENT_AGE} if left blank`,
+    },
+    {
+      id: 'annualRetirementIncome',
+      label: 'Pension or other income a year once you retire',
+      kind: 'usd_per_year',
+      ...OVERRIDE_RANGES.annualRetirementIncome,
+      sentence: 'I expect {value} a year of pension or other income starting when I retire, in today\'s dollars.',
+      defaultNote: 'None if left blank',
+    },
+    {
+      id: 'annualContribution',
+      label: 'What you invest a year now',
+      kind: 'usd_per_year',
+      ...OVERRIDE_RANGES.annualContribution,
+      sentence: 'I invest {value} a year now.',
+      defaultNote: 'Optional: shows when you could stop adding to it',
+    },
+    {
+      id: 'realReturnRatePercent',
+      label: 'Growth a year after inflation',
+      kind: 'percent',
+      ...OVERRIDE_RANGES.realReturnRatePercent,
+      sentence: 'Assume {value} growth a year after inflation.',
+      defaultNote: `${DEFAULT_COAST_FIRE_REAL_RETURN_PERCENT}% if left blank`,
+    },
+    {
+      id: 'withdrawalRatePercent',
+      label: 'Withdrawal rate in retirement',
+      kind: 'percent',
+      ...OVERRIDE_RANGES.withdrawalRatePercent,
+      sentence: 'Use a {value} withdrawal rate.',
+      defaultNote: `${DEFAULT_COAST_FIRE_WITHDRAWAL_RATE_PERCENT}% if left blank`,
+    },
+  ],
+};
+
+/** The form for a Coast FIRE run waiting on figures, or null for one that ran or failed otherwise. */
+export function coastFireInputRequest(execution: CoastFireScenarioExecution): InputRequest | null {
+  if (execution.status !== 'unavailable' || !execution.missingFields?.length) return null;
+  // Without an age there is no telling whether the conventional retirement
+  // age is still ahead, so both were asked for. Given an age under it, a blank
+  // retirement age is the default, so the form does not insist on one — until
+  // the entered age is at or past that threshold, when the default no longer
+  // applies and the field becomes needed again (requireWhen).
+  const ageMissing = execution.missingFields.includes('currentAge');
+  const missing = ageMissing
+    ? execution.missingFields.filter((field) => field !== 'retirementAge')
+    : execution.missingFields;
+  const request = buildInputRequest(COAST_FIRE_INPUT_REQUEST, missing, execution.knownInputs);
+  if (!request || !ageMissing) return request;
+  return {
+    ...request,
+    fields: request.fields.map((field) =>
+      field.id !== 'retirementAge'
+        ? field
+        : {
+            ...field,
+            defaultNote: `${CONVENTIONAL_RETIREMENT_AGE} if you are under ${CONVENTIONAL_RETIREMENT_AGE}`,
+            requireWhen: { fieldId: 'currentAge', minimum: CONVENTIONAL_RETIREMENT_AGE },
+          }
+    ),
+  };
+}
+
 export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
   CoastFireScenarioPlan,
   CoastFireScenarioExecution,
@@ -1151,6 +1285,7 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
   },
   execute: (snapshot, plan) => runCoastFireScenario(snapshot, plan),
   unavailable: (startedAt, reason) => unavailable(startedAt, reason),
+  inputRequest: coastFireInputRequest,
   compactEvidence: compactCoastFireScenarioExecution,
   canonicalFacts: coastFireScenarioCanonicalFacts,
   describeAssumptions: describeCoastFireScenarioExecution,

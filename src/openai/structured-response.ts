@@ -6,6 +6,7 @@
  */
 
 import type { CanonicalFactUnit } from './canonical-facts';
+import type { InputRequest } from './input-request';
 
 export interface ResponseKeyNumber {
   value: number;
@@ -30,6 +31,12 @@ export interface AskLincResponse {
   key_numbers?: Record<string, ResponseKeyNumber | number>;
   insights?: string[];
   suggested_actions?: string[];
+  /**
+   * A form for figures a calculator is waiting on (`openai/input-request.ts`).
+   * Server-set only: parsing a model reply never produces one, and a stored
+   * one is re-validated before it is returned.
+   */
+  input_request?: InputRequest;
 }
 
 /** Provider-agnostic contract used in prompts and by providers that support JSON Schema. */
