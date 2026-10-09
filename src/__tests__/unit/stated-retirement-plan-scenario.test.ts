@@ -298,6 +298,37 @@ describe('retirement plan from stated figures', () => {
     );
   });
 
+  it('plans with the figures saved in Your numbers, and says so', async () => {
+    const runner = fakeRunner();
+    const execution = await runStatedRetirementPlan(
+      {
+        ...NO_HOLDINGS,
+        statedFigures: {
+          retirementAge: { value: 62, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          annualRetirementSpending: { value: 60_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          socialSecurityAnnual: { value: 28_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          allocation: { value: 'growth', savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+        },
+      },
+      plan({ currentAge: 45, investableAssets: 800_000 }),
+      runner as QuickPlanRunner
+    );
+
+    expect(runner.mock.calls[0][0]).toMatchObject({
+      retirementAge: 62,
+      annualSpending: 60_000,
+      socialSecurityAnnual: 28_000,
+      allocation: 'growth',
+    });
+    const disclosure = describeStatedRetirementPlanExecution(execution)!;
+    expect(disclosure).toContain(
+      'From Your numbers: retiring at 62, spending $60,000 a year in retirement, $28,000 a year of Social Security, ' +
+      'and the Growth preset, saved Sep 14, 2026.'
+    );
+    expect(disclosure).not.toContain('You did not name a mix');
+    expect(disclosure).not.toContain('You did not name a retirement age');
+  });
+
   it('answers with what the mix sustained when nobody knows the spending level', async () => {
     const runner = fakeRunner();
     const execution = await runStatedRetirementPlan(

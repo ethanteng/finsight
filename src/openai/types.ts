@@ -6,6 +6,7 @@ import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-typ
 import type { PlaidLiabilityDetails } from '../services/plaid-liabilities';
 import type { UnmodeledInvestmentValue } from '../services/investment-coverage';
 import type { PersonalContextValues } from '../profile/personal-context';
+import type { StatedFigures } from '../services/stated-figures';
 import type { CashFlowForecastContext } from './cash-flow-forecast-context';
 
 export interface QuestionNeeds {
@@ -225,6 +226,12 @@ export interface FinancialContextSnapshot {
    * may quote rather than a number the model appears to have invented.
    */
   userProfileValues?: PersonalContextValues;
+  /**
+   * The retirement plan the user saved in Your numbers (`services/stated-figures.ts`):
+   * their own figures, kept between decisions, each with the date it was saved.
+   * Absent when nothing is saved.
+   */
+  statedFigures?: StatedFigures;
   homeValueSummary?: string;
   /** Structured RentCast value data used for fact provenance and uncertainty bounds. */
   homeValueData?: HomeData;

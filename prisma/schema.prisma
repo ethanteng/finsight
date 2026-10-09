@@ -26,6 +26,7 @@ model User {
   accessTokens                 AccessToken[]
   accounts                     Account[]
   manualAccounts               ManualAccount[]
+  statedFigures                StatedFigures?
   plannedCashFlowEvents        PlannedCashFlowEvent[]
   cashFlowForecastAdjustments  CashFlowForecastAdjustment[]
   conversations                Conversation[]
@@ -598,6 +599,25 @@ model ManualAccount {
 
   @@index([userId])
   @@map("manual_accounts")
+}
+
+/// The retirement plan a user saved for Ask Linc to work from when they have
+/// not stated it in the question: a retirement age, what retirement will cost,
+/// what they save. Balances live in ManualAccount, monthly income and spending
+/// in the User overrides, and age in remembered personal context; this holds
+/// the plan. Written only by the user's own action -- the Your numbers page or
+/// "Use these next time?" under an answer -- never inferred from a question.
+model StatedFigures {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// { [key]: { value, savedAt, source } }; keys, bounds and shape are
+  /// validated by src/services/stated-figures.ts on every read and write.
+  figures   Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("stated_figures")
 }
 
 /// Money a user expects to come in or go out, which the cash-flow forecast

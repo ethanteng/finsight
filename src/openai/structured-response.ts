@@ -7,6 +7,7 @@
 
 import type { CanonicalFactUnit } from './canonical-facts';
 import type { InputRequest } from './input-request';
+import type { SaveOffer } from './save-offer';
 
 export interface ResponseKeyNumber {
   value: number;
@@ -37,6 +38,12 @@ export interface AskLincResponse {
    * one is re-validated before it is returned.
    */
   input_request?: InputRequest;
+  /**
+   * "Use these next time?" (`openai/save-offer.ts`): figures this answer ran
+   * on that the user stated and has not saved. Server-set, offered with the
+   * answer only; a stored answer does not offer it again.
+   */
+  save_offer?: SaveOffer;
 }
 
 /** Provider-agnostic contract used in prompts and by providers that support JSON Schema. */

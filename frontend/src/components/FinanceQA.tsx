@@ -8,6 +8,7 @@ import { useAnalytics } from './Analytics';
 import { trackContentsquareEvent } from '@/lib/contentsquare';
 import Feedback from './Feedback';
 import InputRequestCard from './InputRequestCard';
+import SaveOfferCard from './SaveOfferCard';
 import { ShowTheMathContent, DatabaseSourceSection, downloadShowTheMathAsText, type ShowTheMathData } from './ShowTheMathModal';
 import { formatKeyNumberValue, formatProvenance, type DisplayKeyNumber } from '@/lib/formatKeyNumber';
 import { relativeTurnTime } from '@/lib/relative-time';
@@ -483,6 +484,17 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
                     key={conversationId ?? 'pending'}
                     request={structuredResponse.input_request}
                     onSubmit={(message) => submitInputRequest(structuredResponse.input_request!.calculatorId, message)}
+                  />
+                )}
+                {structuredResponse?.save_offer && !loading && (
+                  <SaveOfferCard
+                    key={conversationId ?? 'pending'}
+                    offer={structuredResponse.save_offer}
+                    onSaved={(count) => trackEvent('save_offer_saved', {
+                      calculator_id: structuredResponse.save_offer!.calculatorId,
+                      figure_count: count,
+                      user_tier: userTier,
+                    })}
                   />
                 )}
                 {structuredResponse?.insights && structuredResponse.insights.length > 0 && <section aria-labelledby="takeaways-heading"><h3 id="takeaways-heading" className="mb-3 flex items-center gap-2 font-semibold text-[#102319]"><Lightbulb size={18} className="text-[#49725a]" />Takeaways</h3><ul className="grid gap-3 sm:grid-cols-2">{structuredResponse.insights.map((insight, index) => <li key={index} className="flex gap-3 rounded-2xl border border-[#397052]/10 bg-[#eef4ea] p-4 text-sm leading-6 text-[#365e4c]"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#d9e8d4] text-xs font-semibold text-[#28543a]">{index + 1}</span><span>{insight}</span></li>)}</ul></section>}

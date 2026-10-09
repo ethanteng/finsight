@@ -134,6 +134,10 @@ Submitting does not send numbers down a second path. Each filled field is writte
 
 A stored answer keeps its form: the response parser keeps none of the server's own fields, so the Ask route checks a saved `input_request` with `parseInputRequest` and puts it back, dropping it whole if any part does not hold together.
 
+### Your numbers
+
+Both calculators read the plan the user saved in Your numbers after anything stated in the decision and before linked data or defaults, name each saved figure and its date in the disclosure, and show it in the form as "From Your numbers". A completed run also hands the answer "Use these next time?" for the main case's stated figures that are not saved yet (`savableFigures`, `scenarioCalculatorRegistry.saveOffer`). See `docs/YOUR_NUMBERS.md`.
+
 ### What the answer says about linking
 
 `collectMissingInputAsks` decides the note for a retirement question with no holdings linked, and it closes the answer, after every assumption disclosure:

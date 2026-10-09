@@ -287,6 +287,56 @@ describe('Coast FIRE calculator', () => {
       .toContain('your investment total of $650,000: every linked investment account plus the investment balances you entered');
   });
 
+  describe('with a plan saved in Your numbers', () => {
+    const savedPlan = {
+      statedFigures: {
+        retirementAge: { value: 58, savedAt: '2026-09-14T10:00:00.000Z', source: 'answer' },
+        annualRetirementSpending: { value: 70_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'answer' },
+        annualContribution: { value: 12_000, savedAt: '2026-10-01T10:00:00.000Z', source: 'page' },
+      },
+    };
+
+    it('plans with the saved figures the question did not state, and says where they came from', async () => {
+      const execution = await runCoastFireScenario(
+        savedPlan,
+        plan({ currentAge: 38, currentSavings: 500_000 })
+      ) as CompletedCoastFireScenarioExecution;
+
+      const [scenario] = execution.scenarios;
+      expect(scenario.metrics).toMatchObject({ retirementAge: 58, annualRetirementSpending: 70_000 });
+      expect(scenario.contributionPath?.annualContribution).toBe(12_000);
+      expect(scenario.assumptions.find((item) => item.key === 'retirementAge'))
+        .toMatchObject({ origin: 'saved', savedAt: '2026-09-14T10:00:00.000Z' });
+      expect(describeCoastFireScenarioExecution(execution)).toContain(
+        'From Your numbers: retiring at 58, spending $70,000 a year in retirement, and investing $12,000 a year now, ' +
+        'last saved Oct 1, 2026.'
+      );
+    });
+
+    it('lets what the user says now outrank what they saved', async () => {
+      const execution = await runCoastFireScenario(
+        savedPlan,
+        plan({ currentAge: 38, currentSavings: 500_000, retirementAge: 55 })
+      ) as CompletedCoastFireScenarioExecution;
+      expect(execution.scenarios[0].metrics.retirementAge).toBe(55);
+    });
+
+    it('does not plan with a saved retirement age the user has already reached', async () => {
+      const execution = await runCoastFireScenario(
+        savedPlan,
+        plan({ currentAge: 60, currentSavings: 500_000 })
+      ) as CompletedCoastFireScenarioExecution;
+      expect(execution.scenarios[0].metrics.retirementAge).toBe(65);
+    });
+
+    it('shows a saved figure in the form as coming from Your numbers', async () => {
+      const execution = await runCoastFireScenario(savedPlan, plan({}));
+      const request = coastFireInputRequest(execution)!;
+      expect(request.fields.find((item) => item.id === 'annualRetirementSpending'))
+        .toMatchObject({ required: false, value: 70_000, valueNote: 'From Your numbers' });
+    });
+  });
+
   it('calls a spending figure the user set on the Finances page theirs, not linked', async () => {
     const execution = await runCoastFireScenario(
       { expectedMonthly: { spending: 6_000, income: null, incomeSource: 'transactions', spendingSource: 'override' } },

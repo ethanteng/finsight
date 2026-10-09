@@ -81,7 +81,7 @@ export default function InputRequestCard({ request, disabled = false, onSubmit }
           {field.label}
           {needed && <span className="rounded-full bg-[#fde9c8] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#7a4a12]">Needed</span>}
         </label>
-        <div className={`mt-1.5 flex items-center rounded-xl border bg-white px-3 focus-within:ring-2 focus-within:ring-[#49725a]/30 ${error ? 'border-[#b84a3d]/60' : 'border-[#102319]/15'}`}>
+        <div className={`mt-1.5 flex items-center rounded-xl border bg-[#f9f8f0] px-3 focus-within:ring-2 focus-within:ring-[#49725a]/30 ${error ? 'border-[#b84a3d]/60' : 'border-[#102319]/15'}`}>
           {prefix && <span className="mr-1 text-sm text-[#5e6b63]" aria-hidden="true">{prefix}</span>}
           {field.kind === 'choice' ? (
             <select

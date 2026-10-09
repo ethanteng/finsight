@@ -54,6 +54,8 @@ Numbers in the user's earlier messages in the same decision are `user_input` fac
 
 Current age, how much someone has invested, and (for Coast FIRE) spending with nothing to read it from are still asked for. Nothing the application holds can stand in for them.
 
+A figure the user saved in Your numbers stands in before any of these: after what they say in the current decision, before linked data and the defaults above, and named with the date it was saved. See `docs/YOUR_NUMBERS.md`.
+
 An assumed retirement input is persisted with the analysis under `assumedInputs`. It is stripped before the next resolution, so an assumed 65 or last month's spending is never read back as the user's plan. A withdrawal start age that followed an assumed retirement age goes with it; one the user named apart from it stays. A figure the user gave in an earlier conversation is theirs and is not listed there. Fact labels mark assumed inputs ("assumed: equal to the user's current annual spending"), so the model cannot present them as something the user said.
 
 ### The closing note (`src/openai/missing-inputs.ts`)

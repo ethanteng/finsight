@@ -5,8 +5,7 @@ import { Account, Transaction, UnifiedFinancialData, HomeData } from '../service
 import { TokenStatus } from '../services/token-validation-service';
 import { QuestionNeeds, FinancialContextSnapshot, TransactionSummaryItem, InvestmentSnapshot } from './types';
 import { buildAccountSummaries } from './account-summary';
-import { describeLinkedData, incomeLinked, NOTHING_LINKED, spendingLinked } from './linked-data';
-import type { AccountLike } from '../services/account-classifier';
+import { incomeLinked, linkedDataFromSnapshot, NOTHING_LINKED, spendingLinked } from './linked-data';
 import {
   describeUnmodeledInvestmentValue,
   summarizeUnmodeledInvestmentValue,
@@ -31,6 +30,7 @@ import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-typ
 import { compactSearchQueryEvidence } from '../data/search-types';
 import type { SearchContext } from '../data/orchestrator';
 import type { PersonalContextValues } from '../profile/personal-context';
+import { parseStatedFigures, savedNumber, type StatedFigures } from '../services/stated-figures';
 import { buildCashFlowForecastContext, withoutUnlinkedIncome, type CashFlowForecastContext } from './cash-flow-forecast-context';
 import { expectedMonthly } from '../cash-flow/forecast';
 
@@ -157,22 +157,10 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       const rawAccounts = snapshot.accounts as any;
       const linkedAccounts = Array.isArray(rawAccounts) ? rawAccounts as Account[] : [];
       accounts = questionNeeds.needsAccountDetails ? linkedAccounts : [];
-      const summaryForCoverage = snapshot.transactionsSummary as { byMonth?: Record<string, unknown> } | null;
-      const transactionMonths = summaryForCoverage?.byMonth ? Object.keys(summaryForCoverage.byMonth).length : 0;
-      const holdingCount = (snapshot.investmentPortfolio as { holdingCount?: number } | null)?.holdingCount ?? 0;
-      const overviewForCoverage = snapshot.financialOverview as Record<string, unknown> | null;
-      const carriesData = transactionMonths > 0 || holdingCount > 0 || ['totalCash', 'totalInvestments', 'totalDebt']
-        .some((key) => typeof overviewForCoverage?.[key] === 'number' && overviewForCoverage[key] !== 0);
       // Data with no account list behind it is a snapshot we cannot read
       // coverage from, not proof that nothing is linked; it keeps the behavior
       // that predates the record rather than having real figures nulled.
-      linkedData = linkedAccounts.length === 0 && carriesData
-        ? undefined
-        : describeLinkedData({
-            accounts: linkedAccounts as unknown as AccountLike[],
-            holdingCount,
-            transactionMonths,
-          });
+      linkedData = linkedDataFromSnapshot(snapshot);
 
       // Log account count and check for duplicates in snapshot
       console.log(`📊 gatherContextSnapshot: Retrieved ${accounts.length} accounts from snapshot for user ${userId}`);
@@ -383,17 +371,32 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   const fetchUserOverrides = async (): Promise<{
     monthlyIncomeOverride?: number | null;
     monthlyExpenseOverride?: number | null;
+    statedFigures?: StatedFigures;
   }> => {
     if (!userId) return {};
     try {
       const { getPrismaClient } = await import('../prisma-client');
       const prisma = getPrismaClient();
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { monthlyIncomeOverride: true, monthlyExpenseOverride: true }
-      });
+      // Read apart, so a failure reading the saved plan (a deploy that beats
+      // its migration, say) never costs the answer the monthly overrides.
+      const [user, saved] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: userId },
+          select: { monthlyIncomeOverride: true, monthlyExpenseOverride: true }
+        }),
+        // Small, and every calculator that plans from stated figures reads it.
+        (async () => prisma.statedFigures.findUnique({ where: { userId }, select: { figures: true } }))()
+          .catch((error: unknown) => {
+            console.error('Failed to fetch saved figures:', error);
+            return null;
+          }),
+      ]);
       return user
-        ? { monthlyIncomeOverride: user.monthlyIncomeOverride, monthlyExpenseOverride: user.monthlyExpenseOverride }
+        ? {
+            monthlyIncomeOverride: user.monthlyIncomeOverride,
+            monthlyExpenseOverride: user.monthlyExpenseOverride,
+            statedFigures: parseStatedFigures(saved?.figures),
+          }
         : {};
     } catch (error) {
       console.error('Failed to fetch user overrides:', error);
@@ -576,6 +579,9 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     marketContextMetadata: marketContextResult?.metadata,
     userProfile: userProfile?.text,
     userProfileValues: userProfile?.values,
+    ...(userOverrides.statedFigures && Object.keys(userOverrides.statedFigures).length > 0 && {
+      statedFigures: userOverrides.statedFigures,
+    }),
     homeValueSummary,
     homeValueData,
     financialSummary: financialSummary || undefined,
@@ -668,6 +674,7 @@ export async function completeRetirementAnalysis(
         ? monthlySpending * 12
         : null,
       userProfile: snapshot.userProfile || '',
+      statedFigures: snapshot.statedFigures,
       holdings,
       securities,
       unmodeledInvestments: snapshot.investments?.unmodeledInvestments,
@@ -724,6 +731,8 @@ async function fetchOrCreateRetirementAnalysis(args: {
   asOfDate?: string;
   /** What the user spends a year now, from linked cash flow; the fallback for retirement spending. */
   currentAnnualSpending?: number | null;
+  /** The plan the user saved in Your numbers. */
+  statedFigures?: StatedFigures;
 }): Promise<RetirementAnalysisResolution> {
   const {
     userId,
@@ -737,6 +746,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
     unmodeledInvestments,
     asOfDate,
     currentAnnualSpending,
+    statedFigures,
   } = args;
 
   // Parse retirement parameters from the question and the turns that set it up.
@@ -888,7 +898,22 @@ async function fetchOrCreateRetirementAnalysis(args: {
       ? storedAnalysisInput.assumedInputs as AssumedRetirementInputs
       : {}
   );
-  const storedInputForResolution = withoutStoredAssumptions(storedInput, storedAssumptions);
+  // The plan the user saved in Your numbers is theirs, kept on purpose, so it
+  // outranks a figure a run last week happened to store: a saved retirement
+  // age stands where a remembered one would, and saved spending where an
+  // earlier figure would (disclosed as one). A saved age they have already
+  // reached is no plan for the future and is left out.
+  const knownCurrentAge = questionParams.currentAge ?? profileAge ?? storedInput.currentAge ?? undefined;
+  const savedRetirementAge = savedNumber(statedFigures, 'retirementAge')?.value;
+  const usableSavedRetirementAge = savedRetirementAge !== undefined &&
+    (knownCurrentAge === undefined || knownCurrentAge === null || savedRetirementAge > knownCurrentAge)
+    ? savedRetirementAge
+    : undefined;
+  const savedSpending = savedNumber(statedFigures, 'annualRetirementSpending')?.value;
+  const storedInputForResolution = {
+    ...withoutStoredAssumptions(storedInput, storedAssumptions),
+    ...(savedSpending !== undefined && { annualWithdrawalAmount: savedSpending }),
+  };
   const { getHistoricalDatasetVersion } = await import('../retirement-analytics/engine/historical-data-loader');
   const historicalDatasetVersion = getHistoricalDatasetVersion();
   const confirmsStoredAnnualWithdrawal =
@@ -905,7 +930,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
   } = resolveRetirementInputs({
     questionParams,
     profileAge,
-    profileRetirementAge,
+    profileRetirementAge: usableSavedRetirementAge ?? profileRetirementAge,
     storedInput: storedInputForResolution,
     allowStoredAnnualWithdrawal: confirmsStoredAnnualWithdrawal || useExistingRetirementBaseline,
     // Answer with a disclosed assumption rather than stopping to ask: the

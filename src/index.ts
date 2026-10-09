@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { dataOrchestrator } from './data/orchestrator';
 import authRoutes from './auth/routes';
 import manualAccountsRoutes from './auth/manual-accounts-routes';
+import statedFiguresRoutes from './auth/stated-figures-routes';
 import accountsRoutes from './auth/accounts-routes';
 import transactionCategoriesRoutes from './auth/transaction-categories-routes';
 import financesRoutes from './auth/finances-routes';
@@ -341,6 +342,9 @@ app.use('/auth', authRoutes);
 
 // Setup Manual Accounts routes
 app.use('/api/manual-accounts', manualAccountsRoutes);
+
+// Your numbers: the retirement plan a user saved for Ask Linc to work from
+app.use('/api/stated-figures', statedFiguresRoutes);
 
 // Setup Accounts routes (for Plaid and SnapTrade accounts)
 app.use('/api/accounts', accountsRoutes);

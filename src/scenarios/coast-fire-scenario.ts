@@ -54,6 +54,13 @@ import {
   type InputRequestSpec,
   type KnownInput,
 } from '../openai/input-request';
+import {
+  describeSavedFigures,
+  savedChoice,
+  savedNumber,
+  type StatedFigureKey,
+} from '../services/stated-figures';
+import type { SavableFigure, SaveOfferKey } from '../openai/save-offer';
 
 export const COAST_FIRE_CALCULATOR_ID = 'coast_fire' as const;
 export const COAST_FIRE_SCENARIO_VERSION = 1 as const;
@@ -138,10 +145,11 @@ export interface CoastFireScenarioPlan {
 /**
  * Where a value came from. `snapshot` is the investment total or current
  * spending Linc holds (`basis` says whether linked accounts or the user's own
- * entries), `profile` an age the user told Linc earlier, `default` the public
- * calculator's named default.
+ * entries), `profile` an age the user told Linc earlier, `saved` a figure
+ * from the plan they saved in Your numbers, `default` the public calculator's
+ * named default.
  */
-export type CoastFireAssumptionOrigin = 'user' | 'snapshot' | 'profile' | 'default';
+export type CoastFireAssumptionOrigin = 'user' | 'snapshot' | 'profile' | 'saved' | 'default';
 
 export interface CoastFireAssumption {
   key: CoastFireOverrideField;
@@ -156,6 +164,8 @@ export interface CoastFireAssumption {
    * recorded before it, which were all read as linked.
    */
   basis?: BalanceBasis;
+  /** For a `saved` value: when the user saved it in Your numbers. */
+  savedAt?: string;
 }
 
 /** When contributions get savings to the point where they could coast. */
@@ -183,8 +193,9 @@ export interface CoastFireHistoricalTest {
     id: QuickPlanAllocationId;
     label: string;
     description: string;
-    /** Whether the user named the mix or it is the disclosed default. */
-    origin: 'user' | 'default';
+    /** Whether the user named the mix, saved it in Your numbers, or it is the disclosed default. */
+    origin: 'user' | 'saved' | 'default';
+    savedAt?: string;
     usEquityPercent: number;
     bondsPercent: number;
     cashPercent: number;
@@ -388,6 +399,14 @@ const ASSUMPTION_LABELS: Record<CoastFireOverrideField, { label: string; unit: C
   annualContribution: { label: 'Annual contributions until savings can coast, in today\'s dollars', unit: 'usd' },
 };
 
+/** How a figure taken from Your numbers is named in the disclosure. */
+const SAVED_PHRASES: Partial<Record<CoastFireOverrideField, (value: number) => string>> = {
+  retirementAge: (value) => `retiring at ${value}`,
+  annualRetirementSpending: (value) => `spending ${money(value)} a year in retirement`,
+  annualRetirementIncome: (value) => `${money(value)} a year of retirement income`,
+  annualContribution: (value) => `investing ${money(value)} a year now`,
+};
+
 /** In the user's terms, for the ask when a figure is missing. */
 const MISSING_INPUT_PROMPTS: Partial<Record<CoastFireOverrideField, string>> = {
   currentAge: 'your current age',
@@ -425,7 +444,7 @@ interface ResolvedCoastFireVariant {
   inputs: CoastFireInputs;
   annualContribution: number;
   assumptions: CoastFireAssumption[];
-  allocation: { id: QuickPlanAllocationId; origin: 'user' | 'default' };
+  allocation: { id: QuickPlanAllocationId; origin: 'user' | 'saved' | 'default'; savedAt?: string };
 }
 
 /**
@@ -444,7 +463,7 @@ function resolveVariant(
   const missingFields: CoastFireOverrideField[] = [];
   const take = (
     field: CoastFireOverrideField,
-    fallback?: { value: number; origin: Exclude<CoastFireAssumptionOrigin, 'user'>; basis?: BalanceBasis }
+    fallback?: { value: number; origin: Exclude<CoastFireAssumptionOrigin, 'user'>; basis?: BalanceBasis; savedAt?: string }
   ): number | undefined => {
     const stated = overrides[field];
     const source = overrides.sources[field];
@@ -459,6 +478,7 @@ function resolveVariant(
         value: fallback.value,
         origin: fallback.origin,
         ...(fallback.basis && { basis: fallback.basis }),
+        ...(fallback.savedAt && { savedAt: fallback.savedAt }),
       });
       return fallback.value;
     }
@@ -470,19 +490,29 @@ function resolveVariant(
     return undefined;
   };
 
+  // The plan the user saved in Your numbers stands in after anything they
+  // said in this decision and before what accounts or defaults would give.
+  const saved = (key: StatedFigureKey) => {
+    const figure = savedNumber(snapshot.statedFigures, key);
+    return figure && { value: figure.value, origin: 'saved' as const, savedAt: figure.savedAt };
+  };
   const knownAge = profileAge(snapshot);
   const investmentTotal = knownInvestmentTotal(snapshot);
   const knownSpending = currentAnnualSpending(snapshot);
   // A spending override is the figure the user set on the Finances page.
   const spendingBasis: BalanceBasis = snapshot.expectedMonthly?.spendingSource === 'override' ? 'entered' : 'linked';
   const currentAge = take('currentAge', knownAge !== undefined ? { value: knownAge, origin: 'profile' } : undefined);
-  // The conventional planning age, while it is still ahead of them. Past it,
-  // there is no coasting to work out, so it is asked for instead.
+  // A saved retirement age the user has already reached is no plan for the
+  // future; then the conventional age while it is still ahead of them. Past
+  // that, there is no coasting to work out, so it is asked for instead.
+  const savedRetirementAge = saved('retirementAge');
   const retirementAge = take(
     'retirementAge',
-    currentAge !== undefined && currentAge < CONVENTIONAL_RETIREMENT_AGE
-      ? { value: CONVENTIONAL_RETIREMENT_AGE, origin: 'default' }
-      : undefined
+    savedRetirementAge && (currentAge === undefined || savedRetirementAge.value > currentAge)
+      ? savedRetirementAge
+      : currentAge !== undefined && currentAge < CONVENTIONAL_RETIREMENT_AGE
+        ? { value: CONVENTIONAL_RETIREMENT_AGE, origin: 'default' }
+        : undefined
   );
   const currentSavings = take(
     'currentSavings',
@@ -492,9 +522,13 @@ function resolveVariant(
   // say; I assume retirement costs the same and say so.
   const annualRetirementSpending = take(
     'annualRetirementSpending',
-    knownSpending !== undefined ? { value: knownSpending, origin: 'snapshot', basis: spendingBasis } : undefined
+    saved('annualRetirementSpending') ??
+      (knownSpending !== undefined ? { value: knownSpending, origin: 'snapshot', basis: spendingBasis } : undefined)
   );
-  const annualRetirementIncome = take('annualRetirementIncome', { value: 0, origin: 'default' });
+  const annualRetirementIncome = take(
+    'annualRetirementIncome',
+    saved('retirementIncome') ?? { value: 0, origin: 'default' }
+  );
   const realReturnRate = take('realReturnRatePercent', {
     value: DEFAULT_COAST_FIRE_REAL_RETURN_PERCENT,
     origin: 'default',
@@ -504,9 +538,12 @@ function resolveVariant(
     origin: 'default',
   });
   // Zero is the honest reading of an unstated contribution, and it changes
-  // nothing about the Coast FIRE number itself; only a stated one is recorded.
-  const statedContribution = overrides.annualContribution !== undefined && overrides.sources.annualContribution
-    ? take('annualContribution')
+  // nothing about the Coast FIRE number itself; only a stated or saved one is
+  // recorded.
+  const savedContribution = saved('annualContribution');
+  const statedContribution = (overrides.annualContribution !== undefined && overrides.sources.annualContribution) ||
+    savedContribution
+    ? take('annualContribution', savedContribution)
     : undefined;
 
   if (missing.length > 0) {
@@ -534,10 +571,21 @@ function resolveVariant(
     },
     annualContribution: statedContribution ?? 0,
     assumptions,
-    allocation: overrides.allocation && overrides.sources.allocation
-      ? { id: overrides.allocation, origin: 'user' }
-      : { id: DEFAULT_ALLOCATION_ID, origin: 'default' },
+    allocation: allocationFor(snapshot, overrides),
   };
+}
+
+/** The preset mix: the user's words, then the one they saved, then the default. */
+function allocationFor(
+  snapshot: FinancialContextSnapshot,
+  overrides: PlannedCoastFireOverrides
+): ResolvedCoastFireVariant['allocation'] {
+  if (overrides.allocation && overrides.sources.allocation) return { id: overrides.allocation, origin: 'user' };
+  const savedMix = savedChoice(snapshot.statedFigures, 'allocation');
+  if (savedMix && savedMix.value in QUICKPLAN_ALLOCATIONS) {
+    return { id: savedMix.value as QuickPlanAllocationId, origin: 'saved', savedAt: savedMix.savedAt };
+  }
+  return { id: DEFAULT_ALLOCATION_ID, origin: 'default' };
 }
 
 /**
@@ -695,6 +743,7 @@ async function presetHistoricalTest(
         label: mix.label,
         description: mix.description,
         origin: variant.allocation.origin,
+        ...(variant.allocation.savedAt && { savedAt: variant.allocation.savedAt }),
         usEquityPercent: Math.round(mix.usEquity * 100),
         bondsPercent: Math.round(mix.bonds * 100),
         cashPercent: Math.round(mix.cash * 100),
@@ -1115,13 +1164,25 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
 
   const tested = execution.scenarios.filter((scenario) => scenario.historicalTest);
   const historyNotice = tested.map(describeHistoricalTest).join('');
+  const savedMix = primary.historicalTest?.allocation;
+  const savedNotice = describeSavedFigures([
+    ...primary.assumptions.flatMap((assumption) => {
+      const phrase = assumption.origin === 'saved' && assumption.savedAt
+        ? SAVED_PHRASES[assumption.key]?.(assumption.value)
+        : undefined;
+      return phrase ? [{ phrase, savedAt: assumption.savedAt! }] : [];
+    }),
+    ...(savedMix?.origin === 'saved' && savedMix.savedAt
+      ? [{ phrase: `the ${savedMix.label} preset`, savedAt: savedMix.savedAt }]
+      : []),
+  ]);
   const straightLine = tested.length > 0
     ? ' The Coast FIRE number itself is a single straight line — the same return every year. Neither part models taxes or fees.'
     : ' It is a single straight line — the same return every year, with no taxes, fees or market swings.';
 
   return `Coast FIRE assumptions: ${rate(m.realReturnRate)} a year after inflation, a ${rate(m.withdrawalRate)} ` +
     `withdrawal rate, and ${income}, all in today's dollars.${comparison}${retirementAgeNotice}${spendingNotice}` +
-    `${savingsNotice}${ageNotice}` +
+    `${savingsNotice}${ageNotice}${savedNotice}` +
     `${defaultsNotice}${contributionNotice}${comparisonNotice}${historyNotice}${straightLine} ` +
     'Change any of these and I will re-run it.';
 }
@@ -1230,6 +1291,32 @@ export function coastFireInputRequest(execution: CoastFireScenarioExecution): In
   };
 }
 
+/** Where each figure the user states would be kept in Your numbers. */
+const SAVE_KEYS: Partial<Record<CoastFireOverrideField, SaveOfferKey>> = {
+  retirementAge: 'retirementAge',
+  annualRetirementSpending: 'annualRetirementSpending',
+  annualRetirementIncome: 'retirementIncome',
+  annualContribution: 'annualContribution',
+  currentSavings: 'investedBalance',
+};
+
+/**
+ * What the main case took from the user's own words, for "Use these next
+ * time?". A comparison's values are what-ifs and are never offered.
+ */
+export function coastFireSavableFigures(execution: CoastFireScenarioExecution): SavableFigure[] {
+  if (execution.status !== 'completed') return [];
+  const [primary] = execution.scenarios;
+  if (!primary) return [];
+  const figures: SavableFigure[] = primary.assumptions.flatMap((assumption) => {
+    const key = assumption.origin === 'user' ? SAVE_KEYS[assumption.key] : undefined;
+    return key ? [{ key, value: assumption.value }] : [];
+  });
+  const mix = primary.historicalTest?.allocation;
+  if (mix?.origin === 'user') figures.push({ key: 'allocation', value: mix.id });
+  return figures;
+}
+
 export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
   CoastFireScenarioPlan,
   CoastFireScenarioExecution,
@@ -1286,6 +1373,7 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
   execute: (snapshot, plan) => runCoastFireScenario(snapshot, plan),
   unavailable: (startedAt, reason) => unavailable(startedAt, reason),
   inputRequest: coastFireInputRequest,
+  savableFigures: coastFireSavableFigures,
   compactEvidence: compactCoastFireScenarioExecution,
   canonicalFacts: coastFireScenarioCanonicalFacts,
   describeAssumptions: describeCoastFireScenarioExecution,
