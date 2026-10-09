@@ -220,6 +220,79 @@ describe('Your numbers', () => {
     expect(saved).not.toHaveBeenCalled();
   });
 
+  it('re-reads memory immediately before every age save so a stale page snapshot cannot wipe it', async () => {
+    const saved = jest.fn();
+    serve({
+      'GET /api/stated-figures': { figures: {}, coverage: NOTHING_LINKED },
+      'GET /api/manual-accounts': { data: [] },
+      'GET /api/finances/overrides': { monthlyIncome: null, monthlyExpense: null },
+      'GET /profile': { memory: { city: 'Portland' } },
+      'PUT /profile': (init: RequestInit) => {
+        const body = JSON.parse(String(init.body));
+        saved(body);
+        return { memory: body.memory };
+      },
+    });
+    const served = global.fetch as jest.Mock;
+    let profileReads = 0;
+    global.fetch = jest.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (new URL(url).pathname === '/profile' && (init?.method ?? 'GET') === 'GET') {
+        profileReads += 1;
+        if (profileReads >= 2) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({ memory: { city: 'Portland', householdSize: 2 } }),
+          });
+        }
+      }
+      return served(url, init);
+    });
+    render(<YourNumbersPageClient />);
+
+    const about = (await screen.findByRole('heading', { name: 'About you' })).closest('section')!;
+    fireEvent.change(within(about).getByLabelText(/Your age/), { target: { value: '41' } });
+    fireEvent.click(within(about).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(saved).toHaveBeenCalledWith({
+      memory: { city: 'Portland', householdSize: 2, age: 41 },
+    }));
+  });
+
+  it('does not clear Finances overrides when Save is clicked after overrides failed to load', async () => {
+    const saved = jest.fn();
+    serve({
+      'GET /api/stated-figures': { figures: {}, coverage: NOTHING_LINKED },
+      'GET /api/manual-accounts': { data: [] },
+      'GET /api/finances/overrides': { monthlyIncome: 9000, monthlyExpense: 5500 },
+      'GET /profile': { memory: {} },
+      'PUT /api/finances/overrides': (init: RequestInit) => {
+        saved(JSON.parse(String(init.body)));
+        return { monthlyIncome: 9000, monthlyExpense: 5500 };
+      },
+    });
+    const served = global.fetch as jest.Mock;
+    let overrideReads = 0;
+    global.fetch = jest.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const firstOverridesRead =
+        new URL(url).pathname === '/api/finances/overrides' &&
+        (init?.method ?? 'GET') === 'GET' &&
+        overrideReads++ === 0;
+      return firstOverridesRead
+        ? Promise.resolve({ ok: false, status: 500, json: async () => ({}) })
+        : served(url, init);
+    });
+    render(<YourNumbersPageClient />);
+
+    const cash = (await screen.findByRole('heading', { name: 'Each month' })).closest('section')!;
+    expect(within(cash).getByLabelText(/Take-home pay a month/)).toHaveValue('');
+    fireEvent.click(within(cash).getByRole('button', { name: 'Save' }));
+
+    expect(await within(cash).findByText('Nothing has changed.')).toBeInTheDocument();
+    await waitFor(() => expect(within(cash).getByLabelText(/Take-home pay a month/)).toHaveValue('9,000'));
+    expect(saved).not.toHaveBeenCalled();
+  });
+
   it('sends a signed-out visitor to sign in', async () => {
     localStorage.removeItem('auth_token');
     serve({});

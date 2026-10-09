@@ -192,6 +192,9 @@ export default function YourNumbersPageClient() {
   const [coverage, setCoverage] = useState<FigureCoverage | null>(null);
   const [manualAccounts, setManualAccounts] = useState<ManualAccount[]>([]);
   const [overrides, setOverrides] = useState<Overrides>({ monthlyIncome: null, monthlyExpense: null });
+  // False until overrides GET succeeds. Empty monthly fields must not PUT nulls
+  // over real Finances overrides when that load never completed.
+  const [overridesLoaded, setOverridesLoaded] = useState(false);
   const [memory, setMemory] = useState<Memory | null>(null);
 
   const [planTexts, setPlanTexts] = useState<Record<string, string>>({});
@@ -239,11 +242,16 @@ export default function YourNumbersPageClient() {
         const loaded = { monthlyIncome: data.monthlyIncome ?? null, monthlyExpense: data.monthlyExpense ?? null };
         setOverrides(loaded);
         setMonthlyTexts(Object.fromEntries(MONTHLY_FIELDS.map((field) => [field.id, textFor(field, loaded[field.id])])));
+        setOverridesLoaded(true);
+      } else {
+        setOverridesLoaded(false);
       }
       if (profileResponse.ok) {
         const loadedMemory: Memory = (await profileResponse.json()).memory ?? {};
         setMemory(loadedMemory);
         setAgeText(textFor(AGE_FIELD, typeof loadedMemory.age === 'number' ? loadedMemory.age : null));
+      } else {
+        setMemory(null);
       }
       setState('ready');
     } catch (error) {
@@ -281,21 +289,19 @@ export default function YourNumbersPageClient() {
     setErrors(({ age: _cleared, ...rest }) => rest);
     setSaving('age');
     try {
-      // PUT /profile replaces the whole memory, so an age is only ever saved
-      // into a memory that was read: if the page could not load it, read it now.
-      let current = memory;
-      if (!current) {
-        const loaded = await sendSignedInRequest(API_URL, '/profile', 'GET');
-        if (!loaded.ok) throw new Error('What Linc remembers about you could not be loaded, so your age was not saved. Refresh to try again.');
-        current = ((await loaded.json()).memory ?? {}) as Memory;
-        setMemory(current);
-        // The field was empty because load failed, not because the user cleared
-        // a value they saw. Leaving it blank must not wipe a saved age.
-        if (reading.status !== 'ok') {
-          setAgeText(textFor(AGE_FIELD, typeof current.age === 'number' ? current.age : null));
-          setStatusFor('age', 'Nothing has changed.');
-          return;
-        }
+      // PUT /profile replaces the whole memory, so always re-read immediately
+      // before writing — a stale in-page snapshot can wipe concurrent Profile edits.
+      const loaded = await sendSignedInRequest(API_URL, '/profile', 'GET');
+      if (!loaded.ok) throw new Error('What Linc remembers about you could not be loaded, so your age was not saved. Refresh to try again.');
+      const current = ((await loaded.json()).memory ?? {}) as Memory;
+      const loadHadFailed = memory === null;
+      setMemory(current);
+      // The field was empty because load failed, not because the user cleared
+      // a value they saw. Leaving it blank must not wipe a saved age.
+      if (loadHadFailed && reading.status !== 'ok') {
+        setAgeText(textFor(AGE_FIELD, typeof current.age === 'number' ? current.age : null));
+        setStatusFor('age', 'Nothing has changed.');
+        return;
       }
       const next: Memory = { ...current };
       if (reading.status === 'ok') next.age = reading.value as number;
@@ -312,11 +318,40 @@ export default function YourNumbersPageClient() {
   };
 
   const saveMonthly = async () => {
-    const { values, errors: problems } = readAll(MONTHLY_FIELDS, monthlyTexts);
-    setErrors((current) => ({ ...Object.fromEntries(Object.entries(current).filter(([key]) => !(key in values) && !(key in problems))), ...problems }));
-    if (Object.keys(problems).length > 0) return;
     setSaving('monthly');
     try {
+      let texts = monthlyTexts;
+      // Empty fields after a failed overrides GET would PUT null and clear Finances.
+      if (!overridesLoaded) {
+        const loaded = await sendSignedInRequest(API_URL, '/api/finances/overrides', 'GET');
+        if (!loaded.ok) {
+          throw new Error('Your monthly figures could not be loaded, so nothing was saved. Refresh to try again.');
+        }
+        const data = await loaded.json();
+        const baseline = { monthlyIncome: data.monthlyIncome ?? null, monthlyExpense: data.monthlyExpense ?? null };
+        setOverrides(baseline);
+        const hadTyped = MONTHLY_FIELDS.some((field) => (monthlyTexts[field.id] ?? '').trim() !== '');
+        texts = Object.fromEntries(MONTHLY_FIELDS.map((field) => [
+          field.id,
+          (monthlyTexts[field.id] ?? '').trim() !== ''
+            ? monthlyTexts[field.id]
+            : textFor(field, baseline[field.id]),
+        ]));
+        setMonthlyTexts(texts);
+        setOverridesLoaded(true);
+        if (!hadTyped) {
+          setErrors((current) => {
+            const next = { ...current };
+            for (const field of MONTHLY_FIELDS) delete next[field.id];
+            return next;
+          });
+          setStatusFor('monthly', 'Nothing has changed.');
+          return;
+        }
+      }
+      const { values, errors: problems } = readAll(MONTHLY_FIELDS, texts);
+      setErrors((current) => ({ ...Object.fromEntries(Object.entries(current).filter(([key]) => !(key in values) && !(key in problems))), ...problems }));
+      if (Object.keys(problems).length > 0) return;
       const response = await sendSignedInRequest(API_URL, '/api/finances/overrides', 'PUT', values);
       if (!response.ok) throw new Error(await failureMessage(response, 'Your monthly figures could not be saved.'));
       const data = await response.json();
