@@ -13,6 +13,7 @@ import { ShowTheMathContent, DatabaseSourceSection, downloadShowTheMathAsText, t
 import { formatKeyNumberValue, formatProvenance, type DisplayKeyNumber } from '@/lib/formatKeyNumber';
 import { relativeTurnTime } from '@/lib/relative-time';
 import type { DisplayStructuredResponse, StructuredPromptHistory } from '@/lib/structured-answer';
+import type { DisplaySaveOffer } from '@/lib/your-numbers';
 import { useVisibleAnswerMeasurement } from '@/lib/use-visible-answer-measurement';
 
 type PromptHistory = StructuredPromptHistory;
@@ -68,6 +69,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   // Tracks the turn the live answer on screen belongs to, so a history reload
   // that re-selects that turn can keep a save_offer history deliberately omits.
   const conversationIdRef = useRef<string | null>(null);
+  // The offer itself, keyed by turn id: surviving a follow-up's history race
+  // needs more than comparing conversationIdRef, which a stale reload can move.
+  const liveSaveOfferRef = useRef<{ conversationId: string; offer: DisplaySaveOffer } | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState('');
   const [structuredResponse, setStructuredResponse] = useState<DisplayStructuredResponse | null>(null);
@@ -121,6 +125,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
     askEpochRef.current += 1;
     prevSelectedTurnIdRef.current = null;
     conversationIdRef.current = null;
+    liveSaveOfferRef.current = null;
     setLoading(false);
     setProgressMessage(null);
     setQuestion('');
@@ -169,9 +174,15 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
       setThreadId(selectedPrompt.threadId ?? selectedPrompt.id);
       // History restores input_request but not save_offer (live-only). When the
       // sidebar re-selects the turn that just answered, keep the live offer so
-      // "Use these next time?" does not vanish after the post-answer reload.
+      // "Use these next time?" does not vanish after the post-answer reload —
+      // including when a stale reload for an earlier turn ran between a
+      // follow-up's answer and its own history selection.
       setStructuredResponse((prev) => {
         const next = selectedPrompt.structuredResponse ?? null;
+        const live = liveSaveOfferRef.current;
+        if (next && !next.save_offer && live && selectedPrompt.id === live.conversationId) {
+          return { ...next, save_offer: live.offer };
+        }
         if (
           next &&
           prev?.save_offer &&
@@ -239,6 +250,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
     setShowTheMathData(null);
     setShowTheMathError(null);
     setConversationId(null);
+    conversationIdRef.current = null;
+    liveSaveOfferRef.current = null;
     setAnsweredAt(null);
     setActiveView('answer');
     setSelectedSourceKey(null);
@@ -320,6 +333,12 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
                   if (data.conversationId) {
                     setConversationId(data.conversationId);
                     conversationIdRef.current = data.conversationId;
+                    if (data.structuredResponse?.save_offer) {
+                      liveSaveOfferRef.current = {
+                        conversationId: data.conversationId,
+                        offer: data.structuredResponse.save_offer,
+                      };
+                    }
                   }
                   if (data.threadId) setThreadId(data.threadId);
                   if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
@@ -374,6 +393,12 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
           if (data.conversationId) {
             setConversationId(data.conversationId);
             conversationIdRef.current = data.conversationId;
+            if (data.structuredResponse?.save_offer) {
+              liveSaveOfferRef.current = {
+                conversationId: data.conversationId,
+                offer: data.structuredResponse.save_offer,
+              };
+            }
           }
           if (data.threadId) setThreadId(data.threadId);
           if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
