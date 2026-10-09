@@ -486,6 +486,9 @@ function resolveVariant(
       }
     }
     // What Your numbers holds for the rest, unless the user said otherwise here.
+    // Same filters as the completed path: a saved retirement age already reached,
+    // a horizon that would not outlast retirement, or a claiming age with no
+    // benefit must not prefill the form (submitting them would re-state junk).
     const savedFor: Partial<Record<StatedRetirementPlanField, StatedFigureKey>> = {
       retirementAge: 'retirementAge',
       annualSpending: 'annualRetirementSpending',
@@ -494,11 +497,39 @@ function resolveVariant(
       socialSecurityStartAge: 'socialSecurityStartAge',
       lifeExpectancy: 'planThroughAge',
     };
+    const usableSavedRetirementAge = (() => {
+      const figure = saved('retirementAge');
+      if (!figure) return undefined;
+      if (currentAge !== undefined && figure.value <= currentAge) return undefined;
+      return figure.value;
+    })();
+    const knownNumber = (field: StatedRetirementPlanField): number | undefined => {
+      const held = known.find((input) => input.key === field)?.value;
+      return typeof held === 'number' ? held : undefined;
+    };
     for (const [field, key] of Object.entries(savedFor) as Array<[StatedRetirementPlanField, StatedFigureKey]>) {
       const figure = saved(key);
-      if (figure && !known.some((input) => input.key === field)) {
-        known.push({ key: field, value: figure.value, origin: 'saved' });
+      if (!figure || known.some((input) => input.key === field)) continue;
+      if (field === 'retirementAge' && usableSavedRetirementAge === undefined) continue;
+      if (field === 'lifeExpectancy') {
+        const retirementAgeForHorizon =
+          knownNumber('retirementAge') ??
+          (overrides.retirementAge !== undefined && overrides.sources.retirementAge
+            ? overrides.retirementAge
+            : undefined) ??
+          usableSavedRetirementAge;
+        if (retirementAgeForHorizon !== undefined && figure.value <= retirementAgeForHorizon) continue;
       }
+      if (field === 'socialSecurityStartAge') {
+        const benefit =
+          knownNumber('socialSecurityAnnual') ??
+          (overrides.socialSecurityAnnual !== undefined && overrides.sources.socialSecurityAnnual
+            ? overrides.socialSecurityAnnual
+            : undefined) ??
+          saved('socialSecurityAnnual')?.value;
+        if (!(typeof benefit === 'number' && benefit > 0)) continue;
+      }
+      known.push({ key: field, value: figure.value, origin: 'saved' });
     }
     if (savedMix && !known.some((input) => input.key === 'allocation')) {
       known.push({ key: 'allocation', value: savedMix.value, origin: 'saved' });

@@ -230,6 +230,30 @@ describe('retirement plan from stated figures', () => {
     });
   });
 
+  it('does not prefill the form with a saved retirement age the user has already reached', async () => {
+    const execution = await runStatedRetirementPlan(
+      {
+        ...NO_HOLDINGS,
+        userProfileValues: { age: 60 },
+        statedFigures: {
+          retirementAge: { value: 55, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          annualRetirementSpending: { value: 70_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          socialSecurityStartAge: { value: 67, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+        },
+      },
+      plan({}),
+      fakeRunner() as QuickPlanRunner
+    );
+    const request = statedRetirementPlanInputRequest(execution)!;
+    const field = (id: string) => request.fields.find((item) => item.id === id);
+
+    expect(field('retirementAge')?.value).toBeUndefined();
+    expect(field('retirementAge')?.valueNote).toBeUndefined();
+    expect(field('annualSpending')).toMatchObject({ value: 70_000, valueNote: 'From Your numbers' });
+    // Claiming age alone is not a benefit; the completed path would ignore it too.
+    expect(field('socialSecurityStartAge')?.value).toBeUndefined();
+  });
+
   it('assumes the conventional retirement age and says so', async () => {
     const runner = fakeRunner();
     const execution = await runStatedRetirementPlan(NO_HOLDINGS, plan({
