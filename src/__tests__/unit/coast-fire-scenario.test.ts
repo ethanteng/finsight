@@ -229,8 +229,12 @@ describe('Coast FIRE calculator', () => {
     const request = coastFireInputRequest(execution)!;
 
     expect((execution as any).missingFields).toContain('retirementAge');
-    expect(request.fields.find((item) => item.id === 'retirementAge'))
-      .toMatchObject({ required: false, defaultNote: '65 if left blank' });
+    // Blank only means 65 under that age; past it the field becomes needed.
+    expect(request.fields.find((item) => item.id === 'retirementAge')).toMatchObject({
+      required: false,
+      defaultNote: '65 if you are under 65',
+      requireWhen: { fieldId: 'currentAge', minimum: 65 },
+    });
   });
 
   it('has no form for a run that completed', async () => {

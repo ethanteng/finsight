@@ -4,6 +4,7 @@ import React, { useId, useState } from 'react';
 import { ArrowUp, ClipboardList } from 'lucide-react';
 import {
   composeInputRequestMessage,
+  fieldIsRequired,
   initialFieldText,
   readField,
   type DisplayInputRequest,
@@ -35,8 +36,14 @@ export default function InputRequestCard({ request, disabled = false, onSubmit }
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const shown = request.fields.filter((field) => field.required || field.value !== undefined);
-  const more = request.fields.filter((field) => !field.required && field.value === undefined);
+  // requireWhen fields stay visible: a retirement age that becomes needed once
+  // the typed age crosses 65 must not sit behind "More assumptions".
+  const shown = request.fields.filter(
+    (field) => field.required || field.value !== undefined || field.requireWhen
+  );
+  const more = request.fields.filter(
+    (field) => !field.required && field.value === undefined && !field.requireWhen
+  );
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -46,7 +53,7 @@ export default function InputRequestCard({ request, disabled = false, onSubmit }
       const reading = readField(field, texts[field.id] ?? '');
       if (reading.status === 'ok') values[field.id] = reading.value;
       else if (reading.status === 'invalid') problems[field.id] = reading.message;
-      else if (field.required) problems[field.id] = 'Needed to run this.';
+      else if (fieldIsRequired(field, texts, request.fields)) problems[field.id] = 'Needed to run this.';
     }
     setErrors(problems);
     if (Object.keys(problems).length > 0) {
@@ -60,6 +67,7 @@ export default function InputRequestCard({ request, disabled = false, onSubmit }
     const inputId = `${formId}-${field.id}`;
     const noteId = `${inputId}-note`;
     const error = errors[field.id];
+    const needed = fieldIsRequired(field, texts, request.fields);
     const note = error ?? field.valueNote ?? field.defaultNote;
     const prefix = UNIT_PREFIX[field.kind];
     const suffix = UNIT_SUFFIX[field.kind];
@@ -71,7 +79,7 @@ export default function InputRequestCard({ request, disabled = false, onSubmit }
       <div key={field.id} className="min-w-0">
         <label htmlFor={inputId} className="flex items-center gap-2 text-sm font-semibold text-[#102319]">
           {field.label}
-          {field.required && <span className="rounded-full bg-[#fde9c8] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#7a4a12]">Needed</span>}
+          {needed && <span className="rounded-full bg-[#fde9c8] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#7a4a12]">Needed</span>}
         </label>
         <div className={`mt-1.5 flex items-center rounded-xl border bg-white px-3 focus-within:ring-2 focus-within:ring-[#49725a]/30 ${error ? 'border-[#b84a3d]/60' : 'border-[#102319]/15'}`}>
           {prefix && <span className="mr-1 text-sm text-[#5e6b63]" aria-hidden="true">{prefix}</span>}

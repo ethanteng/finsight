@@ -1,5 +1,6 @@
 import {
   composeInputRequestMessage,
+  fieldIsRequired,
   initialFieldText,
   readField,
   type DisplayInputRequest,
@@ -68,5 +69,29 @@ describe('the message a form sends', () => {
   it('leaves a blank optional figure to its default', () => {
     expect(composeInputRequestMessage(request, { currentAge: 38, currentSavings: 500_000 }))
       .not.toContain('growth a year');
+  });
+});
+
+describe('requireWhen', () => {
+  const retirementAge: DisplayInputRequestField = {
+    id: 'retirementAge',
+    label: 'Retirement age',
+    kind: 'age',
+    required: false,
+    minimum: 30,
+    maximum: 95,
+    defaultNote: '65 if you are under 65',
+    requireWhen: { fieldId: 'currentAge', minimum: 65 },
+    sentence: 'I plan to retire at {value}.',
+  };
+  const fields = [age, retirementAge];
+
+  it('stays optional while the sibling age is under the threshold', () => {
+    expect(fieldIsRequired(retirementAge, { currentAge: '38' }, fields)).toBe(false);
+  });
+
+  it('becomes needed once the sibling age reaches the threshold', () => {
+    expect(fieldIsRequired(retirementAge, { currentAge: '65' }, fields)).toBe(true);
+    expect(fieldIsRequired(retirementAge, { currentAge: '70' }, fields)).toBe(true);
   });
 });

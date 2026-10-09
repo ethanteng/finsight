@@ -22,6 +22,8 @@ export interface DisplayInputRequestField {
   value?: number | string;
   valueNote?: string;
   defaultNote?: string;
+  /** Once `fieldId` holds a number ≥ minimum, this field is needed too. */
+  requireWhen?: { fieldId: string; minimum: number };
   sentence: string;
 }
 
@@ -62,6 +64,24 @@ function rangeMessage(field: DisplayInputRequestField): string {
   if (minimum !== undefined) return `Enter ${show(minimum)} or more.`;
   if (maximum !== undefined) return `Enter ${show(maximum)} or less.`;
   return 'Enter a number.';
+}
+
+/**
+ * Whether a field is needed given what is already typed: always, when the
+ * calculator marked it required, or once a sibling age crosses `requireWhen`.
+ */
+export function fieldIsRequired(
+  field: DisplayInputRequestField,
+  texts: Record<string, string>,
+  fields: readonly DisplayInputRequestField[]
+): boolean {
+  if (field.required) return true;
+  const rule = field.requireWhen;
+  if (!rule) return false;
+  const sibling = fields.find((item) => item.id === rule.fieldId);
+  if (!sibling) return false;
+  const reading = readField(sibling, texts[rule.fieldId] ?? '');
+  return reading.status === 'ok' && typeof reading.value === 'number' && reading.value >= rule.minimum;
 }
 
 /**
@@ -119,7 +139,8 @@ export function composeInputRequestMessage(
 ): string {
   const sentences = request.fields.flatMap((field) => {
     const value = values[field.id];
-    return value === undefined ? [] : [field.sentence.replace('{value}', formatFieldValue(field, value))];
+    // split/join so a formatted "$500,000" is never read as a replace pattern.
+    return value === undefined ? [] : [field.sentence.split('{value}').join(formatFieldValue(field, value))];
   });
   return [...sentences, request.question].join(' ');
 }

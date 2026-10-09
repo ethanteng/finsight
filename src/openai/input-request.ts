@@ -43,6 +43,12 @@ export interface InputRequestField {
   valueNote?: string;
   /** What the calculator uses when the field is left blank. */
   defaultNote?: string;
+  /**
+   * Once `fieldId` holds a number at least `minimum`, this field is needed
+   * too. Used when a named default only applies below a threshold (Coast
+   * FIRE's conventional retirement age).
+   */
+  requireWhen?: { fieldId: string; minimum: number };
   /** The sentence the figure is sent in, with `{value}` where it goes. */
   sentence: string;
 }
@@ -73,6 +79,7 @@ export interface InputFieldSpec {
   options?: readonly InputRequestOption[];
   sentence: string;
   defaultNote?: string;
+  requireWhen?: { fieldId: string; minimum: number };
 }
 
 export interface InputRequestSpec {
@@ -116,6 +123,7 @@ export function buildInputRequest(
       ...(field.options && { options: field.options.map((option) => ({ ...option })) }),
       ...(held && { value: held.value, valueNote: describeOrigin(held) }),
       ...(!required && !held && field.defaultNote && { defaultNote: field.defaultNote }),
+      ...(!required && field.requireWhen && { requireWhen: { ...field.requireWhen } }),
       sentence: field.sentence,
     };
   });
@@ -171,6 +179,14 @@ function parseField(value: unknown): InputRequestField | null {
   const held = finite(record.value) ?? text(record.value, 40);
   const valueNote = text(record.valueNote, 160);
   const defaultNote = text(record.defaultNote, 160);
+  let requireWhen: InputRequestField['requireWhen'];
+  if (record.requireWhen && typeof record.requireWhen === 'object' && !Array.isArray(record.requireWhen)) {
+    const rule = record.requireWhen as Record<string, unknown>;
+    const fieldId = text(rule.fieldId, 40);
+    const ruleMinimum = finite(rule.minimum);
+    if (!fieldId || !/^[A-Za-z]+$/.test(fieldId) || ruleMinimum === undefined) return null;
+    requireWhen = { fieldId, minimum: ruleMinimum };
+  }
   return {
     id,
     label,
@@ -182,6 +198,7 @@ function parseField(value: unknown): InputRequestField | null {
     ...(held !== undefined && { value: held }),
     ...(valueNote && { valueNote }),
     ...(defaultNote && { defaultNote }),
+    ...(requireWhen && { requireWhen }),
     sentence,
   };
 }

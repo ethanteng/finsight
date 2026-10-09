@@ -73,8 +73,21 @@ describe('a stored form', () => {
     expect(broken((copy) => { copy.fields.find((field: any) => field.id === 'mix').options = []; })).toBeNull();
     expect(broken((copy) => { copy.fields = []; })).toBeNull();
     expect(broken((copy) => { delete copy.question; })).toBeNull();
+    expect(broken((copy) => { copy.fields[0].requireWhen = { fieldId: 'bad-id', minimum: 65 }; })).toBeNull();
     expect(parseInputRequest(undefined)).toBeNull();
     expect(parseInputRequest('a form')).toBeNull();
+  });
+
+  it('keeps a requireWhen rule that names a real sibling field', () => {
+    const withRule = {
+      ...built,
+      fields: built.fields.map((field) =>
+        field.id === 'retirementAge'
+          ? { ...field, requireWhen: { fieldId: 'currentAge', minimum: 65 } }
+          : field
+      ),
+    };
+    expect(parseInputRequest(JSON.parse(JSON.stringify(withRule)))).toEqual(withRule);
   });
 });
 

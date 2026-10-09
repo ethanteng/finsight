@@ -1207,11 +1207,27 @@ export function coastFireInputRequest(execution: CoastFireScenarioExecution): In
   if (execution.status !== 'unavailable' || !execution.missingFields?.length) return null;
   // Without an age there is no telling whether the conventional retirement
   // age is still ahead, so both were asked for. Given an age under it, a blank
-  // retirement age is the default, so the form does not insist on one.
-  const missing = execution.missingFields.includes('currentAge')
+  // retirement age is the default, so the form does not insist on one — until
+  // the entered age is at or past that threshold, when the default no longer
+  // applies and the field becomes needed again (requireWhen).
+  const ageMissing = execution.missingFields.includes('currentAge');
+  const missing = ageMissing
     ? execution.missingFields.filter((field) => field !== 'retirementAge')
     : execution.missingFields;
-  return buildInputRequest(COAST_FIRE_INPUT_REQUEST, missing, execution.knownInputs);
+  const request = buildInputRequest(COAST_FIRE_INPUT_REQUEST, missing, execution.knownInputs);
+  if (!request || !ageMissing) return request;
+  return {
+    ...request,
+    fields: request.fields.map((field) =>
+      field.id !== 'retirementAge'
+        ? field
+        : {
+            ...field,
+            defaultNote: `${CONVENTIONAL_RETIREMENT_AGE} if you are under ${CONVENTIONAL_RETIREMENT_AGE}`,
+            requireWhen: { fieldId: 'currentAge', minimum: CONVENTIONAL_RETIREMENT_AGE },
+          }
+    ),
+  };
 }
 
 export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
