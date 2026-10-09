@@ -1,6 +1,7 @@
 import type { FinancialContextSnapshot } from '../openai/types';
 import type { ContextPackId } from '../openai/context-packs';
 import type { CanonicalFact } from '../openai/canonical-facts';
+import type { InputRequest } from '../openai/input-request';
 import { retirementScenarioCalculator } from './retirement-scenario';
 import { homeAffordabilityScenarioCalculator } from './home-affordability-scenario';
 import { coastFireScenarioCalculator } from './coast-fire-scenario';
@@ -87,6 +88,12 @@ export interface ScenarioCalculatorDefinition<
   compactEvidence(execution: Execution): Evidence;
   canonicalFacts(execution: Execution): CanonicalFact[];
   describeAssumptions(execution: Execution): string | null;
+  /**
+   * A form for the figures this execution is waiting on, when the only thing
+   * between it and an answer is something the user has not stated. Absent
+   * for calculators that never ask.
+   */
+  inputRequest?(execution: Execution): InputRequest | null;
 }
 
 type AnyScenarioCalculator = ScenarioCalculatorDefinition<any, any, any>;
@@ -289,6 +296,23 @@ export class ScenarioCalculatorRegistry {
       if (!execution) return [];
       return this.require<unknown, ScenarioExecutionBase, ScenarioExecutionBase>(id).canonicalFacts(execution);
     });
+  }
+
+  /**
+   * The form for the first calculator waiting on figures only the user has,
+   * or null when none is. One at most: two forms under one answer would ask
+   * for the same age twice.
+   */
+  inputRequest(executions: ScenarioExecutionRecord | undefined): InputRequest | null {
+    if (!executions) return null;
+    for (const id of this.ids()) {
+      const execution = executions[id];
+      if (!execution) continue;
+      const request = this.require<unknown, ScenarioExecutionBase, ScenarioExecutionBase>(id)
+        .inputRequest?.(execution);
+      if (request) return request;
+    }
+    return null;
   }
 
   assumptionDisclosures(executions: ScenarioExecutionRecord | undefined): string[] {

@@ -124,6 +124,16 @@ It declares `appliesTo`: it runs only where the holdings-based projection cannot
 
 `src/scenarios/preset-stand-in.ts` is the one rule both calculators use. A preset mix stands in for the user's holdings in two cases: no holdings are linked, or holdings are linked and none of them maps to a return series the engine can simulate (`no_supported_simulation`, an all-crypto account, say). Disclosures name which case it was: "no investment holdings are linked" for the first, "none of your linked holdings map to a return series I can simulate" for the second, which also never offers linking to someone who already has.
 
+### Asking for figures with a form
+
+When Coast FIRE or the stated retirement plan stops for a figure nobody stated, its unavailable execution records the missing fields (`missingFields`) and everything it had already resolved (`knownInputs`: the user's words, an age they told Linc, a balance or spending figure from linked accounts or the Finances page, each with its origin). The calculator's `inputRequest` hook turns that into a form (`src/openai/input-request.ts`), and the registry puts the first one on the answer as `structuredResponse.input_request`. The prose ask in the disclosure stays, for any client that does not render the form.
+
+The form lists what is missing first (marked as needed), then what Linc holds (filled in, saying where it came from), then the assumptions that have a default, each saying what a blank means. Its fields, bounds and options are the calculator's own, so the model never writes one. Coast FIRE does not insist on a retirement age while the age itself is missing, since 65 applies once an age under it is given.
+
+Submitting does not send numbers down a second path. Each filled field is written into its server-authored sentence ("I am {value} years old."), worded the way the planner is told to read that input, and the sentences plus the calculator's question ("What is my Coast FIRE number?") go as the user's next message in the same decision. The planner reads them, traces each to that wording, and every rule about stated figures applies unchanged, including the newest revision winning. A blank optional field is left out, so its default runs and is disclosed. The composer shows exactly what was sent.
+
+A stored answer keeps its form: the response parser keeps none of the server's own fields, so the Ask route checks a saved `input_request` with `parseInputRequest` and puts it back, dropping it whole if any part does not hold together.
+
 ### What the answer says about linking
 
 `collectMissingInputAsks` decides the note for a retirement question with no holdings linked, and it closes the answer, after every assumption disclosure:
@@ -155,6 +165,8 @@ Records are persisted inside the conversation's Show the Math evidence manifest 
 | `src/scenarios/home-affordability-scenario.ts` | Target-home inputs, mortgage and ownership-cost math, lower-bound coverage rules, cash-flow outputs, canonical facts, and disclosure |
 | `src/scenarios/coast-fire-scenario.ts` | Coast FIRE from stated figures, the contribution path to coasting, canonical facts, and disclosure |
 | `src/scenarios/stated-retirement-plan-scenario.ts` | The quick-plan engine on stated figures while no holdings are linked, canonical facts, and disclosure |
+| `src/openai/input-request.ts` | The form a calculator hands the client for figures it is waiting on, and the check on a stored one |
+| `frontend/src/components/InputRequestCard.tsx` | Renders that form under the answer and sends it as the next question |
 | `src/openai/missing-inputs.ts` | The closing note when no holdings are linked, tailored to the calculator that answered |
 | `src/retirement-analytics/engine/withdrawal-simulator.ts` | Withdrawal policy mechanics |
 | `src/openai/context-planner.ts` | Semantic scenario identification in the preflight pass |

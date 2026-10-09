@@ -38,6 +38,12 @@ import { presetStandInReason, type PresetStandInReason } from './preset-stand-in
 import { CONVENTIONAL_RETIREMENT_AGE } from '../openai/retirement-inputs';
 import { COAST_FIRE_CALCULATOR_ID } from './coast-fire-scenario';
 import { balanceBasis, type BalanceBasis } from '../openai/linked-data';
+import {
+  buildInputRequest,
+  type InputRequest,
+  type InputRequestSpec,
+  type KnownInput,
+} from '../openai/input-request';
 
 export const STATED_RETIREMENT_PLAN_CALCULATOR_ID = 'stated_retirement_plan' as const;
 export const STATED_RETIREMENT_PLAN_VERSION = 1 as const;
@@ -205,6 +211,10 @@ export interface UnavailableStatedRetirementPlanExecution {
   reason: string;
   /** In the user's terms, when the only obstacle is a figure nobody stated. */
   missingInputs?: string[];
+  /** The same figures by field, for the form that asks for them. */
+  missingFields?: StatedRetirementPlanField[];
+  /** What was already known when they were found missing, so the form can show it. */
+  knownInputs?: KnownInput[];
   standInFor?: PresetStandInReason;
 }
 
@@ -361,9 +371,10 @@ interface ResolvedVariant {
 function resolveVariant(
   snapshot: FinancialContextSnapshot,
   overrides: PlannedStatedRetirementOverrides
-): ResolvedVariant | { missing: string[] } {
+): ResolvedVariant | { missing: string[]; missingFields: StatedRetirementPlanField[]; known: KnownInput[] } {
   const assumptions: StatedRetirementAssumption[] = [];
   const missing: string[] = [];
+  const missingFields: StatedRetirementPlanField[] = [];
   const take = <T extends number | string>(
     field: StatedRetirementPlanField,
     fallback?: { value: T; origin: Exclude<StatedRetirementAssumptionOrigin, 'user'>; basis?: BalanceBasis }
@@ -385,7 +396,10 @@ function resolveVariant(
       return fallback.value;
     }
     const prompt = MISSING_INPUT_PROMPTS[field];
-    if (prompt) missing.push(prompt);
+    if (prompt) {
+      missing.push(prompt);
+      missingFields.push(field);
+    }
     return undefined;
   };
 
@@ -421,7 +435,27 @@ function resolveVariant(
     'currentAge',
     knownAge !== undefined ? { value: knownAge, origin: 'profile' } : undefined
   );
-  if (missing.length > 0) return { missing };
+  if (missing.length > 0) {
+    // Everything else the user stated, and the spending their accounts or
+    // Finances page show, so the form opens on what Linc already holds.
+    // Defaults are left out: a blank field already means the default.
+    const known: KnownInput[] = assumptions.map((assumption) => ({
+      key: assumption.key,
+      value: assumption.value,
+      origin: assumption.origin as KnownInput['origin'],
+      ...(assumption.basis && { basis: assumption.basis }),
+    }));
+    for (const field of ALL_FIELDS) {
+      const stated = overrides[field];
+      if (stated !== undefined && overrides.sources[field] && !known.some((input) => input.key === field)) {
+        known.push({ key: field, value: stated, origin: 'user' });
+      }
+    }
+    if (knownSpending !== undefined && !known.some((input) => input.key === 'annualSpending')) {
+      known.push({ key: 'annualSpending', value: knownSpending, origin: 'snapshot', basis: spendingBasis });
+    }
+    return { missing, missingFields, known };
+  }
   // The conventional planning age, or now for someone already past it.
   const retirementAge = take<number>('retirementAge', {
     value: Math.max(currentAge!, CONVENTIONAL_RETIREMENT_AGE),
@@ -514,7 +548,7 @@ function scenarioId(variant: ResolvedVariant): string {
 function unavailable(
   startedAt: number,
   reason: string,
-  missingInputs?: string[],
+  missing?: { prompts: string[]; fields: StatedRetirementPlanField[]; known: KnownInput[] },
   standInFor?: PresetStandInReason
 ): UnavailableStatedRetirementPlanExecution {
   return {
@@ -524,7 +558,11 @@ function unavailable(
     computedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt,
     reason,
-    ...(missingInputs && missingInputs.length > 0 && { missingInputs }),
+    ...(missing && missing.prompts.length > 0 && {
+      missingInputs: missing.prompts,
+      missingFields: missing.fields,
+      ...(missing.known.length > 0 && { knownInputs: missing.known }),
+    }),
     ...(standInFor && { standInFor }),
   };
 }
@@ -619,7 +657,12 @@ export async function runStatedRetirementPlan(
     // The comparison inherits every primary value, so it can only be missing
     // what the primary was missing.
     if ('missing' in variant) {
-      return unavailable(startedAt, `Missing ${joinList(variant.missing)}.`, variant.missing, standInFor);
+      return unavailable(
+        startedAt,
+        `Missing ${joinList(variant.missing)}.`,
+        { prompts: variant.missing, fields: variant.missingFields, known: variant.known },
+        standInFor
+      );
     }
     if (!variants.some((existing) => requestKey(existing) === requestKey(variant))) variants.push(variant);
   }
@@ -872,6 +915,98 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
     'Fund fees, taxes and account types are not modeled. Change any of these and I will re-run it.';
 }
 
+/**
+ * The retirement-plan form: the public calculator's inputs, each with the
+ * sentence it is sent in, worded the way the planner is told to read them.
+ */
+const STATED_RETIREMENT_PLAN_INPUT_REQUEST: InputRequestSpec = {
+  calculatorId: STATED_RETIREMENT_PLAN_CALCULATOR_ID,
+  title: 'Your retirement plan',
+  question: 'Can I retire on this plan?',
+  submitLabel: 'Test my plan',
+  fields: [
+    {
+      id: 'currentAge',
+      label: 'Your age',
+      kind: 'age',
+      ...RANGES.currentAge,
+      sentence: 'I am {value} years old.',
+    },
+    {
+      id: 'investableAssets',
+      label: 'Invested today',
+      kind: 'usd',
+      ...RANGES.investableAssets,
+      sentence: 'I have {value} invested today.',
+    },
+    {
+      id: 'retirementAge',
+      label: 'Age you plan to retire',
+      kind: 'age',
+      ...RANGES.retirementAge,
+      sentence: 'I plan to retire at {value}.',
+      defaultNote: `${CONVENTIONAL_RETIREMENT_AGE} if left blank`,
+    },
+    {
+      id: 'annualSpending',
+      label: 'What you expect to spend a year in retirement',
+      kind: 'usd_per_year',
+      ...RANGES.annualSpending,
+      sentence: 'I expect to spend {value} a year in retirement, in today\'s dollars.',
+      defaultNote: 'If left blank, I will show what the mix can sustain',
+    },
+    {
+      id: 'annualContributions',
+      label: 'What you save a year until you retire',
+      kind: 'usd_per_year',
+      ...RANGES.annualContributions,
+      sentence: 'I save {value} a year until I retire.',
+      defaultNote: 'None if left blank',
+    },
+    {
+      id: 'socialSecurityAnnual',
+      label: 'Social Security a year',
+      kind: 'usd_per_year',
+      ...RANGES.socialSecurityAnnual,
+      sentence: 'I expect {value} a year from Social Security, in today\'s dollars.',
+      defaultNote: 'None if left blank',
+    },
+    {
+      id: 'socialSecurityStartAge',
+      label: 'Age Social Security starts',
+      kind: 'age',
+      ...RANGES.socialSecurityStartAge,
+      sentence: 'My Social Security starts at {value}.',
+      defaultNote: `${DEFAULT_SOCIAL_SECURITY_START_AGE} if left blank`,
+    },
+    {
+      id: 'lifeExpectancy',
+      label: 'Plan through age',
+      kind: 'age',
+      ...RANGES.lifeExpectancy,
+      sentence: 'Plan through age {value}.',
+      defaultNote: `${DEFAULT_LIFE_EXPECTANCY} if left blank`,
+    },
+    {
+      id: 'allocation',
+      label: 'Preset mix',
+      kind: 'choice',
+      options: (['conservative', 'balanced', 'growth'] as const).map((id) => ({
+        value: id,
+        label: QUICKPLAN_ALLOCATIONS[id].label,
+      })),
+      sentence: 'Use the {value} preset mix.',
+      defaultNote: `${QUICKPLAN_ALLOCATIONS[DEFAULT_ALLOCATION_ID].label} if left blank`,
+    },
+  ],
+};
+
+/** The form for a stated plan waiting on figures, or null for one that ran or failed otherwise. */
+export function statedRetirementPlanInputRequest(execution: StatedRetirementPlanExecution): InputRequest | null {
+  if (execution.status !== 'unavailable' || !execution.missingFields?.length) return null;
+  return buildInputRequest(STATED_RETIREMENT_PLAN_INPUT_REQUEST, execution.missingFields, execution.knownInputs);
+}
+
 export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
   StatedRetirementPlan,
   StatedRetirementPlanExecution,
@@ -925,6 +1060,7 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
   yieldsTo: [COAST_FIRE_CALCULATOR_ID],
   execute: (snapshot, plan) => runStatedRetirementPlan(snapshot, plan),
   unavailable: (startedAt, reason) => unavailable(startedAt, reason),
+  inputRequest: statedRetirementPlanInputRequest,
   compactEvidence: compactStatedRetirementPlanExecution,
   canonicalFacts: statedRetirementPlanCanonicalFacts,
   describeAssumptions: describeStatedRetirementPlanExecution,

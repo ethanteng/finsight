@@ -5,6 +5,7 @@ import {
   runStatedRetirementPlan,
   statedRetirementPlanApplies,
   statedRetirementPlanCanonicalFacts,
+  statedRetirementPlanInputRequest,
   type CompletedStatedRetirementPlanExecution,
   type QuickPlanRunner,
 } from '../../scenarios/stated-retirement-plan-scenario';
@@ -191,6 +192,24 @@ describe('retirement plan from stated figures', () => {
     const ask = describeStatedRetirementPlanExecution(execution)!;
     expect(ask).toContain('before any accounts are linked');
     expect(ask).toContain('Or link your investment accounts');
+  });
+
+  it('hands the client a form for the two figures, keeping everything else the user stated', async () => {
+    const execution = await runStatedRetirementPlan(
+      { ...NO_HOLDINGS, expectedMonthly: { spending: 5_500, income: 9_000, incomeSource: 'transactions', spendingSource: 'transactions' } },
+      plan({ retirementAge: 60, socialSecurityAnnual: 30_000, allocation: 'growth' }),
+      fakeRunner() as QuickPlanRunner
+    );
+    const request = statedRetirementPlanInputRequest(execution)!;
+    const field = (id: string) => request.fields.find((item) => item.id === id)!;
+
+    expect(request).toMatchObject({ calculatorId: 'stated_retirement_plan', question: 'Can I retire on this plan?' });
+    expect(request.fields.filter((item) => item.required).map((item) => item.id)).toEqual(['currentAge', 'investableAssets']);
+    expect(field('retirementAge')).toMatchObject({ value: 60, valueNote: 'From what you said earlier' });
+    expect(field('socialSecurityAnnual')).toMatchObject({ value: 30_000 });
+    expect(field('allocation')).toMatchObject({ value: 'growth', options: expect.arrayContaining([{ value: 'growth', label: 'Growth' }]) });
+    expect(field('annualSpending')).toMatchObject({ value: 66_000, valueNote: 'From your linked accounts' });
+    expect(field('lifeExpectancy')).toMatchObject({ defaultNote: '95 if left blank' });
   });
 
   it('assumes the conventional retirement age and says so', async () => {

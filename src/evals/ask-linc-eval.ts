@@ -355,6 +355,39 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
   });
   const coastSummary = coastFollowUp.structuredResponse.summary;
 
+  // The same question from someone with nothing linked who has said only when
+  // they want to retire:
+  // the answer asks for the rest in words and hands the client a form for it,
+  // built from the calculator's own fields rather than written by the model.
+  const coastAskQuestion = 'Have I reached Coast FIRE? I want to retire at 55.';
+  const coastAskVariant = (values: Record<string, number>) => ({
+    overrides: {
+      ...Object.fromEntries(coastFields.map(field => [field, values[field] ?? null])),
+      sources: Object.fromEntries(coastFields.map(field => [field, values[field] !== undefined ? 'retire at 55' : null])),
+    },
+  });
+  const coastAskSnapshot = baseSnapshot();
+  coastAskSnapshot.retirementAnalysisNeedsInfo = coastSnapshot.retirementAnalysisNeedsInfo;
+  coastAskSnapshot.linkedData = { accounts: 0, cash: 0, credit: 0, loans: 0, investments: 0, holdings: 0, transactionMonths: 0 };
+  coastAskSnapshot.financialSummary!.financialOverview = { netWorth: 0, totalCash: 0, totalInvestments: 0, totalDebt: 0, homeValue: null } as any;
+  coastAskSnapshot.financialSummary!.investmentPortfolio = { totalValue: 0, holdingCount: 0, securityCount: 0, assetAllocation: [] } as any;
+  const coastAsk = await runAskLincAnalysis({
+    question: coastAskQuestion,
+    enableValidation: false,
+    evaluation: {
+      snapshot: coastAskSnapshot,
+      contextPlan: {
+        ...coastPlan,
+        scenarioPlans: scenarioCalculatorRegistry.parsePlans({
+          coast_fire: { requested: true, primary: coastAskVariant({ retirementAge: 55 }), comparison: coastAskVariant({}) },
+        }),
+      },
+      skipToneConfig: true,
+      model: () => jsonResponse('Coast FIRE means having enough invested now that growth alone reaches your target by 55.'),
+    },
+  });
+  const coastAskForm = coastAsk.structuredResponse.input_request;
+
   // Assumptions are allowed, but only from something real: with no cash flow
   // linked and no earlier figure, there is nothing to read spending from.
   const retirementInputs = resolveRetirementInputs({
@@ -476,6 +509,17 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
         !coastSummary.includes('I could not run') &&
         coastSystemPrompt.includes('Never tell the user that a figure in an earlier answer is unverified'),
       detail: 'A calculator lead with nothing linked gets the deterministic answer, a market-history test on a preset mix, and what linking would add -- not a refusal.',
+    },
+    {
+      id: 'calculator-asks-for-missing-figures-with-a-form',
+      category: 'calculator_follow_up',
+      passed: coastAsk.structuredResponse.summary.includes('To work out your Coast FIRE number I need your current age') &&
+        coastAskForm?.calculatorId === 'coast_fire' &&
+        JSON.stringify(coastAskForm.fields.filter(field => field.required).map(field => field.id)) ===
+          JSON.stringify(['currentAge', 'currentSavings', 'annualRetirementSpending']) &&
+        coastAskForm.fields.some(field => field.id === 'retirementAge' && field.value === 55) &&
+        !coastAsk.showTheMathData!.evidenceManifest.facts.some(fact => fact.id.endsWith('_coast_fire_number')),
+      detail: 'A Coast FIRE question missing figures runs nothing, asks for them in words, and carries a form for exactly those, with the retirement age already stated filled in.',
     },
     {
       id: 'retirement-never-invents-spending',

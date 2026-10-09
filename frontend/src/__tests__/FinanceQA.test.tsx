@@ -97,6 +97,79 @@ describe('FinanceQA decision workspace', () => {
     expect(screen.queryByText('Compatibility text.')).not.toBeInTheDocument();
   });
 
+  describe('a calculator waiting on figures', () => {
+    const askedForFigures = {
+      id: 'conversation-coast',
+      question: 'What is my Coast FIRE number?',
+      answer: 'To work out your Coast FIRE number I need your current age.',
+      threadId: 'thread-coast',
+      structuredResponse: {
+        summary: 'To work out your Coast FIRE number I need your current age.',
+        input_request: {
+          calculatorId: 'coast_fire',
+          title: 'Your Coast FIRE figures',
+          question: 'What is my Coast FIRE number?',
+          submitLabel: 'Work out my Coast FIRE number',
+          fields: [
+            { id: 'currentAge', label: 'Your age', kind: 'age' as const, required: true, minimum: 18, maximum: 90, sentence: 'I am {value} years old.' },
+            { id: 'currentSavings', label: 'Invested for retirement today', kind: 'usd' as const, required: false, value: 500000, valueNote: 'From what you entered on the Finances page', sentence: 'I have {value} invested for retirement today.' },
+            { id: 'realReturnRatePercent', label: 'Growth a year after inflation', kind: 'percent' as const, required: false, minimum: 0, maximum: 12, defaultNote: '5% if left blank', sentence: 'Assume {value} growth a year after inflation.' },
+          ],
+        },
+      },
+      timestamp: Date.now(),
+    };
+
+    it('shows the form under the answer, with what Linc already holds filled in', () => {
+      render(<FinanceQA selectedPrompt={askedForFigures} />);
+
+      expect(screen.getByRole('heading', { name: 'Your Coast FIRE figures' })).toBeInTheDocument();
+      expect(screen.getByLabelText(/Your age/)).toHaveValue('');
+      expect(screen.getByText('Needed')).toBeInTheDocument();
+      expect(screen.getByLabelText('Invested for retirement today')).toHaveValue('500,000');
+      expect(screen.getByText('From what you entered on the Finances page')).toBeInTheDocument();
+      // Defaults stay behind "More assumptions", saying what a blank means.
+      expect(screen.getByText('More assumptions (optional)')).toBeInTheDocument();
+      expect(screen.getByText('5% if left blank')).toBeInTheDocument();
+    });
+
+    it('will not send until what is needed is there', () => {
+      render(<FinanceQA selectedPrompt={askedForFigures} />);
+      fireEvent.click(screen.getByRole('button', { name: /Work out my Coast FIRE number/ }));
+
+      expect(screen.getByText('Needed to run this.')).toBeInTheDocument();
+      expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/ask/display-real'), expect.anything());
+    });
+
+    it('sends the figures as the next question in the same decision', async () => {
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/ask/display-real')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            headers: new Headers({ 'content-type': 'application/json' }),
+            json: async () => ({ answer: 'Your Coast FIRE number is $872,593.', threadId: 'thread-coast', conversationId: 'conversation-2' }),
+          });
+        }
+        return Promise.resolve({ ok: false, status: 404, headers: new Headers(), json: async () => ({}) });
+      });
+
+      render(<FinanceQA selectedPrompt={askedForFigures} />);
+      fireEvent.change(screen.getByLabelText(/Your age/), { target: { value: '38' } });
+      fireEvent.click(screen.getByRole('button', { name: /Work out my Coast FIRE number/ }));
+
+      const sent = 'I am 38 years old. I have $500,000 invested for retirement today. What is my Coast FIRE number?';
+      await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/ask/display-real'),
+        expect.objectContaining({ body: JSON.stringify({ question: sent, threadId: 'thread-coast' }) })
+      ));
+      // The composer shows exactly what was sent on the user's behalf.
+      expect(screen.getByRole('textbox', { name: 'Your financial question' })).toHaveValue(sent);
+      expect(await screen.findByText('Your Coast FIRE number is $872,593.')).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Your Coast FIRE figures' })).not.toBeInTheDocument();
+    });
+  });
+
   it('signs a saved answer as Linc, with when it was written', () => {
     // An answer is only as current as the balances it read, so the byline says
     // how old it is rather than calling every answer "current".
