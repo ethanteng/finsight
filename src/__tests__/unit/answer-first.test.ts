@@ -154,6 +154,31 @@ describe('the fact pack never quotes an empty connection', () => {
     expect(fact('total_debt')).toBeUndefined();
   });
 
+  it('names the home value as part of net worth, not as money the user entered', () => {
+    const withHome = (linkedData: Record<string, unknown>) => buildCanonicalFactPack(snapshot({
+      linkedData,
+      financialSummary: {
+        computedAt: '2026-10-01T00:00:00.000Z',
+        financialOverview: { netWorth: 510_000, totalCash: 10_000, totalInvestments: 0, totalDebt: 0, homeValue: 500_000 },
+      },
+    }), 'What is my net worth?', needs()).facts.find((fact) => fact.id === 'net_worth')?.label;
+
+    expect(withHome(linked({ entered: entered({ accounts: 1, cash: 1 }) }))).toBe(
+      'Net worth from balances the user entered and the home value, with nothing linked ' +
+      '(no investment accounts, no credit cards or loans entered)'
+    );
+    expect(withHome(linked({ accounts: 1, cash: 1, transactionMonths: 3 }))).toBe(
+      'Net worth across linked accounts and the home value only (no investment accounts, no credit cards or loans linked)'
+    );
+    expect(buildSnapshotSummaryForValidation(snapshot({
+      linkedData: linked({ entered: entered({ accounts: 1, cash: 1 }) }),
+      financialSummary: {
+        computedAt: '2026-10-01T00:00:00.000Z',
+        financialOverview: { netWorth: 510_000, totalCash: 10_000, totalInvestments: 0, totalDebt: 0, homeValue: 500_000 },
+      },
+    }))).toContain('netWorth=510000 (balances the user entered and the home value, nothing linked;');
+  });
+
   it('says which totals mix linked accounts with balances the user entered', () => {
     const data = snapshot({
       linkedData: linked({

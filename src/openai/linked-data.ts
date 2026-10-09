@@ -218,31 +218,59 @@ export function linkedOverview(
   };
 }
 
+/** Whether net worth carries a home value: it adds a known one to the account totals. */
+export function netWorthIncludesHome(overview: { homeValue?: unknown }): boolean {
+  return typeof overview.homeValue === 'number' && Number.isFinite(overview.homeValue) && overview.homeValue > 0;
+}
+
+/** The sources net worth is built from, in words, home value included where it counts. */
+function netWorthSources(linked: LinkedData | undefined, includesHome: boolean): string {
+  const sources = [
+    (linked?.accounts ?? 0) > 0 || !linked?.entered?.accounts ? 'linked accounts' : null,
+    linked?.entered?.accounts ? 'balances the user entered' : null,
+    includesHome ? 'the home value' : null,
+  ].filter((item): item is string => item !== null);
+  return joinList(sources);
+}
+
 /**
  * How net worth is labelled in the fact pack: what it is built from, and what
  * it leaves out. Just "Net worth" when every kind is covered by linked accounts.
+ * A home value is part of the figure whenever one is known, so a label naming
+ * the account sources also names it, or a $500,000 home would read as money
+ * the user typed in.
  */
-export function netWorthFactLabel(linked: LinkedData | undefined, leavesOut: readonly string[]): string {
+export function netWorthFactLabel(
+  linked: LinkedData | undefined,
+  leavesOut: readonly string[],
+  includesHome = false
+): string {
   const missing = leavesOut.join(', no ');
+  const sources = netWorthSources(linked, includesHome);
   if (!linked?.entered?.accounts) {
-    return leavesOut.length > 0 ? `Net worth across linked accounts only (no ${missing} linked)` : 'Net worth';
+    return leavesOut.length > 0 ? `Net worth across ${sources} only (no ${missing} linked)` : 'Net worth';
   }
   if (linked.accounts === 0) {
-    return `Net worth from balances the user entered, with nothing linked${leavesOut.length > 0 ? ` (no ${missing} entered)` : ''}`;
+    return `Net worth from ${sources}, with nothing linked${leavesOut.length > 0 ? ` (no ${missing} entered)` : ''}`;
   }
-  return `Net worth across linked accounts and balances the user entered${leavesOut.length > 0 ? ` (no ${missing} linked or entered)` : ''}`;
+  return `Net worth across ${sources}${leavesOut.length > 0 ? ` (no ${missing} linked or entered)` : ''}`;
 }
 
 /** The same scope for the reviewer's overview line, or null when there is nothing to qualify. */
-export function netWorthReviewerNote(linked: LinkedData | undefined, leavesOut: readonly string[]): string | null {
+export function netWorthReviewerNote(
+  linked: LinkedData | undefined,
+  leavesOut: readonly string[],
+  includesHome = false
+): string | null {
   const missing = leavesOut.join(', no ');
+  const sources = netWorthSources(linked, includesHome);
   if (!linked?.entered?.accounts) {
-    return leavesOut.length > 0 ? `linked accounts only; no ${missing} linked` : null;
+    return leavesOut.length > 0 ? `${sources} only; no ${missing} linked` : null;
   }
   if (linked.accounts === 0) {
-    return `balances the user entered, nothing linked${leavesOut.length > 0 ? `; no ${missing} entered` : ''}`;
+    return `${sources}, nothing linked${leavesOut.length > 0 ? `; no ${missing} entered` : ''}`;
   }
-  return `linked accounts plus balances the user entered${leavesOut.length > 0 ? `; no ${missing} linked or entered` : ''}`;
+  return `${sources}${leavesOut.length > 0 ? `; no ${missing} linked or entered` : ''}`;
 }
 
 /** A zero portfolio with no investment account linked or entered: an empty connection. */

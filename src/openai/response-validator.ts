@@ -20,6 +20,7 @@ import {
   emptyPortfolio,
   incomeLinked,
   linkedOverview,
+  netWorthIncludesHome,
   netWorthReviewerNote,
 } from './linked-data';
 
@@ -177,7 +178,7 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
   if (overview) {
     const linked = snapshot.linkedData;
     const { shown, netWorthLeavesOut } = linkedOverview(linked, overview);
-    const netWorthNote = netWorthReviewerNote(linked, netWorthLeavesOut);
+    const netWorthNote = netWorthReviewerNote(linked, netWorthLeavesOut, netWorthIncludesHome(overview));
     const totals = [
       linked?.accounts === 0 && !linked.entered?.accounts
         ? 'no linked accounts; balance totals are not available (not zero)'

@@ -12,6 +12,7 @@ import {
   incomeLinked,
   linkedOverview,
   netWorthFactLabel,
+  netWorthIncludesHome,
   spendingLinked,
 } from './linked-data';
 
@@ -310,7 +311,7 @@ export function buildCanonicalFactPack(
     if (shown.has('netWorth')) {
       addSnapshotFact(
         'net_worth',
-        netWorthFactLabel(linked, netWorthLeavesOut),
+        netWorthFactLabel(linked, netWorthLeavesOut, netWorthIncludesHome(overview)),
         overview.netWorth,
         'usd',
         'financialSummary.financialOverview.netWorth'
