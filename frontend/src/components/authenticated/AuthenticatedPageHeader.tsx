@@ -64,16 +64,19 @@ export default function AuthenticatedPageHeader({
           <span>Ask Linc</span>
         </Link>
 
+        {/* The links never wrap and the nav never shrinks below them: when the
+            row runs short it is the email beside Sign out that gives way. Below
+            xl the icons go too, so the row still fits at 1024px. */}
         {showNavLinks && (
-          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-1 lg:flex" aria-label="Workspace navigation">
+          <nav className="hidden flex-1 items-center justify-center gap-1 lg:flex" aria-label="Workspace navigation">
             {links.map(({ href, label, page, icon: Icon, beta }) => (
               <Link
                 key={href}
                 href={href}
                 aria-current={activePage === page ? 'page' : undefined}
-                className={`authenticated-nav-link ${activePage === page ? 'is-active' : ''}`}
+                className={`authenticated-nav-link whitespace-nowrap ${activePage === page ? 'is-active' : ''}`}
               >
-                <Icon size={16} aria-hidden="true" />
+                <Icon className="hidden xl:block" size={16} aria-hidden="true" />
                 {label}
                 {beta && <BetaBadge tone={activePage === page ? 'dark' : 'light'} />}
               </Link>
@@ -83,9 +86,9 @@ export default function AuthenticatedPageHeader({
 
         <div className="ml-auto flex min-w-0 items-center gap-4">
           {action && <UpgradeAccountButton action={action} />}
-          {email && <span className="hidden max-w-52 truncate text-xs text-[#66736b] xl:block">{email}</span>}
+          {email && <span className="hidden max-w-52 truncate text-xs text-[#66736b] xl:block" title={email}>{email}</span>}
           {onLogout && (
-            <button className="authenticated-sign-out" onClick={onLogout} type="button">
+            <button className="authenticated-sign-out shrink-0 whitespace-nowrap" onClick={onLogout} type="button">
               Sign out
             </button>
           )}
