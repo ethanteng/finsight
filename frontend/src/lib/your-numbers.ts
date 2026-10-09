@@ -84,6 +84,28 @@ export async function failureMessage(response: Response, fallback: string): Prom
 }
 
 /**
+ * Save or update the invested balance as a manual account. A retry after a
+ * partial save (plan wrote, balance failed) must not create a second copy of
+ * the same entered balance.
+ */
+async function saveInvestedBalanceAccount(apiUrl: string, amount: number): Promise<void> {
+  const listed = await sendSignedInRequest(apiUrl, '/api/manual-accounts', 'GET');
+  if (!listed.ok) throw new Error(await failureMessage(listed, 'The balance could not be saved.'));
+  const accounts = (await listed.json()).data as Array<{ id: string; name?: string; type?: string }> | undefined;
+  const existing = Array.isArray(accounts)
+    ? accounts.find((account) => account.name === INVESTED_BALANCE_ACCOUNT_NAME && account.type === 'investment')
+    : undefined;
+  const response = existing
+    ? await sendSignedInRequest(apiUrl, `/api/manual-accounts/${existing.id}`, 'PUT', { amount })
+    : await sendSignedInRequest(apiUrl, '/api/manual-accounts', 'POST', {
+        name: INVESTED_BALANCE_ACCOUNT_NAME,
+        amount,
+        type: 'investment',
+      });
+  if (!response.ok) throw new Error(await failureMessage(response, 'The balance could not be saved.'));
+}
+
+/**
  * Save what the user ticked in an offer: the plan to Your numbers and the
  * balance to a manual account. Throws with a message the card can show.
  */
@@ -97,11 +119,6 @@ export async function saveOfferedFigures(apiUrl: string, items: readonly Display
     if (!response.ok) throw new Error(await failureMessage(response, 'Your numbers could not be saved.'));
   }
   if (balance && typeof balance.value === 'number') {
-    const response = await sendSignedInRequest(apiUrl, '/api/manual-accounts', 'POST', {
-      name: INVESTED_BALANCE_ACCOUNT_NAME,
-      amount: balance.value,
-      type: 'investment',
-    });
-    if (!response.ok) throw new Error(await failureMessage(response, 'The balance could not be saved.'));
+    await saveInvestedBalanceAccount(apiUrl, balance.value);
   }
 }

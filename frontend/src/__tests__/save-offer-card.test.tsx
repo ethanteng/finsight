@@ -33,6 +33,12 @@ describe('Use these next time?', () => {
   });
 
   it('saves the plan to Your numbers and the balance as an entered account', async () => {
+    (global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === 'string' && url.includes('/api/manual-accounts') && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: [] }) });
+      }
+      return ok();
+    });
     const onSaved = jest.fn();
     render(<SaveOfferCard offer={offer} onSaved={onSaved} />);
     fireEvent.click(screen.getByRole('button', { name: 'Save to Your numbers' }));
@@ -54,6 +60,34 @@ describe('Use these next time?', () => {
     );
     expect(onSaved).toHaveBeenCalledWith(3);
     expect(screen.getByRole('link', { name: 'Change them any time' })).toHaveAttribute('href', '/your-numbers');
+  });
+
+  it('updates an existing Invested for retirement account instead of creating a second copy', async () => {
+    (global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === 'string' && url.includes('/api/manual-accounts') && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ id: 'acct-1', name: 'Invested for retirement', type: 'investment', amount: 100000 }] }),
+        });
+      }
+      return ok();
+    });
+    render(<SaveOfferCard offer={{
+      calculatorId: 'coast_fire',
+      items: [{ key: 'investedBalance' as const, label: 'Invested today', value: 500000, display: '$500,000' }],
+    }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Your numbers' }));
+
+    await screen.findByText('Saved to Your numbers');
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/manual-accounts/acct-1'),
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ amount: 500000 }) })
+    );
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/manual-accounts$/),
+      expect.objectContaining({ method: 'POST' })
+    );
   });
 
   it('leaves out what the user unticks', async () => {
