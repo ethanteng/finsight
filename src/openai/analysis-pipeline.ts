@@ -886,8 +886,15 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   if (!outputValidation.safe) {
     logFlaggedOutput(displayText, outputValidation.flagged || 'unknown', { userId });
     recordLlmAnalysisFailure(Date.now() - pipelineStartedAt);
+    // The form is application-owned (calculator fields, not model prose), so
+    // keep it when the written answer is replaced with the safety fallback.
     return {
-      structuredResponse: { summary: outputValidation.sanitized, insights: [], suggested_actions: [] },
+      structuredResponse: {
+        summary: outputValidation.sanitized,
+        insights: [],
+        suggested_actions: [],
+        ...(inputRequest && { input_request: inputRequest }),
+      },
       displayText: outputValidation.sanitized
     };
   }
