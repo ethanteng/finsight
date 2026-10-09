@@ -273,18 +273,26 @@ export default function YourNumbersPageClient() {
   const setStatusFor = (section: string, message: string | null) => setStatus((current) => ({ ...current, [section]: message }));
 
   const saveAge = async () => {
-    if (!memory) return;
     const reading = readField(AGE_FIELD, ageText);
     if (reading.status === 'invalid') {
       setErrors((current) => ({ ...current, age: reading.message }));
       return;
     }
     setErrors(({ age: _cleared, ...rest }) => rest);
-    const next: Memory = { ...memory };
-    if (reading.status === 'ok') next.age = reading.value as number;
-    else delete next.age;
     setSaving('age');
     try {
+      // PUT /profile replaces the whole memory, so an age is only ever saved
+      // into a memory that was read: if the page could not load it, read it now.
+      let current = memory;
+      if (!current) {
+        const loaded = await sendSignedInRequest(API_URL, '/profile', 'GET');
+        if (!loaded.ok) throw new Error('What Linc remembers about you could not be loaded, so your age was not saved. Refresh to try again.');
+        current = ((await loaded.json()).memory ?? {}) as Memory;
+        setMemory(current);
+      }
+      const next: Memory = { ...current };
+      if (reading.status === 'ok') next.age = reading.value as number;
+      else delete next.age;
       const response = await sendSignedInRequest(API_URL, '/profile', 'PUT', { memory: next });
       if (!response.ok) throw new Error(await failureMessage(response, 'Your age could not be saved.'));
       setMemory((await response.json()).memory ?? next);

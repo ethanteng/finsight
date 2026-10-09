@@ -2,7 +2,10 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import YourNumbersPageClient from '@/app/your-numbers/YourNumbersPageClient';
 
 const push = jest.fn();
-jest.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
+// One router for every render, as Next gives: a new one each time would make the
+// page reload on every render and hide what happens when a load fails.
+const mockRouter = { push };
+jest.mock('next/navigation', () => ({ useRouter: () => mockRouter }));
 jest.mock('next/link', () => ({
   __esModule: true,
   default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) => <a href={href} className={className}>{children}</a>,
@@ -141,6 +144,50 @@ describe('Your numbers', () => {
     fireEvent.click(within(about).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(saved).toHaveBeenCalledWith({ memory: { city: 'Portland', age: 41 } }));
+  });
+
+  it('reads what Linc remembers again before saving an age when it could not load', async () => {
+    const saved = jest.fn();
+    serve({
+      'GET /api/stated-figures': { figures: {}, coverage: NOTHING_LINKED },
+      'GET /api/manual-accounts': { data: [] },
+      'GET /api/finances/overrides': { monthlyIncome: null, monthlyExpense: null },
+      'GET /profile': { memory: { city: 'Portland' } },
+      'PUT /profile': (init: RequestInit) => {
+        const body = JSON.parse(String(init.body));
+        saved(body);
+        return { memory: body.memory };
+      },
+    });
+    const served = global.fetch as jest.Mock;
+    let profileReads = 0;
+    global.fetch = jest.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const firstProfileRead = new URL(url).pathname === '/profile' && (init?.method ?? 'GET') === 'GET' && profileReads++ === 0;
+      return firstProfileRead ? Promise.resolve({ ok: false, status: 500, json: async () => ({}) }) : served(url, init);
+    });
+    render(<YourNumbersPageClient />);
+
+    const about = (await screen.findByRole('heading', { name: 'About you' })).closest('section')!;
+    fireEvent.change(within(about).getByLabelText(/Your age/), { target: { value: '41' } });
+    fireEvent.click(within(about).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(saved).toHaveBeenCalledWith({ memory: { city: 'Portland', age: 41 } }));
+  });
+
+  it('says so, and saves nothing, when what Linc remembers still cannot be read', async () => {
+    serve({
+      'GET /api/stated-figures': { figures: {}, coverage: NOTHING_LINKED },
+      'GET /api/manual-accounts': { data: [] },
+      'GET /api/finances/overrides': { monthlyIncome: null, monthlyExpense: null },
+    });
+    render(<YourNumbersPageClient />);
+
+    const about = (await screen.findByRole('heading', { name: 'About you' })).closest('section')!;
+    fireEvent.change(within(about).getByLabelText(/Your age/), { target: { value: '41' } });
+    fireEvent.click(within(about).getByRole('button', { name: 'Save' }));
+
+    expect(await within(about).findByText(/could not be loaded, so your age was not saved/)).toBeInTheDocument();
+    expect(global.fetch).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'PUT' }));
   });
 
   it('sends a signed-out visitor to sign in', async () => {
