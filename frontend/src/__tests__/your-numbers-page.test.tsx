@@ -190,6 +190,36 @@ describe('Your numbers', () => {
     expect(global.fetch).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'PUT' }));
   });
 
+  it('does not clear a saved age when Save is clicked on an empty field after profile load failed', async () => {
+    const saved = jest.fn();
+    serve({
+      'GET /api/stated-figures': { figures: {}, coverage: NOTHING_LINKED },
+      'GET /api/manual-accounts': { data: [] },
+      'GET /api/finances/overrides': { monthlyIncome: null, monthlyExpense: null },
+      'GET /profile': { memory: { city: 'Portland', age: 41 } },
+      'PUT /profile': (init: RequestInit) => {
+        const body = JSON.parse(String(init.body));
+        saved(body);
+        return { memory: body.memory };
+      },
+    });
+    const served = global.fetch as jest.Mock;
+    let profileReads = 0;
+    global.fetch = jest.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const firstProfileRead = new URL(url).pathname === '/profile' && (init?.method ?? 'GET') === 'GET' && profileReads++ === 0;
+      return firstProfileRead ? Promise.resolve({ ok: false, status: 500, json: async () => ({}) }) : served(url, init);
+    });
+    render(<YourNumbersPageClient />);
+
+    const about = (await screen.findByRole('heading', { name: 'About you' })).closest('section')!;
+    expect(within(about).getByLabelText(/Your age/)).toHaveValue('');
+    fireEvent.click(within(about).getByRole('button', { name: 'Save' }));
+
+    expect(await within(about).findByText('Nothing has changed.')).toBeInTheDocument();
+    await waitFor(() => expect(within(about).getByLabelText(/Your age/)).toHaveValue('41'));
+    expect(saved).not.toHaveBeenCalled();
+  });
+
   it('sends a signed-out visitor to sign in', async () => {
     localStorage.removeItem('auth_token');
     serve({});

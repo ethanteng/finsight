@@ -289,6 +289,13 @@ export default function YourNumbersPageClient() {
         if (!loaded.ok) throw new Error('What Linc remembers about you could not be loaded, so your age was not saved. Refresh to try again.');
         current = ((await loaded.json()).memory ?? {}) as Memory;
         setMemory(current);
+        // The field was empty because load failed, not because the user cleared
+        // a value they saw. Leaving it blank must not wipe a saved age.
+        if (reading.status !== 'ok') {
+          setAgeText(textFor(AGE_FIELD, typeof current.age === 'number' ? current.age : null));
+          setStatusFor('age', 'Nothing has changed.');
+          return;
+        }
       }
       const next: Memory = { ...current };
       if (reading.status === 'ok') next.age = reading.value as number;
