@@ -551,6 +551,49 @@ describe('context planner', () => {
     });
   });
 
+  it('keeps the plan\'s claiming age in the baseline and withholds only a what-if claiming age', () => {
+    const withClaim = (statedAge: number, whatIfAge: number) => {
+      const raw = rawPlan(['retirement_analysis']);
+      raw.retirementInputs.socialSecurityAnnual = 30_000;
+      raw.retirementInputs.socialSecurityStartAge = statedAge;
+      raw.retirementInputs.sources.socialSecurityAnnual = '$30k of Social Security';
+      raw.retirementInputs.sources.socialSecurityStartAge = `at ${statedAge}`;
+      raw.scenarios.retirement = {
+        requested: true,
+        primary: {
+          type: 'historical_cpi',
+          annualRate: null,
+          source: null,
+          overrides: {
+            annualWithdrawalAmount: null,
+            annualContributionAmount: null,
+            retirementAge: null,
+            withdrawalStartAge: null,
+            lifeExpectancy: null,
+            socialSecurityStartAge: whatIfAge,
+            sources: {
+              annualWithdrawalAmount: null,
+              annualContributionAmount: null,
+              retirementAge: null,
+              withdrawalStartAge: null,
+              lifeExpectancy: null,
+              socialSecurityStartAge: `what if I wait until ${whatIfAge}`,
+            },
+          },
+        },
+        comparison: { type: 'none', annualRate: null, source: null, overrides: {} },
+      };
+      return parseContextPlan(raw).retirementInputs;
+    };
+
+    // "I get $30,000 at 62; what if I wait until 70?": 62 is the plan.
+    expect(withClaim(62, 70)).toMatchObject({ socialSecurityAnnual: 30_000, socialSecurityStartAge: 62 });
+    // The what-if read twice is not the plan.
+    const whatIf = withClaim(70, 70);
+    expect(whatIf?.socialSecurityAnnual).toBe(30_000);
+    expect(whatIf?.socialSecurityStartAge).toBeUndefined();
+  });
+
   it('falls back to the variant values when the baseline has nothing to run on', () => {
     const scenario: any = {
       requested: true,

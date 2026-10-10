@@ -8,7 +8,16 @@ import {
   type WithdrawalPolicy,
 } from '../retirement-analytics';
 import type { ScenarioCalculatorDefinition } from './calculator-registry';
-import { incomeForRetirementAge, type RetirementIncomeOrigins } from '../openai/retirement-income';
+import {
+  incomeClaimedAt,
+  incomeForRetirementAge,
+  type RetirementIncomeOrigins,
+} from '../openai/retirement-income';
+import {
+  describeClaimingAdjustment,
+  EARLIEST_CLAIMING_AGE,
+  type ClaimingAdjustment,
+} from '../services/social-security-claiming';
 
 export const RETIREMENT_SCENARIO_VERSION = 2 as const;
 export const RETIREMENT_CALCULATOR_ID = 'retirement' as const;
@@ -20,6 +29,7 @@ const RETIREMENT_OVERRIDE_FIELDS = [
   'retirementAge',
   'withdrawalStartAge',
   'lifeExpectancy',
+  'socialSecurityStartAge',
 ] as const;
 
 export type RetirementOverrideField = (typeof RETIREMENT_OVERRIDE_FIELDS)[number];
@@ -87,6 +97,8 @@ export interface PlannedRetirementOverrides {
   retirementAge?: number;
   withdrawalStartAge?: number;
   lifeExpectancy?: number;
+  /** The age this case claims Social Security; the benefit moves by Social Security's rules. */
+  socialSecurityStartAge?: number;
   sources: Partial<Record<RetirementOverrideField, string>>;
 }
 
@@ -117,6 +129,8 @@ export interface RetirementScenarioResult {
   assumptions: RetirementScenarioAssumption[];
   analysis: RetirementAnalysisOutput;
   reusedBaseline: boolean;
+  /** Set when this case claims Social Security at another age than the baseline. */
+  claiming?: ClaimingAdjustment;
 }
 
 export interface CompletedRetirementScenarioExecution {
@@ -182,6 +196,8 @@ const OVERRIDE_RANGES: Record<RetirementOverrideField, {
   retirementAge: { minimum: 30, maximum: 100, integer: true },
   withdrawalStartAge: { minimum: 30, maximum: 120, integer: true },
   lifeExpectancy: { minimum: 50, maximum: 120, integer: true },
+  // A retirement benefit cannot be claimed before 62; after 70 it grows no more.
+  socialSecurityStartAge: { minimum: EARLIEST_CLAIMING_AGE, maximum: 80, integer: true },
 };
 
 function parseOverrides(value: unknown): PlannedRetirementOverrides | undefined {
@@ -328,6 +344,7 @@ const OVERRIDE_ASSUMPTIONS: Record<RetirementOverrideField, {
   retirementAge: { key: 'retirement_age', label: 'Retirement age' },
   withdrawalStartAge: { key: 'withdrawal_start_age', label: 'Withdrawal start age' },
   lifeExpectancy: { key: 'life_expectancy', label: 'Life expectancy' },
+  socialSecurityStartAge: { key: 'social_security_start_age', label: 'Social Security claiming age' },
 };
 
 function resolveVariant(
@@ -338,7 +355,8 @@ function resolveVariant(
   input: RetirementAnalysisInput;
   policy: WithdrawalPolicy;
   assumptions: RetirementScenarioAssumption[];
-} {
+  claiming?: ClaimingAdjustment;
+} | { unavailableReason: string } {
   const resolvedPolicy = resolvePolicy(planned);
   const input: RetirementAnalysisInput = {
     ...baseInput,
@@ -348,11 +366,21 @@ function resolveVariant(
   const overrides = planned.overrides;
   if (!overrides) return { input, policy: resolvedPolicy.policy, assumptions };
 
+  let claiming: ClaimingAdjustment | undefined;
   for (const field of RETIREMENT_OVERRIDE_FIELDS) {
     const value = overrides[field];
     const source = overrides.sources[field];
     if (value === undefined || !source) continue;
-    input[field] = value;
+    if (field === 'socialSecurityStartAge') {
+      // The same benefit claimed at another age is what Social Security's own
+      // rules pay there, not the baseline's amount started later.
+      const claimed = incomeClaimedAt(input.incomeStreams ?? [], value, input.currentAge);
+      if ('unavailableReason' in claimed) return claimed;
+      input.incomeStreams = claimed.streams;
+      claiming = claimed.claiming;
+    } else {
+      input[field] = value;
+    }
     assumptions.push({
       ...OVERRIDE_ASSUMPTIONS[field],
       value,
@@ -367,7 +395,7 @@ function resolveVariant(
     input.incomeStreams = incomeForRetirementAge(input.incomeStreams, incomeOrigins, input.retirementAge);
   }
 
-  return { input, policy: resolvedPolicy.policy, assumptions };
+  return { input, policy: resolvedPolicy.policy, assumptions, ...(claiming && { claiming }) };
 }
 
 function validateVariantInput(input: RetirementAnalysisInput): string | undefined {
@@ -412,6 +440,7 @@ function variantLabel(
     if (assumption.key === 'pre_withdrawal_contributions') {
       return `$${Number(assumption.value).toLocaleString('en-US')}/year contributions`;
     }
+    if (assumption.key === 'social_security_start_age') return `Social Security claimed at ${assumption.value}`;
     return `${assumption.label.toLowerCase()} ${assumption.value}`;
   });
   return `${policyLabel(policy)} with ${details.join(' and ')}`;
@@ -599,9 +628,10 @@ export async function runRetirementScenario(
     plannedVariants.push({ type: 'historical_cpi' });
   }
 
-  const unique = new Map<string, ReturnType<typeof resolveVariant>>();
+  const unique = new Map<string, Exclude<ReturnType<typeof resolveVariant>, { unavailableReason: string }>>();
   for (const planned of plannedVariants.slice(0, 2)) {
     const resolved = resolveVariant(baseInput, planned, baseline._incomeOrigins);
+    if ('unavailableReason' in resolved) return unavailable(startedAt, resolved.unavailableReason);
     const invalidReason = validateVariantInput(resolved.input);
     if (invalidReason) return unavailable(startedAt, invalidReason);
     const key = inputKey(resolved.input, resolved.policy);
@@ -627,6 +657,7 @@ export async function runRetirementScenario(
       assumptions,
       analysis,
       reusedBaseline,
+      ...(resolved.claiming && { claiming: resolved.claiming }),
     });
   }
 
@@ -647,6 +678,7 @@ export interface CompactRetirementScenarioResult {
   withdrawalPolicy: WithdrawalPolicy;
   assumptions: RetirementScenarioAssumption[];
   reusedBaseline: boolean;
+  claiming?: ClaimingAdjustment;
   metrics: {
     withdrawalRate: number;
     yearsOfExpenses: number;
@@ -680,6 +712,7 @@ export function compactRetirementScenarioExecution(
       withdrawalPolicy: scenario.withdrawalPolicy,
       assumptions: scenario.assumptions,
       reusedBaseline: scenario.reusedBaseline,
+      ...(scenario.claiming && { claiming: scenario.claiming }),
       metrics: {
         withdrawalRate: scenario.analysis.metrics.withdrawalRate,
         yearsOfExpenses: scenario.analysis.metrics.yearsOfExpenses,
@@ -759,6 +792,7 @@ export function retirementScenarioCanonicalFacts(
       life_expectancy: 'age',
       pre_withdrawal_contributions: 'usd',
       annual_growth_rate: 'ratio',
+      social_security_start_age: 'age',
     };
     for (const assumption of scenario.assumptions) {
       const unit = assumptionUnits[assumption.key];
@@ -770,6 +804,12 @@ export function retirementScenarioCanonicalFacts(
         unit,
         scenario.id
       );
+    }
+    if (scenario.claiming) {
+      const { claiming } = scenario;
+      addCalculation(`${prefix}_social_security_at_claiming_age`, `${scenario.label} Social Security a year claimed at ${claiming.toAge}, by Social Security's claiming rules, in today's dollars`, claiming.amount, 'usd', scenario.id);
+      addCalculation(`${prefix}_social_security_before_claiming_change`, `${scenario.label} Social Security a year in the baseline, claimed at ${claiming.fromAge}, in today's dollars`, claiming.fromAmount, 'usd', scenario.id);
+      addCalculation(`${prefix}_social_security_claiming_change`, `${scenario.label} change in annual Social Security from claiming at ${claiming.toAge} instead of ${claiming.fromAge}`, Number(((claiming.amount / claiming.fromAmount - 1) * 100).toFixed(4)), 'percent', scenario.id);
     }
     addCalculation(`${prefix}_withdrawal_rate`, `${scenario.label} initial withdrawal rate`, scenario.analysis.metrics.withdrawalRate * 100, 'percent', scenario.id);
     addCalculation(`${prefix}_years_of_expenses`, `${scenario.label} years of starting expenses`, scenario.analysis.metrics.yearsOfExpenses, 'years', scenario.id);
@@ -871,7 +911,9 @@ export function describeRetirementScenarioExecution(
     const currencyKeys = new Set(['annual_withdrawal_amount', 'pre_withdrawal_contributions']);
     const changes = scenario.assumptions
       .filter((assumption) => assumption.origin === 'user' && assumption.key !== 'withdrawal_policy')
-      .map((assumption) => `${assumption.label.toLowerCase()} ${
+      .map((assumption) => assumption.key === 'social_security_start_age'
+        ? `Social Security claimed at ${assumption.value}`
+        : `${assumption.label.toLowerCase()} ${
         typeof assumption.value === 'number' && currencyKeys.has(assumption.key)
           ? `$${Math.round(assumption.value).toLocaleString('en-US')}`
           : assumption.value
@@ -881,6 +923,10 @@ export function describeRetirementScenarioExecution(
   const changesNotice = changedInputs.length > 0
     ? ` User-supplied variant inputs: ${changedInputs.join('; ')}.`
     : '';
+  // Each benefit moved to another claiming age, with both amounts.
+  const claimingNotice = [...new Set(execution.scenarios.flatMap((scenario) =>
+    scenario.claiming ? [` ${describeClaimingAdjustment(scenario.claiming)}`] : []
+  ))].join('');
   const defaultNotice = defaults.length > 0
     ? ` The fixed-growth rate was not specified, so I used the disclosed Ask Linc default of ${Number((Number(defaults[0].value) * 100).toFixed(4))}%.`
     : '';
@@ -890,7 +936,7 @@ export function describeRetirementScenarioExecution(
   const heldConstantNotice = heldConstant.length > 0
     ? ` while holding ${heldConstant.join(', ')} constant`
     : '';
-  return `Scenario assumptions: ${action}${heldConstantNotice}.${changesNotice}${defaultNotice} Change any assumption and I will re-run it.`;
+  return `Scenario assumptions: ${action}${heldConstantNotice}.${changesNotice}${claimingNotice}${defaultNotice} Change any assumption and I will re-run it.`;
 }
 
 export const retirementScenarioCalculator: ScenarioCalculatorDefinition<
@@ -959,6 +1005,14 @@ export const retirementScenarioCalculator: ScenarioCalculatorDefinition<
       minimum: 50,
       maximum: 120,
     },
+    {
+      id: 'social_security_start_age',
+      label: 'Social Security claiming age',
+      description: 'Age this case claims Social Security; the baseline benefit moves by Social Security\'s claiming rules.',
+      valueType: 'age',
+      minimum: EARLIEST_CLAIMING_AGE,
+      maximum: 80,
+    },
   ],
   defaults: [
     {
@@ -994,7 +1048,7 @@ export const retirementScenarioCalculator: ScenarioCalculatorDefinition<
   ],
   planner: {
     jsonSchema: RETIREMENT_SCENARIO_PLAN_JSON_SCHEMA,
-    instructions: `When the user asks to run or compare a retirement scenario, set requested=true. A variant can change the withdrawal policy, starting annual retirement spending, annual pre-withdrawal contributions, retirement age, withdrawal start age, or life expectancy. Use historical_cpi when the request changes an input but does not change withdrawal growth. Values must come from the user's words; put the matching short wording in overrides.sources. The overrides object is always present; use null for every absent value and source. If retirementAge changes and withdrawalStartAge is not separately stated, repeat the retirement age as withdrawalStartAge. Policy meanings: historical_cpi follows each sequence's CPI, flat_nominal keeps the same nominal dollars, and fixed_growth applies one fixed annual increase. annualRate is decimal (3% is 0.03); use null when the user gives no fixed-growth rate so application code can disclose its default. Use primary for the requested case and comparison for an explicitly named second case. When there is no retirement scenario, set requested=false, use type=none for both variants, return null for rates and policy sources, and return override objects whose values and sources are all null.`,
+    instructions: `When the user asks to run or compare a retirement scenario, set requested=true. A variant can change the withdrawal policy, starting annual retirement spending, annual pre-withdrawal contributions, retirement age, withdrawal start age, life expectancy, or the age it claims Social Security (socialSecurityStartAge; application code moves the plan's benefit by Social Security's own claiming rules, so never supply a new amount for it). Use historical_cpi when the request changes an input but does not change withdrawal growth. Values must come from the user's words; put the matching short wording in overrides.sources. The overrides object is always present; use null for every absent value and source. If retirementAge changes and withdrawalStartAge is not separately stated, repeat the retirement age as withdrawalStartAge. Policy meanings: historical_cpi follows each sequence's CPI, flat_nominal keeps the same nominal dollars, and fixed_growth applies one fixed annual increase. annualRate is decimal (3% is 0.03); use null when the user gives no fixed-growth rate so application code can disclose its default. Use primary for the requested case and comparison for an explicitly named second case. When there is no retirement scenario, set requested=false, use type=none for both variants, return null for rates and policy sources, and return override objects whose values and sources are all null.`,
     parsePlan: parseRetirementScenarioPlan,
   },
   execution: {

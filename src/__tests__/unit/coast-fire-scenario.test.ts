@@ -74,6 +74,7 @@ const FIELDS = [
   'retirementIncomeStartAge',
   'socialSecurityAnnual',
   'socialSecurityStartAge',
+  'socialSecurityAmountAge',
   'realReturnRatePercent',
   'withdrawalRatePercent',
   'annualContribution',
@@ -539,6 +540,60 @@ describe('Coast FIRE calculator', () => {
         { key: 'retirementIncomeInflation', value: 'rises_with_inflation' },
         { key: 'socialSecurityAnnual', value: 30_000 },
         { key: 'socialSecurityStartAge', value: 67 },
+      ]));
+    });
+  });
+
+  describe('claiming Social Security at another age', () => {
+    it('claims the same benefit later by Social Security\'s rules, in the target and the history', async () => {
+      const runner = fakeRunner();
+      const execution = await runCoastFireScenario(
+        EMPTY_SNAPSHOT,
+        plan({ ...STATED, socialSecurityAnnual: 30_000, socialSecurityStartAge: 67 }, { socialSecurityStartAge: 70 }),
+        runner as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+
+      expect(execution.scenarios.map((scenario) => scenario.label))
+        .toEqual(['Claiming Social Security at 67', 'Claiming Social Security at 70']);
+      expect(execution.scenarios.map((scenario) => scenario.metrics.incomes?.[0]))
+        .toEqual([
+          expect.objectContaining({ kind: 'social_security', annualAmount: 30_000, startAge: 67 }),
+          expect.objectContaining({ kind: 'social_security', annualAmount: 37_200, startAge: 70 }),
+        ]);
+      // The market-history test runs each case on the benefit it counts.
+      expect(runner.mock.calls.map(([request]) => [request.socialSecurityAnnual, request.socialSecurityStartAge]))
+        .toEqual([[30_000, 67], [37_200, 70]]);
+
+      const disclosure = describeCoastFireScenarioExecution(execution)!;
+      expect(disclosure).toContain(
+        'Claimed at 70 instead of 67, Social Security of $30,000 a year becomes $37,200 by Social Security\'s own rules'
+      );
+      expect(disclosure).toContain('I compared claiming Social Security at 67 with claiming Social Security at 70.');
+      const facts = coastFireScenarioCanonicalFacts(execution);
+      const comparisonFacts = facts.filter((fact) => fact.provenance.scenarioId === execution.scenarios[1].id);
+      expect(comparisonFacts.find((fact) => fact.id.endsWith('_social_security_at_claiming_age'))?.value).toBe(37_200);
+      expect(comparisonFacts.find((fact) => fact.id.endsWith('_social_security_claiming_change'))?.value).toBe(24);
+      expect(comparisonFacts.find((fact) => fact.id.endsWith('_social_security_annual'))?.label)
+        .toContain('as given, for claiming at 67');
+      expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+    });
+
+    it('moves a saved benefit from its saved start age, and saves it as paid at the new one', async () => {
+      const execution = await runCoastFireScenario(
+        {
+          statedFigures: {
+            socialSecurityAnnual: { value: 28_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+            socialSecurityStartAge: { value: 70, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          },
+        },
+        plan({ ...STATED, socialSecurityStartAge: 62 })
+      ) as CompletedCoastFireScenarioExecution;
+
+      const benefit = Math.round(28_000 * 0.7 / 1.24);
+      expect(execution.scenarios[0].metrics.incomes?.[0]).toMatchObject({ annualAmount: benefit, startAge: 62 });
+      expect(coastFireSavableFigures(execution)).toEqual(expect.arrayContaining([
+        { key: 'socialSecurityAnnual', value: benefit },
+        { key: 'socialSecurityStartAge', value: 62 },
       ]));
     });
   });

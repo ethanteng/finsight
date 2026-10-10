@@ -101,6 +101,7 @@ const SCENARIO_OVERRIDE_INPUT_FIELDS = [
 const BASELINE_INCOME_FIELDS = [
   'socialSecurityAnnual',
   'socialSecurityStartAge',
+  'socialSecurityAmountAge',
   'pensionAnnual',
   'pensionStartAge',
 ] as const;
@@ -131,7 +132,13 @@ export function retirementInputsForBaseline(
       variants.some((variant) => variant?.overrides?.[field] !== undefined)
     )
   );
-  if (overridden.size === 0) return inputs;
+  // A claiming age is withheld only when it is a variant's: "I get $30,000 at
+  // 62; what if I wait until 70?" states the plan's age and the what-if's, and
+  // dropping the plan's would leave the benefit on the default age before the
+  // what-if moves it. The same age in both is the what-if read twice.
+  const claimAgeIsWhatIf = inputs.socialSecurityStartAge !== undefined &&
+    variants.some((variant) => variant?.overrides?.socialSecurityStartAge === inputs.socialSecurityStartAge);
+  if (overridden.size === 0 && !claimAgeIsWhatIf) return inputs;
 
   const baseline: ExtractedRetirementInputs = { sources: {} };
   if (inputs.currentAge !== undefined) {
@@ -145,6 +152,7 @@ export function retirementInputsForBaseline(
   }
   for (const field of BASELINE_INCOME_FIELDS) {
     if (inputs[field] === undefined) continue;
+    if (field === 'socialSecurityStartAge' && claimAgeIsWhatIf) continue;
     baseline[field] = inputs[field];
     if (inputs.sources[field]) baseline.sources[field] = inputs.sources[field];
   }
@@ -212,6 +220,7 @@ const RETIREMENT_FIELDS = [
   'lifeExpectancy',
   'socialSecurityAnnual',
   'socialSecurityStartAge',
+  'socialSecurityAmountAge',
   'pensionAnnual',
   'pensionStartAge',
 ] as const;
@@ -268,7 +277,7 @@ Important boundaries:
 - needsSecondaryValidation is true for projections, comparisons, recommendations, affordability judgments, simulations, optimization, tax reasoning, or other conclusions where an independent reasoning review is useful.
 - The application enforces access, subscription, dependencies and calculations. You only plan context.
 
-Also extract retirement inputs the user actually stated in this decision. Never estimate or supply typical values. annualWithdrawalAmount means intended annual retirement spending in today's dollars, not salary, savings, portfolio value, or current spending. Convert a monthly amount only when it clearly refers to that retirement spending. socialSecurityAnnual and socialSecurityStartAge are the user's Social Security benefit per year and the age it starts; pensionAnnual and pensionStartAge are a pension, annuity or other retirement income that is not Social Security, per year, and when it starts; pensionInflation is fixed when the user says that pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has one or rises with inflation, and otherwise unspecified with a null source. Convert a monthly benefit to a year only when it clearly is one. A short answer takes its meaning from the assistant question immediately before it. The newest revision wins. Put the user's own short wording in sources; use null for an absent value and source.
+Also extract retirement inputs the user actually stated in this decision. Never estimate or supply typical values. annualWithdrawalAmount means intended annual retirement spending in today's dollars, not salary, savings, portfolio value, or current spending. Convert a monthly amount only when it clearly refers to that retirement spending. socialSecurityAnnual and socialSecurityStartAge are the user's Social Security benefit per year and the age they plan to claim it, never a claiming age they only ask about as a what-if; socialSecurityAmountAge is the claiming age their Social Security figure is for, only when they say so (such as a statement showing $2,500 a month at 67), because application code applies Social Security's own claiming rules when it differs from the claiming age; pensionAnnual and pensionStartAge are a pension, annuity or other retirement income that is not Social Security, per year, and when it starts; pensionInflation is fixed when the user says that pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has one or rises with inflation, and otherwise unspecified with a null source. Convert a monthly benefit to a year only when it clearly is one. A short answer takes its meaning from the assistant question immediately before it. The newest revision wins. Put the user's own short wording in sources; use null for an absent value and source.
 
 Registered calculator contracts:
 ${scenarioCalculatorRegistry.plannerInstructions()}

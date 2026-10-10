@@ -36,8 +36,42 @@ Your numbers stores the pension as `retirementIncome`, `retirementIncomeStartAge
   - **What-ifs.** A what-if inherits the baseline's incomes. When the pension's start was only ever "when you retire", it moves with a what-if's retirement age.
   - **Disclosure and facts.** The disclosure names each income and its origin, or says that none is counted. The fact pack publishes each income and the first-year portfolio withdrawal.
 
+## Claiming age
+
+A Social Security benefit belongs to an age: claimed earlier it pays less, claimed later it pays more. Without that rule, "what if I claim at 70?" kept the amount and only started it later, so claiming later always looked worse. Every calculator now moves a benefit to the age it is claimed at by Social Security's own rules (`src/services/social-security-claiming.ts`). The application does the arithmetic; the model still never estimates a number.
+
+**The rules.**
+
+- **Full retirement age** comes from the birth year the user's current age implies: 66 for 1943–1954, rising two months a year to 67 for 1960 and later. Around a birthday that birth year can be a year off. That only matters for someone born 1955–1960, and only by two months.
+- **Claiming early** costs 5/9 of 1% a month for the first 36 months before full retirement age and 5/12 of 1% a month beyond that, back to 62.
+- **Claiming late** earns 2/3 of 1% a month after full retirement age, up to 70.
+- **Not modeled.** Spousal and survivor benefits follow other rules.
+
+At a full retirement age of 67, $30,000 a year becomes $21,000 at 62 and $37,200 at 70.
+
+**The age a figure is for.** A Social Security figure is for, in order:
+
+1. the age the user names for it, such as "my statement shows $2,500 a month at 67". The planner records that as `socialSecurityAmountAge`, and only when the user says it;
+2. for a comparison that only moves the claiming age, the age the main case's figure was for, so "what if I claim at 70?" moves the same benefit;
+3. for a figure from Your numbers, the start age saved beside it, or 67 when none was saved;
+4. otherwise the age it is claimed at, which leaves it as stated.
+
+A comparison that states its own amount, or the age its figure is for, is taken as stated.
+
+**When nothing moves.** The benefit is left as it is when the claiming age is already in the past, when either age is before 62 (that is a disability or survivor benefit, not a retirement benefit), or when both ages are at or past 70. A holdings what-if also refuses to move a benefit whose plan start age is already at or before today (already being paid). The age a figure is for may be in the past — a statement's reference age is not proof that payments have begun — so a 68-year-old whose statement quotes a benefit at 67 still earns delayed credits by claiming at 70.
+
+**In the answer.** When a benefit moves, the disclosure names both amounts, both ages and the full retirement age it used. The fact pack publishes the moved amount, the change in percent, and the figure as given, relabelled with the age it is for. Variant labels read "Claiming Social Security at 70".
+
+**Saving.** Your numbers keeps a benefit beside the age it starts. The save offer for a moved benefit is therefore the amount at the claiming age, together with that age. Saving the figure as given beside the new age would later read as the benefit at that age.
+
+**Each calculator.**
+
+- **Stated plan and Coast FIRE.** Both read `socialSecurityAmountAge` and move the benefit, in the straight line and in the market-history test.
+- **Holdings-based projection.** The baseline moves a figure the user gave for another age. A what-if can set `socialSecurityStartAge`, and the baseline's benefit moves from its own start age to that one. The what-if is reported as unavailable, not run as no change, when the plan has no Social Security, when the benefit is already being paid, or when the claiming age is already past.
+- **Planner boundary.** The planner's retirement inputs withhold a claiming age only when it equals a what-if's. "I get $30,000 at 62; what if I wait until 70?" keeps 62 as the plan. Withholding it would leave the benefit on the default 67 before the what-if moved it.
+
 ## Not yet
 
-- **Claiming age.** Social Security is the amount the user states for the age they state. A what-if that changes the claiming age keeps the amount, so claiming later looks worse than it is. Rescaling the benefit by SSA's rules is the next change.
 - **Couples.** A spouse's benefit and survivor benefits are not modeled.
-- **Holdings what-ifs.** A holdings-based what-if cannot change the income itself, only inherit it.
+- **Earnings history.** The benefit is what the user states, or what they saved. Nothing estimates it from earnings.
+- **Other holdings what-ifs on income.** A holdings-based what-if can move the claiming age. It cannot change a benefit's amount or the pension.

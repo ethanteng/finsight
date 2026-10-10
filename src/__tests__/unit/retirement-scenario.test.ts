@@ -3,6 +3,7 @@ import {
   compactRetirementScenarioExecution,
   describeRetirementScenarioExecution,
   parseRetirementScenarioPlan,
+  retirementScenarioCanonicalFacts,
   runRetirementScenario,
 } from '../../scenarios/retirement-scenario';
 import type { RetirementAnalysisOutput } from '../../retirement-analytics';
@@ -158,6 +159,57 @@ describe('retirement scenario runner', () => {
       { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
       { label: 'pension or other income', annualAmount: 20_000, startAge: 55, inflationAdjusted: false },
     ]);
+  });
+
+  it('claims the baseline\'s Social Security at another age by Social Security\'s rules', async () => {
+    const analyzer = jest.fn(async () => analysis(0.85));
+    const data = snapshot();
+    data.retirementAnalysis._storedInputParams.incomeStreams = [
+      { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
+      { label: 'pension or other income', annualAmount: 20_000, startAge: 60, inflationAdjusted: false },
+    ];
+    const execution = await runRetirementScenario(data, {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: { socialSecurityStartAge: 70, sources: { socialSecurityStartAge: 'claim at 70' } },
+      },
+    }, analyzer);
+
+    expect(execution.status).toBe('completed');
+    expect(analyzer).toHaveBeenCalledTimes(1);
+    expect((analyzer.mock.calls[0] as any[])[0].incomeStreams).toEqual([
+      { label: 'Social Security', annualAmount: 37_200, startAge: 70, inflationAdjusted: true },
+      { label: 'pension or other income', annualAmount: 20_000, startAge: 60, inflationAdjusted: false },
+    ]);
+    if (execution.status !== 'completed') return;
+    const [claimed, baseline] = execution.scenarios;
+    expect(claimed.label).toBe('Historical CPI-linked withdrawals with Social Security claimed at 70');
+    expect(claimed.claiming).toMatchObject({ fromAmount: 30_000, fromAge: 67, toAge: 70, amount: 37_200 });
+    expect(baseline.reusedBaseline).toBe(true);
+    expect(describeRetirementScenarioExecution(execution)).toContain(
+      'Claimed at 70 instead of 67, Social Security of $30,000 a year becomes $37,200 by Social Security\'s own rules'
+    );
+    expect(compactRetirementScenarioExecution(execution)).toMatchObject({
+      scenarios: [expect.objectContaining({ claiming: expect.objectContaining({ amount: 37_200 }) }), expect.anything()],
+    });
+    const facts = retirementScenarioCanonicalFacts(execution);
+    expect(facts.find((fact) => fact.id.endsWith('_social_security_at_claiming_age'))?.value).toBe(37_200);
+    expect(facts.find((fact) => fact.id.endsWith('_assumption_social_security_start_age'))?.value).toBe(70);
+  });
+
+  it('says there is no Social Security to move rather than comparing nothing', async () => {
+    const analyzer = jest.fn(async () => analysis(0.85));
+    const execution = await runRetirementScenario(snapshot(), {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: { socialSecurityStartAge: 70, sources: { socialSecurityStartAge: 'claim at 70' } },
+      },
+    }, analyzer);
+
+    expect(execution).toMatchObject({ status: 'unavailable', reason: expect.stringMatching(/no Social Security benefit/) });
+    expect(analyzer).not.toHaveBeenCalled();
   });
 
   it('compares one requested policy with the existing CPI baseline and discloses the fixed-growth default', async () => {

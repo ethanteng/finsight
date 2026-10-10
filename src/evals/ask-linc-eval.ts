@@ -457,6 +457,40 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
   });
   const savedIncomeSummary = savedIncome.structuredResponse.summary;
   const savedIncomeFacts = savedIncome.showTheMathData!.evidenceManifest.facts;
+
+  // "What if I claim at 70?" on that saved benefit: the same benefit, moved by
+  // Social Security's own rules, not $30,000 started three years later.
+  const claimingQuestion = 'What if I claim Social Security at 70 instead?';
+  const claimingVariant = (values: Record<string, number>) => ({
+    overrides: {
+      ...Object.fromEntries([...coastFields, 'socialSecurityStartAge'].map(field => [field, values[field] ?? null])),
+      sources: Object.fromEntries([...coastFields, 'socialSecurityStartAge'].map(field => [
+        field,
+        values[field] !== undefined ? (field === 'socialSecurityStartAge' ? 'claim Social Security at 70' : savedPlanQuestion) : null,
+      ])),
+    },
+  });
+  const claiming = await runAskLincAnalysis({
+    question: claimingQuestion,
+    enableValidation: false,
+    evaluation: {
+      snapshot: savedIncomeSnapshot,
+      contextPlan: {
+        ...coastPlan,
+        scenarioPlans: scenarioCalculatorRegistry.parsePlans({
+          coast_fire: {
+            requested: true,
+            primary: claimingVariant({ currentAge: 38, currentSavings: 500_000 }),
+            comparison: claimingVariant({ socialSecurityStartAge: 70 }),
+          },
+        }),
+      },
+      skipToneConfig: true,
+      model: () => jsonResponse('Waiting until 70 raises the benefit, but the portfolio covers more years before it starts.'),
+    },
+  });
+  const claimingSummary = claiming.structuredResponse.summary;
+  const claimingFacts = claiming.showTheMathData!.evidenceManifest.facts;
   const coastNumberOf = (facts: typeof savedPlanFacts) =>
     facts.find(fact => fact.id.endsWith('_coast_fire_number'))?.value;
 
@@ -616,6 +650,17 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
         coastNumberOf(savedIncomeFacts)! < coastNumberOf(savedPlanFacts)! &&
         savedIncome.showTheMathData!.evidenceManifest.validation.deterministic.valid,
       detail: 'Social Security and a pension saved in Your numbers lower the Coast FIRE number, each from its own start age, with the years before Social Security reserved and the fixed pension labelled as fixed.',
+    },
+    {
+      id: 'claiming-later-moves-the-same-benefit',
+      category: 'calculator_follow_up',
+      passed: claimingSummary.includes('I compared claiming Social Security at 67 with claiming Social Security at 70.') &&
+        claimingSummary.includes('Claimed at 70 instead of 67, Social Security of $30,000 a year becomes $37,200 by Social Security\'s own rules') &&
+        claimingFacts.some(fact => fact.id.endsWith('_social_security_at_claiming_age') && fact.value === 37_200) &&
+        claimingFacts.some(fact => fact.id.endsWith('_social_security_annual') && fact.label.includes('as given, for claiming at 67')) &&
+        !claiming.structuredResponse.save_offer?.items.some(item => item.key === 'socialSecurityStartAge') &&
+        claiming.showTheMathData!.evidenceManifest.validation.deterministic.valid,
+      detail: 'Claiming a saved benefit later runs the benefit Social Security\'s rules pay at 70, names both amounts and the rule, and offers nothing from the what-if for saving.',
     },
     {
       id: 'retirement-never-invents-spending',
