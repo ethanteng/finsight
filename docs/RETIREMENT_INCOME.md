@@ -58,7 +58,7 @@ At a full retirement age of 67, $30,000 a year becomes $21,000 at 62 and $37,200
 
 A comparison that states its own amount, or the age its figure is for, is taken as stated.
 
-**When nothing moves.** The benefit is left as it is when the user already receives it (the age it is for is not after their current age), when it would be claimed in the past, when either age is before 62 (that is a disability or survivor benefit, not a retirement benefit), or when both ages are at or past 70.
+**When nothing moves.** The benefit is left as it is when the claiming age is already in the past, when either age is before 62 (that is a disability or survivor benefit, not a retirement benefit), or when both ages are at or past 70. A holdings what-if also refuses to move a benefit whose plan start age is already at or before today (already being paid). The age a figure is for may be in the past — a statement's reference age is not proof that payments have begun — so a 68-year-old whose statement quotes a benefit at 67 still earns delayed credits by claiming at 70.
 
 **In the answer.** When a benefit moves, the disclosure names both amounts, both ages and the full retirement age it used. The fact pack publishes the moved amount, the change in percent, and the figure as given, relabelled with the age it is for. Variant labels read "Claiming Social Security at 70".
 

@@ -49,15 +49,22 @@ describe('Social Security claiming-age rules', () => {
   });
 
   it('changes nothing it should not', () => {
-    // Same age, both past 70, already being paid, or a claim in the past.
+    // Same age, both past 70, or a claim age already in the past.
     expect(benefitAtClaimingAge({ amount: 30_000, quotedAtAge: 67, claimAge: 67, currentAge: 45, asOfYear: 2026 })).toBeNull();
     expect(benefitAtClaimingAge({ amount: 30_000, quotedAtAge: 70, claimAge: 72, currentAge: 45, asOfYear: 2026 })).toBeNull();
-    expect(benefitAtClaimingAge({ amount: 30_000, quotedAtAge: 66, claimAge: 70, currentAge: 68, asOfYear: 2026 })).toBeNull();
     expect(benefitAtClaimingAge({ amount: 30_000, quotedAtAge: 70, claimAge: 64, currentAge: 66, asOfYear: 2026 })).toBeNull();
     expect(benefitAtClaimingAge({ amount: 0, quotedAtAge: 67, claimAge: 70, currentAge: 45, asOfYear: 2026 })).toBeNull();
     // Before 62 is not a retirement benefit these rules describe.
     expect(benefitAtClaimingAge({ amount: 30_000, quotedAtAge: 67, claimAge: 60, currentAge: 45, asOfYear: 2026 })).toBeNull();
     expect(benefitAtClaimingAge({ amount: 30_000, quotedAtAge: 55, claimAge: 67, currentAge: 45, asOfYear: 2026 })).toBeNull();
+  });
+
+  it('still moves a statement age that has already passed when the claim is ahead', () => {
+    // A 68-year-old whose statement quotes $30,000 at 67 has not necessarily
+    // claimed; claiming at 70 still earns delayed credits from that figure.
+    const later = benefitAtClaimingAge({ amount: 30_000, quotedAtAge: 67, claimAge: 70, currentAge: 68, asOfYear: 2026 });
+    expect(later).toMatchObject({ fromAmount: 30_000, fromAge: 67, toAge: 70 });
+    expect(later?.amount).toBe(Math.round(30_000 * (1 + (40 * 2) / 300) / (1 + (4 * 2) / 300)));
   });
 
   it('takes the full retirement age from the birth year the current age implies', () => {

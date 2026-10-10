@@ -60,8 +60,13 @@ export interface ClaimingAdjustment {
 /**
  * The same benefit claimed at another age, or null when the rules change
  * nothing or cannot apply: the same effective age (both at or past 70, say),
- * an age before 62, a benefit the user already receives, or a claim in the
- * past.
+ * an age before 62, or a claim age already in the past.
+ *
+ * `quotedAtAge` is only the age a stated figure is for (a statement's
+ * reference age). It is not proof that payments have begun: a 68-year-old
+ * whose statement quotes a benefit at 67 can still earn delayed credits by
+ * claiming at 70. Callers that know the plan's start age is already at or
+ * before today treat that as already paid and do not ask to move it.
  *
  * The birth year comes from the current age, so it can be a year off around a
  * birthday; that only moves the full retirement age, by two months, for
@@ -80,9 +85,9 @@ export function benefitAtClaimingAge(args: {
   // A retirement benefit cannot start before 62, so an age before it is some
   // other benefit (disability, survivor) these rules do not describe.
   if (quotedAtAge < EARLIEST_CLAIMING_AGE || claimAge < EARLIEST_CLAIMING_AGE) return null;
-  // Already being paid, or a claim that would have to start in the past: the
-  // amount is what it is.
-  if (quotedAtAge <= currentAge || claimAge < currentAge) return null;
+  // A claim that would have to start in the past cannot be moved; claiming
+  // at today's age still can.
+  if (claimAge < currentAge) return null;
   const birthYear = (args.asOfYear ?? new Date().getUTCFullYear()) - currentAge;
   const fra = fullRetirementAgeMonths(birthYear);
   const from = claimingFactor(quotedAtAge * 12, fra);
