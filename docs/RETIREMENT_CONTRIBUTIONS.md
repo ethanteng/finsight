@@ -31,9 +31,10 @@ Only accounts that hold the projection's holdings count.
 **When the history cannot say.** No linked figure is produced:
 
 - with fewer than 3 complete months of history;
-- with no contribution or withdrawal at all. Some institutions report contributions only as purchases, so silence is not evidence of saving nothing.
+- with no contribution or withdrawal at all. Some institutions report contributions only as purchases, so silence is not evidence of saving nothing;
+- when any account that holds the projection's holdings has no activity rows at all. A provider can return holdings while its activity fetch failed for that account; treating that silence as empty months would understate saving without saying so.
 
-The month in progress never counts. Neither do months before the first activity on record for those accounts, because months before the connected history begins are unknown, not empty.
+The month in progress never counts. Neither do months before the first activity on record for those accounts, because months before the connected history begins are unknown, not empty. Manual balances are not in the account set: they have no activity stream.
 
 ## In the projection
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 import { linkedContributions, resolveRetirementContribution } from '../../openai/retirement-contributions';
 
+const PLAID = new Set(['plaid-401k']);
 const ACCOUNTS = new Set(['plaid-401k', 'snaptrade-ira']);
 const AS_OF = new Date('2026-10-10T00:00:00.000Z');
 
@@ -22,7 +23,7 @@ const monthly = (amount: number) => Array.from({ length: 12 }, (_, index) => {
 
 describe('contributions from linked investment accounts', () => {
   it('takes a typical month times twelve over the last twelve complete months', () => {
-    const linked = linkedContributions(monthly(1_500), { accountIds: ACCOUNTS, asOf: AS_OF })!;
+    const linked = linkedContributions(monthly(1_500), { accountIds: PLAID, asOf: AS_OF })!;
     expect(linked).toMatchObject({
       annualAmount: 18_000,
       typicalMonthlyNet: 1_500,
@@ -40,7 +41,7 @@ describe('contributions from linked investment accounts', () => {
       plaid('2026-03-02', 100_000, 'deposit'),
       plaid('2026-05-02', 40_000, 'withdrawal'),
     ];
-    const linked = linkedContributions(activity, { accountIds: ACCOUNTS, asOf: AS_OF })!;
+    const linked = linkedContributions(activity, { accountIds: PLAID, asOf: AS_OF })!;
     expect(linked.annualAmount).toBe(12_000);
     expect(linked).toMatchObject({ contributed: 112_000, withdrawn: 40_000 });
   });
@@ -50,7 +51,7 @@ describe('contributions from linked investment accounts', () => {
       const month = new Date(Date.UTC(2025, 9 + index, 15)).toISOString().slice(0, 10);
       return plaid(month, 2_000, 'withdrawal');
     });
-    const linked = linkedContributions(activity, { accountIds: ACCOUNTS, asOf: AS_OF })!;
+    const linked = linkedContributions(activity, { accountIds: PLAID, asOf: AS_OF })!;
     expect(linked).toMatchObject({ annualAmount: 0, typicalMonthlyNet: -2_000, withdrawn: 24_000 });
   });
 
@@ -75,24 +76,46 @@ describe('contributions from linked investment accounts', () => {
 
   it('counts a buy Plaid marks as a contribution', () => {
     const activity = monthly(800).map((row) => ({ ...row, type: 'buy' }));
-    expect(linkedContributions(activity, { accountIds: ACCOUNTS, asOf: AS_OF })?.annualAmount).toBe(9_600);
+    expect(linkedContributions(activity, { accountIds: PLAID, asOf: AS_OF })?.annualAmount).toBe(9_600);
   });
 
   it('says nothing from silence, too little history, or the month in progress', () => {
     // Trades and dividends only: no evidence either way.
-    expect(linkedContributions([plaid('2026-05-01', 300, 'dividend', 'cash')], { accountIds: ACCOUNTS, asOf: AS_OF })).toBeNull();
+    expect(linkedContributions([plaid('2026-05-01', 300, 'dividend', 'cash')], { accountIds: PLAID, asOf: AS_OF })).toBeNull();
     // Two complete months of history.
     expect(linkedContributions(
       [plaid('2026-08-05', 1_000), plaid('2026-09-05', 1_000), plaid('2026-10-05', 1_000)],
-      { accountIds: ACCOUNTS, asOf: AS_OF }
+      { accountIds: PLAID, asOf: AS_OF }
     )).toBeNull();
-    expect(linkedContributions([], { accountIds: ACCOUNTS, asOf: AS_OF })).toBeNull();
+    expect(linkedContributions([], { accountIds: PLAID, asOf: AS_OF })).toBeNull();
+  });
+
+  it('says nothing when a holdings account has no activity rows at all', () => {
+    // SnapTrade can return holdings while one account's activity fetch failed.
+    // Counting only the successful account would understate saving silently.
+    const onlyPlaid = monthly(1_500);
+    expect(linkedContributions(onlyPlaid, { accountIds: ACCOUNTS, asOf: AS_OF })).toBeNull();
+    // One dividend on the other account is enough to show its history loaded.
+    expect(linkedContributions(
+      [
+        ...onlyPlaid,
+        {
+          account_id: 'snaptrade-ira',
+          date: '2026-06-01',
+          amount: 10,
+          type: 'dividend',
+          source: 'snaptrade',
+          snapTradeData: { type: 'DIVIDEND' },
+        },
+      ],
+      { accountIds: ACCOUNTS, asOf: AS_OF }
+    )?.annualAmount).toBe(18_000);
   });
 
   it('counts the months with nothing in them since the history began', () => {
     // One contribution in a year of history: the typical month is zero.
     const activity = [plaid('2025-10-03', 300, 'dividend'), plaid('2026-02-10', 7_000)];
-    expect(linkedContributions(activity, { accountIds: ACCOUNTS, asOf: AS_OF })).toMatchObject({
+    expect(linkedContributions(activity, { accountIds: PLAID, asOf: AS_OF })).toMatchObject({
       annualAmount: 0,
       months: 12,
       contributed: 7_000,
@@ -101,7 +124,7 @@ describe('contributions from linked investment accounts', () => {
 });
 
 describe('which contribution the projection runs', () => {
-  const linked = linkedContributions(monthly(1_500), { accountIds: ACCOUNTS, asOf: AS_OF });
+  const linked = linkedContributions(monthly(1_500), { accountIds: PLAID, asOf: AS_OF });
   const saved = { annualContribution: { value: 20_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' as const } };
 
   it('takes what the user said, then Your numbers, then linked accounts, then none', () => {

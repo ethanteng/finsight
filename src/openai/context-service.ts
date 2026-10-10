@@ -246,12 +246,17 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           holdings: holdings,
           securities: securities,
           // Reduced here to one small figure, so two years of activity rows
-          // never travel with the snapshot.
+          // never travel with the snapshot. Manual balances have no activity
+          // stream, so only provider accounts that hold these holdings count.
           ...(questionNeeds.needsRetirement && {
             linkedContributions: linkedContributions(
               Array.isArray(snapshot.activities) ? snapshot.activities as unknown[] : [],
               {
-                accountIds: new Set(holdings.map((holding: any) => String(holding?.account_id ?? '')).filter(Boolean)),
+                accountIds: new Set(
+                  holdings
+                    .map((holding: any) => String(holding?.account_id ?? ''))
+                    .filter((id: string) => id.length > 0 && !id.startsWith('manual-'))
+                ),
                 asOf: snapshot.computedAt instanceof Date ? snapshot.computedAt : new Date(snapshot.computedAt as any),
               }
             ),

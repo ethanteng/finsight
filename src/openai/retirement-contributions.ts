@@ -119,6 +119,12 @@ function median(values: number[]): number {
  * Only complete months count -- the month in progress never does -- and none
  * before the first activity on record for those accounts, since months before
  * the connected history begins are unknown, not empty.
+ *
+ * Every account the caller asked about must appear in the activity rows. A
+ * provider can return holdings for an account while its activity fetch failed
+ * (SnapTrade does this per account); treating that silence as empty months
+ * would understate saving without saying so. Declining the linked figure lets
+ * a stated or saved amount win, or the answer ask.
  */
 export function linkedContributions(
   activities: readonly unknown[] | undefined,
@@ -130,11 +136,14 @@ export function linkedContributions(
 
   let earliest: string | null = null;
   const byMonth = new Map<string, { in: number; out: number }>();
+  const accountsSeen = new Set<string>();
   let sawMovement = false;
   for (const value of activities) {
     if (!value || typeof value !== 'object') continue;
     const activity = value as Record<string, any>;
-    if (!options.accountIds.has(String(activity.account_id ?? ''))) continue;
+    const accountId = String(activity.account_id ?? '');
+    if (!options.accountIds.has(accountId)) continue;
+    accountsSeen.add(accountId);
     const month = monthOf(activity);
     if (!month || month >= currentMonth) continue;
     if (earliest === null || month < earliest) earliest = month;
@@ -147,6 +156,9 @@ export function linkedContributions(
     totals[direction] += amount;
     byMonth.set(month, totals);
   }
+  // An account with holdings but no activity rows is incomplete history, not a
+  // saver who deposited nothing — often a failed per-account activity fetch.
+  if (accountsSeen.size < options.accountIds.size) return null;
   if (!sawMovement || earliest === null) return null;
 
   const firstMonth = earliest > windowStart ? earliest : windowStart;
