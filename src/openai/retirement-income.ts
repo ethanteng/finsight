@@ -179,7 +179,7 @@ export function incomeClaimedAt(
   claimAge: number,
   currentAge: number
 ): { streams: RetirementIncomeStream[]; claiming?: ClaimingAdjustment } | { unavailableReason: string } {
-  const socialSecurity = streams.find((stream) => stream.label !== PENSION_LABEL);
+  const socialSecurity = streams.find((stream) => stream.label === SOCIAL_SECURITY_LABEL);
   if (!socialSecurity) {
     return {
       unavailableReason: 'This plan has no Social Security benefit to claim at another age. Tell me what Social ' +
