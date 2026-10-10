@@ -68,6 +68,7 @@ export function formatAnalysisOutput(
       withdrawalRate: withdrawalMetrics.withdrawalRate,
       yearsOfExpenses: withdrawalMetrics.yearsOfExpenses,
       projectedPortfolioAtWithdrawalStart: withdrawalMetrics.projectedPortfolioAtWithdrawalStart,
+      firstYearPortfolioWithdrawal: withdrawalMetrics.firstYearPortfolioWithdrawal,
       yearsToWithdrawalStart: withdrawalMetrics.yearsToWithdrawalStart,
       historicalWithdrawalRates: withdrawalMetrics.historicalWithdrawalRates
     },

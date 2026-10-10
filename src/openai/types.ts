@@ -7,6 +7,8 @@ import type { PlaidLiabilityDetails } from '../services/plaid-liabilities';
 import type { UnmodeledInvestmentValue } from '../services/investment-coverage';
 import type { PersonalContextValues } from '../profile/personal-context';
 import type { StatedFigures } from '../services/stated-figures';
+import type { RetirementIncomeStream } from '../retirement-analytics/types';
+import type { RetirementIncomeOrigins } from './retirement-income';
 import type { CashFlowForecastContext } from './cash-flow-forecast-context';
 
 export interface QuestionNeeds {
@@ -268,6 +270,8 @@ export interface FinancialContextSnapshot {
       withdrawalRate: number;
       yearsOfExpenses: number;
       projectedPortfolioAtWithdrawalStart?: number;
+      /** Median first-year draw after income, in today's dollars; absent before analysis version 11. */
+      firstYearPortfolioWithdrawal?: number;
       yearsToWithdrawalStart?: number;
       historicalWithdrawalRates: {
         p10: number;
@@ -344,6 +348,8 @@ export interface FinancialContextSnapshot {
       annualWithdrawalAmount?: number;
       withdrawalStartAge?: number;
       lifeExpectancy?: number;
+      /** Social Security and a pension, each on its own schedule; absent before version 11. */
+      incomeStreams?: RetirementIncomeStream[];
     };
     _evidence?: {
       recordId: string;
@@ -357,6 +363,8 @@ export interface FinancialContextSnapshot {
      */
     /** Inputs a disclosed assumption filled, and why. See `retirement-inputs.ts`. */
     _assumedInputs?: Partial<Record<'retirementAge' | 'annualWithdrawalAmount', 'earlier' | 'current_spending' | 'convention'>>;
+    /** Where each income's terms came from. See `retirement-income.ts`. */
+    _incomeOrigins?: RetirementIncomeOrigins;
     _inputSources?: {
       currentAge?: string;
       retirementAge?: string;

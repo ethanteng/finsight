@@ -31,6 +31,7 @@ import { compactSearchQueryEvidence } from '../data/search-types';
 import type { SearchContext } from '../data/orchestrator';
 import type { PersonalContextValues } from '../profile/personal-context';
 import { parseStatedFigures, savedNumber, type StatedFigures } from '../services/stated-figures';
+import { resolveRetirementIncome, sameIncomeStreams, type RetirementIncomeOrigins } from './retirement-income';
 import { buildCashFlowForecastContext, withoutUnlinkedIncome, type CashFlowForecastContext } from './cash-flow-forecast-context';
 import { expectedMonthly } from '../cash-flow/forecast';
 
@@ -866,12 +867,20 @@ async function fetchOrCreateRetirementAnalysis(args: {
     };
   };
   // Filled in once inputs are resolved, below; every return path after that
-  // states which of them were assumed.
+  // states which of them were assumed, and where each income came from.
   let assumedInputs: AssumedRetirementInputs = {};
+  let incomeOrigins: RetirementIncomeOrigins | undefined = undefined;
   const withSources = (analysis: RetirementAnalysis): RetirementAnalysisResolution => {
     const covered = withCoverage(analysis);
     const assumed = Object.keys(assumedInputs).length > 0 ? { _assumedInputs: assumedInputs } : {};
-    return { analysis: { ...covered, ...(inputSources && { _inputSources: inputSources }), ...assumed } };
+    return {
+      analysis: {
+        ...covered,
+        ...(inputSources && { _inputSources: inputSources }),
+        ...assumed,
+        ...(incomeOrigins && { _incomeOrigins: incomeOrigins }),
+      },
+    };
   };
 
   // Extract age from profile if not in question
@@ -964,6 +973,24 @@ async function fetchOrCreateRetirementAnalysis(args: {
     };
   }
 
+  // Social Security and a pension: what the user said in this decision, then
+  // what they saved in Your numbers. Someone already retired (no retirement
+  // age) has a pension that starts now unless they said otherwise.
+  const income = resolveRetirementIncome({
+    stated: extracted && {
+      socialSecurityAnnual: extracted.socialSecurityAnnual,
+      socialSecurityStartAge: extracted.socialSecurityStartAge,
+      pensionAnnual: extracted.pensionAnnual,
+      pensionStartAge: extracted.pensionStartAge,
+      pensionInflation: extracted.pensionInflation,
+    },
+    statedFigures,
+    retirementAge: retirementAge ?? currentAge,
+  });
+  incomeOrigins = income.origins;
+  const storedIncome = Array.isArray(storedAnalysisInput.incomeStreams) ? storedAnalysisInput.incomeStreams : [];
+  const sameIncome = sameIncomeStreams(storedIncome, income.streams);
+
   // Resolve once so cache matching and the stored input use the same evidence
   // boundary as the engine. A full date prevents a January snapshot from
   // selecting an allocation that was not published until June.
@@ -986,6 +1013,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       storedInput.annualWithdrawalAmount === annualWithdrawalAmount &&
       storedInput.withdrawalStartAge === withdrawalStartAge &&
       (storedInput.lifeExpectancy ?? 95) === lifeExpectancy &&
+      sameIncome &&
       sameAssumptions(storedAssumptions, persistableAssumptions(assumed)) &&
       storedAnalysisInput.analysisVersion === RETIREMENT_ANALYSIS_VERSION &&
       storedAnalysisInput.historicalDatasetVersion === historicalDatasetVersion &&
@@ -1076,6 +1104,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       lifeExpectancy,
       annualWithdrawalAmount,
       withdrawalStartAge,
+      incomeStreams: income.streams,
       // Which of these were assumed, so a later run never reads them back as
       // the user's plan. A figure from an earlier conversation is theirs and
       // is not listed.
@@ -1112,6 +1141,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         annualWithdrawalAmount: analysisInput.annualWithdrawalAmount,
         withdrawalStartAge: analysisInput.withdrawalStartAge,
         lifeExpectancy: analysisInput.lifeExpectancy,
+        incomeStreams: analysisInput.incomeStreams,
       };
       // No `_evidence`: that cites a stored record, and this one is not stored.
       return withSources(degradedResult);
@@ -1152,6 +1182,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       annualWithdrawalAmount: analysisInput.annualWithdrawalAmount,
       withdrawalStartAge: analysisInput.withdrawalStartAge,
       lifeExpectancy: analysisInput.lifeExpectancy,
+      incomeStreams: analysisInput.incomeStreams,
     };
     resultWithInputs._evidence = {
       recordId: createdAnalysis.id,

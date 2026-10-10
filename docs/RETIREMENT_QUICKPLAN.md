@@ -60,19 +60,20 @@ in exchange for no extra information about a portfolio they have not described.
 Connecting real accounts is what gets real international holdings modeled
 against their own series — which is the difference the page is selling.
 
-**Social Security is modeled, not netted.** `RetirementAnalysisInput` gained an
-optional `retirementIncome` stream, wired through `simulateWithdrawals` as an
-`incomeOffset`. It reduces the portfolio withdrawal from its own start age,
-indexed by each sequence's CPI, floored at zero — so a visitor who retires at 60
-and claims at 67 correctly funds those seven years entirely from the portfolio,
-which is exactly the stretch sequence risk punishes. Netting the benefit across
-the whole retirement would have hidden that. Existing callers pass nothing and
-are unaffected.
+**Social Security is modeled, not netted.** `RetirementAnalysisInput.incomeStreams`
+is wired through `simulateWithdrawals`. Each stream reduces the portfolio
+withdrawal from its own start age, floored at zero — so a visitor who retires at
+60 and claims at 67 correctly funds those seven years entirely from the
+portfolio, which is exactly the stretch sequence risk punishes. Netting the
+benefit across the whole retirement would have hidden that. The request also
+takes an optional pension (`pensionAnnual`, `pensionStartAge`,
+`pensionInflationAdjusted`) that Ask Linc's stated plan and Coast FIRE fill; the
+page does not ask for one. See `docs/RETIREMENT_INCOME.md`.
 
 **Metrics the page does not show.** The engine's `metrics.withdrawalRate` and
 `yearsOfExpenses` describe gross spending against the portfolio and are not the
-net draw once an income offset starts, so the page derives its own first-year
-figures. `stressTest.worstSequences.byDrawdown` measures the portfolio path
+net draw once income starts, so the first-year figures come from the engine's
+`firstYearPortfolioWithdrawal`, measured in the simulation. `stressTest.worstSequences.byDrawdown` measures the portfolio path
 *including withdrawals*, so a depleted sequence reports a ~100% "drawdown"; on a
 page with no room to explain that it would read as a market crash, so the
 service drops it.

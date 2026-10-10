@@ -175,24 +175,28 @@ export async function analyzeRetirementPortfolio(
         : `Retirement spending rises ${withdrawalPolicy.annualRate * 100}% on each withdrawal anniversary`
   );
 
-  // A COLA-indexed income the household receives directly. It never adds to the
-  // portfolio; it only reduces what the portfolio has to pay out once it starts,
-  // which is why it is expressed to the simulator as a month offset from today.
-  const retirementIncome = input.retirementIncome;
-  if (retirementIncome) {
-    if (!Number.isFinite(retirementIncome.annualAmount) || retirementIncome.annualAmount < 0) {
+  // Income the household receives directly. It never adds to the portfolio; it
+  // only reduces what the portfolio has to pay out while it is paid, which is
+  // why each stream is expressed to the simulator as months from today.
+  const paidIncome = (input.incomeStreams ?? []).filter((stream) => {
+    if (!Number.isFinite(stream.annualAmount) || stream.annualAmount < 0) {
       throw new Error('Retirement income must be a finite, non-negative amount');
     }
-    if (!Number.isFinite(retirementIncome.startAge)) {
+    if (!Number.isFinite(stream.startAge)) {
       throw new Error('Retirement income start age must be a finite age');
     }
-  }
-  const incomeOffset = retirementIncome && retirementIncome.annualAmount > 0
-    ? {
-        annualAmount: retirementIncome.annualAmount,
-        startMonth: Math.max(0, Math.round((retirementIncome.startAge - input.currentAge) * 12)),
-      }
-    : undefined;
+    if (stream.endAge !== undefined && (!Number.isFinite(stream.endAge) || stream.endAge <= stream.startAge)) {
+      throw new Error('Retirement income must end after it starts');
+    }
+    return stream.annualAmount > 0 && (stream.endAge === undefined || stream.endAge > input.currentAge);
+  });
+  const monthsFromNow = (age: number) => Math.max(0, Math.round((age - input.currentAge) * 12));
+  const incomeStreams = paidIncome.map((stream) => ({
+    annualAmount: stream.annualAmount,
+    startMonth: monthsFromNow(stream.startAge),
+    ...(stream.endAge !== undefined && { endMonth: monthsFromNow(stream.endAge) }),
+    indexed: stream.inflationAdjusted !== false,
+  }));
 
   // Model the full path from today through life expectancy, including explicit
   // pre-withdrawal contributions when the scenario supplies them.
@@ -205,12 +209,18 @@ export async function analyzeRetirementPortfolio(
         : `Portfolio grows for ${yearsToWithdrawalStart} years before withdrawals begin; no additional contributions are assumed`
     );
   }
-  if (incomeOffset) {
-    const startAge = Math.max(input.currentAge, retirementIncome!.startAge);
+  for (const stream of paidIncome) {
+    const startAge = Math.max(input.currentAge, stream.startAge);
+    const amount = `$${Math.round(stream.annualAmount).toLocaleString('en-US')}`;
+    const what = stream.label ?? 'retirement income';
+    const period = stream.endAge !== undefined
+      ? `from age ${startAge} until age ${stream.endAge}`
+      : `from age ${startAge}`;
     assumptions.push(
-      `$${Math.round(incomeOffset.annualAmount).toLocaleString('en-US')} of annual retirement income begins at age ${startAge}, ` +
-      'rises with each historical sequence\'s CPI, and reduces that year\'s portfolio withdrawal; ' +
-      'income above that year\'s spending is not reinvested'
+      (stream.inflationAdjusted !== false
+        ? `${amount} a year of ${what} in today's dollars is paid ${period} and rises with each historical sequence's CPI`
+        : `${amount} a year of ${what} is paid ${period} as a fixed dollar amount, so each historical sequence's inflation erodes it, including before it starts`) +
+      '; it reduces that month\'s portfolio withdrawal, and income above that month\'s spending is not reinvested'
     );
   }
 
@@ -269,7 +279,7 @@ export async function analyzeRetirementPortfolio(
       modeledValue,
       sequence,
       input.annualWithdrawalAmount,
-      { withdrawalDelayMonths, withdrawalPolicy, annualContributionAmount, incomeOffset }
+      { withdrawalDelayMonths, withdrawalPolicy, annualContributionAmount, incomeStreams }
     )
   );
 
@@ -308,6 +318,15 @@ export async function analyzeRetirementPortfolio(
   const yearsOfExpenses = input.annualWithdrawalAmount > 0
     ? medianProjectedStartValue / input.annualWithdrawalAmount
     : 0;
+  const firstYearWithdrawals = outcomes
+    .map(outcome => outcome.realFirstYearPortfolioWithdrawal)
+    .filter(value => Number.isFinite(value))
+    .sort((left, right) => left - right);
+  // Summed from twelve monthly draws, so rounded to cents rather than
+  // reporting $95,000.00000000001 for a plan that withdraws exactly $95,000.
+  const medianFirstYearPortfolioWithdrawal = firstYearWithdrawals.length === 0
+    ? 0
+    : Math.round(firstYearWithdrawals[Math.floor(firstYearWithdrawals.length / 2)] * 100) / 100;
 
   const priceHistoryCoverage = calculateHistoricalPriceCoverage(portfolioMapping);
 
@@ -330,6 +349,7 @@ export async function analyzeRetirementPortfolio(
     withdrawalRate,
     yearsOfExpenses,
     projectedPortfolioAtWithdrawalStart: medianProjectedStartValue,
+    firstYearPortfolioWithdrawal: medianFirstYearPortfolioWithdrawal,
     yearsToWithdrawalStart,
     historicalWithdrawalRates: stressTestResults.historicalWithdrawalRates,
     withdrawalFailureRate: 1 - stressTestResults.survivalRate,

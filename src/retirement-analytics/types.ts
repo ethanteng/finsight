@@ -64,21 +64,32 @@ export interface ProxiedSeriesReport {
 }
 
 /**
- * A level real income stream that reduces what the portfolio must fund once it
- * begins -- Social Security, or a pension with a full cost-of-living
- * adjustment.
+ * An income the household receives directly -- Social Security, a pension --
+ * that reduces what the portfolio must fund while it is paid.
  *
- * The amount is stated in today's dollars and indexed by each historical
- * sequence's own CPI, which is how Social Security's COLA behaves. Income in
- * excess of that year's spending is not reinvested: the simulation floors the
- * portfolio withdrawal at zero rather than crediting a surplus it has no basis
- * to assume the household saves.
+ * Two kinds of amount, because pensions come in both:
+ * - `inflationAdjusted` (the default) is stated in today's dollars and indexed
+ *   by each historical sequence's own CPI from today on, which is how Social
+ *   Security's COLA behaves.
+ * - Otherwise it is a fixed dollar amount, exactly as a pension statement
+ *   quotes it, that never changes: it buys less every year prices rise,
+ *   including the years before it starts.
+ *
+ * Income in excess of that month's spending is not reinvested: the simulation
+ * floors the portfolio withdrawal at zero rather than crediting a surplus it
+ * has no basis to assume the household saves.
  */
 export interface RetirementIncomeStream {
-  /** Annual amount in today's dollars. Must be finite and non-negative. */
+  /** Names the stream in the engine's assumptions, e.g. "Social Security". */
+  label?: string;
+  /** Annual amount. Must be finite and non-negative. */
   annualAmount: number;
   /** Age at which the income begins. Earlier than `currentAge` means already receiving it. */
   startAge: number;
+  /** Age at which it stops. Omitted means it is paid for the rest of the plan. */
+  endAge?: number;
+  /** Whether it keeps pace with inflation; defaults to true. See the type comment. */
+  inflationAdjusted?: boolean;
 }
 
 // ============================================================================
@@ -103,16 +114,17 @@ export interface RetirementAnalysisInput {
   annualContributionAmount?: number;
 
   /**
-   * Social Security or an equivalent COLA-indexed income that offsets
-   * withdrawals from its own start age. Omitted means the portfolio funds all
-   * retirement spending on its own.
+   * Social Security, pensions and any other income that offsets withdrawals
+   * while it is paid, each on its own schedule. Omitted or empty means the
+   * portfolio funds all retirement spending on its own.
    *
-   * When this is supplied, `annualWithdrawalAmount` is the household's whole
+   * When income is supplied, `annualWithdrawalAmount` is the household's whole
    * spending, and `WithdrawalSustainabilityMetrics.withdrawalRate` /
    * `yearsOfExpenses` continue to describe that gross figure against the
-   * portfolio -- they are not the net draw once this income starts.
+   * portfolio -- they are not the net draw once income starts.
+   * `firstYearPortfolioWithdrawal` is the net draw.
    */
-  retirementIncome?: RetirementIncomeStream;
+  incomeStreams?: RetirementIncomeStream[];
   
   /**
    * Investment value deliberately left out of this projection because its
@@ -198,6 +210,13 @@ export interface WithdrawalSustainabilityMetrics {
   withdrawalRate: number; // annualWithdrawalAmount / portfolioValue (descriptive, not prescriptive)
   yearsOfExpenses: number; // naive ratio: portfolioValue / annualWithdrawalAmount. Ignores returns, inflation, sequence risk. Not a longevity estimate.
   projectedPortfolioAtWithdrawalStart: number; // median real value across historical accumulation sequences
+  /**
+   * Median, in today's dollars, of what the portfolio paid out in the first
+   * twelve months of withdrawals: spending less the income being received.
+   * Measured in the simulation rather than derived from the inputs, because a
+   * fixed-dollar pension is worth whatever each sequence's inflation left it.
+   */
+  firstYearPortfolioWithdrawal: number;
   yearsToWithdrawalStart: number;
   historicalWithdrawalRates: {
     p10: number;
@@ -407,6 +426,12 @@ export interface PortfolioOutcome {
   portfolioValueAtWithdrawalStart: number;
   realPortfolioValueAtWithdrawalStart: number;
   finalValue: number; // inflation-adjusted
+  /**
+   * What the portfolio had to pay in the first twelve months of withdrawals,
+   * in today's dollars: spending less income. A sequence that ran out within
+   * that year reports the need up to that month.
+   */
+  realFirstYearPortfolioWithdrawal: number;
   maximumDrawdown: number; // peak-to-trough decline
   timeToRecovery: number | null; // months until recovery from worst drawdown
   realReturn: number; // inflation-adjusted annualized return
@@ -596,6 +621,8 @@ export interface RetirementAnalysisOutput {
     withdrawalRate: number; // annual withdrawal / median real portfolio at withdrawal start
     yearsOfExpenses: number; // median real portfolio at withdrawal start / annual withdrawal
     projectedPortfolioAtWithdrawalStart: number;
+    /** Absent on analyses computed before income streams (version 10 and earlier). */
+    firstYearPortfolioWithdrawal?: number;
     yearsToWithdrawalStart: number;
     historicalWithdrawalRates: {
       p10: number;

@@ -426,6 +426,40 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
   const savedPlanSummary = savedPlan.structuredResponse.summary;
   const savedPlanFacts = savedPlan.showTheMathData!.evidenceManifest.facts;
 
+  // The same decision with Social Security and a pension saved: both reach the
+  // calculation, each on its own schedule, not just the fact pack.
+  const savedIncomeSnapshot = baseSnapshot();
+  Object.assign(savedIncomeSnapshot, {
+    retirementAnalysisNeedsInfo: savedPlanSnapshot.retirementAnalysisNeedsInfo,
+    linkedData: savedPlanSnapshot.linkedData,
+    statedFigures: {
+      ...savedPlanSnapshot.statedFigures,
+      socialSecurityAnnual: { value: 30_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+      retirementIncome: { value: 20_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+    },
+  });
+  savedIncomeSnapshot.financialSummary!.financialOverview = savedPlanSnapshot.financialSummary!.financialOverview;
+  savedIncomeSnapshot.financialSummary!.investmentPortfolio = savedPlanSnapshot.financialSummary!.investmentPortfolio;
+  const savedIncome = await runAskLincAnalysis({
+    question: savedPlanQuestion,
+    enableValidation: false,
+    evaluation: {
+      snapshot: savedIncomeSnapshot,
+      contextPlan: {
+        ...coastPlan,
+        scenarioPlans: scenarioCalculatorRegistry.parsePlans({
+          coast_fire: { requested: true, primary: savedPlanVariant({ currentAge: 38, currentSavings: 500_000 }), comparison: savedPlanVariant({}) },
+        }),
+      },
+      skipToneConfig: true,
+      model: () => jsonResponse('Not yet, though Social Security and your pension close much of the gap.'),
+    },
+  });
+  const savedIncomeSummary = savedIncome.structuredResponse.summary;
+  const savedIncomeFacts = savedIncome.showTheMathData!.evidenceManifest.facts;
+  const coastNumberOf = (facts: typeof savedPlanFacts) =>
+    facts.find(fact => fact.id.endsWith('_coast_fire_number'))?.value;
+
   // Assumptions are allowed, but only from something real: with no cash flow
   // linked and no earlier figure, there is nothing to read spending from.
   const retirementInputs = resolveRetirementInputs({
@@ -568,6 +602,20 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
         !savedPlan.structuredResponse.input_request &&
         JSON.stringify(savedPlan.structuredResponse.save_offer?.items.map(item => item.key)) === JSON.stringify(['investedBalance']),
       detail: 'A new decision plans with the figures saved in Your numbers, names them with their date, and offers to keep only the newly stated savings.',
+    },
+    {
+      id: 'saved-income-reaches-the-calculation',
+      category: 'calculator_follow_up',
+      passed: savedIncomeSummary.includes('Social Security of $30,000 a year in today\'s dollars starts at 67') &&
+        savedIncomeSummary.includes('A pension of $20,000 a year starts at 55 as a fixed amount') &&
+        savedIncomeSummary.includes('The target includes $') &&
+        savedIncomeFacts.some(fact => fact.id.endsWith('_bridge_reserve')) &&
+        savedIncomeFacts.some(fact => fact.id.endsWith('_annual_retirement_income') && fact.label.includes('a fixed dollar amount')) &&
+        typeof coastNumberOf(savedIncomeFacts) === 'number' &&
+        typeof coastNumberOf(savedPlanFacts) === 'number' &&
+        coastNumberOf(savedIncomeFacts)! < coastNumberOf(savedPlanFacts)! &&
+        savedIncome.showTheMathData!.evidenceManifest.validation.deterministic.valid,
+      detail: 'Social Security and a pension saved in Your numbers lower the Coast FIRE number, each from its own start age, with the years before Social Security reserved and the fixed pension labelled as fixed.',
     },
     {
       id: 'retirement-never-invents-spending',

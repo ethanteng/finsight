@@ -4,6 +4,7 @@ import { mergeLabelKeyedTotals } from '../services/label-normalization';
 import { isProviderIdentifierLabel } from '../services/holding-label';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
+import { PENSION_LABEL } from './retirement-income';
 import { questionMentionsSecurity } from './security-question-match';
 import {
   STATED_FIGURE_DEFINITIONS,
@@ -681,7 +682,20 @@ export function buildCanonicalFactPack(
   const retirement = snapshot.retirementAnalysis;
   if (needs.needsRetirement && retirement) {
     addSnapshotFact('withdrawal_rate_ratio', 'Withdrawal rate source ratio', retirement.metrics.withdrawalRate, 'ratio', 'retirementAnalysis.metrics.withdrawalRate', false);
-    addCalculatedFact('withdrawal_rate', 'Withdrawal rate', retirement.metrics.withdrawalRate * 100, 'percent', 'input * 100', ['withdrawal_rate_ratio']);
+    // With income counted, this is still all retirement spending against the
+    // portfolio; the label says so, and the first-year draw after income is
+    // published beside it below.
+    const countsIncome = (retirement._storedInputParams?.incomeStreams?.length ?? 0) > 0;
+    addCalculatedFact(
+      'withdrawal_rate',
+      countsIncome
+        ? 'Withdrawal rate: all retirement spending against the median portfolio, before Social Security or pension income'
+        : 'Withdrawal rate',
+      retirement.metrics.withdrawalRate * 100,
+      'percent',
+      'input * 100',
+      ['withdrawal_rate_ratio']
+    );
     addSnapshotFact('equity_allocation', 'Equity allocation', retirement.metrics.equityAllocation, 'percent', 'retirementAnalysis.metrics.equityAllocation');
     addSnapshotFact('fixed_income_allocation', 'Fixed-income allocation', retirement.metrics.fixedIncomeAllocation, 'percent', 'retirementAnalysis.metrics.fixedIncomeAllocation');
     addSnapshotFact(
@@ -785,6 +799,43 @@ export function buildCanonicalFactPack(
       'retirementAnalysis.inputs.annualWithdrawalAmount'
     );
     addSnapshotFact('withdrawal_start_age', 'Withdrawal start age', retirement._storedInputParams?.withdrawalStartAge, 'age', 'retirementAnalysis.inputs.withdrawalStartAge');
+
+    // The incomes the projection counted, labelled in the units each is in and
+    // with any term that was assumed, so the answer can quote them only as
+    // what they are.
+    const projectionIncome = retirement._storedInputParams?.incomeStreams ?? [];
+    const incomeOrigins = retirement._incomeOrigins;
+    for (const stream of projectionIncome) {
+      const pension = stream.label === PENSION_LABEL;
+      const key = pension ? 'retirement_pension' : 'retirement_social_security';
+      const amountLabel = !pension
+        ? 'Social Security a year counted in the retirement projection, in today\'s dollars'
+        : stream.inflationAdjusted
+          ? 'Pension or other income a year counted in the retirement projection, in today\'s dollars, rising with inflation'
+          : 'Pension or other income a year counted in the retirement projection, a fixed dollar amount that does not rise with inflation';
+      const startAssumed = pension
+        ? incomeOrigins?.pension?.startAge === 'default'
+        : incomeOrigins?.socialSecurity?.startAge === 'default';
+      addSnapshotFact(`${key}_annual`, amountLabel, stream.annualAmount, 'usd', `retirementAnalysis.inputs.incomeStreams.${key}.annualAmount`);
+      addSnapshotFact(
+        `${key}_start_age`,
+        `${pension ? 'Pension' : 'Social Security'} start age in the retirement projection${startAssumed
+          ? pension ? ' (assumed: when the user retires)' : ' (assumed: the user named none)'
+          : ''}`,
+        stream.startAge,
+        'age',
+        `retirementAnalysis.inputs.incomeStreams.${key}.startAge`
+      );
+    }
+    if (projectionIncome.length > 0) {
+      addSnapshotFact(
+        'first_year_portfolio_withdrawal',
+        'Median spending the portfolio itself covers in the first year of withdrawals, after retirement income, in today\'s dollars',
+        retirement.metrics.firstYearPortfolioWithdrawal,
+        'usd',
+        'retirementAnalysis.metrics.firstYearPortfolioWithdrawal'
+      );
+    }
 
     // Investment value deliberately excluded from the projection because its
     // exposure or a sufficiently long return series is unavailable. Published as facts because the answer cannot state

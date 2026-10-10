@@ -108,6 +108,35 @@ describe('Your numbers', () => {
     expect(await screen.findByText('Saved. Linc will plan with these from your next question.')).toBeInTheDocument();
   });
 
+  it('saves when the pension starts and whether it rises with inflation', async () => {
+    const saved = jest.fn();
+    serve({
+      'GET /api/stated-figures': {
+        figures: { retirementIncome: { value: 24_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' } },
+        coverage: NOTHING_LINKED,
+      },
+      'GET /api/manual-accounts': { data: [] },
+      'GET /api/finances/overrides': { monthlyIncome: null, monthlyExpense: null },
+      'GET /profile': { memory: {} },
+      'PUT /api/stated-figures': (init: RequestInit) => {
+        saved(JSON.parse(String(init.body)));
+        return { figures: {} };
+      },
+    });
+    render(<YourNumbersPageClient />);
+
+    expect(await screen.findByLabelText('Pension or other income a year')).toHaveValue('24,000');
+    expect(screen.getByText('Linc assumes a fixed amount, which buys less each year prices rise.')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Age the pension starts'), { target: { value: '60' } });
+    fireEvent.change(screen.getByLabelText('Does the pension rise with inflation?'), { target: { value: 'rises_with_inflation' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save plan' }));
+
+    await waitFor(() => expect(saved).toHaveBeenCalledWith({
+      figures: { retirementIncomeStartAge: 60, retirementIncomeInflation: 'rises_with_inflation' },
+      source: 'page',
+    }));
+  });
+
   it('will not save a figure outside what Linc accepts', async () => {
     serve({
       'GET /api/stated-figures': { figures: {}, coverage: NOTHING_LINKED },

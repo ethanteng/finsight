@@ -4,6 +4,8 @@
  * computes a projection.
  */
 
+import { INCOME_INFLATION_OPTIONS, type IncomeInflation } from '../services/stated-figures';
+
 export interface RetirementInputTurn {
   question: string;
   answer?: string;
@@ -15,8 +17,15 @@ export interface ExtractedRetirementInputs {
   annualWithdrawalAmount?: number;
   withdrawalStartAge?: number;
   lifeExpectancy?: number;
+  /** Social Security a year, in today's dollars. */
+  socialSecurityAnnual?: number;
+  socialSecurityStartAge?: number;
+  /** A pension or other income that is not Social Security, a year. */
+  pensionAnnual?: number;
+  pensionStartAge?: number;
+  pensionInflation?: IncomeInflation;
   /** The words each value came from, for the answer to cite and Show the Math to display. */
-  sources: Partial<Record<ExtractedField, string>>;
+  sources: Partial<Record<ExtractedField | 'pensionInflation', string>>;
 }
 
 type ExtractedField =
@@ -24,7 +33,11 @@ type ExtractedField =
   | 'retirementAge'
   | 'annualWithdrawalAmount'
   | 'withdrawalStartAge'
-  | 'lifeExpectancy';
+  | 'lifeExpectancy'
+  | 'socialSecurityAnnual'
+  | 'socialSecurityStartAge'
+  | 'pensionAnnual'
+  | 'pensionStartAge';
 
 const FIELDS: ExtractedField[] = [
   'currentAge',
@@ -32,6 +45,10 @@ const FIELDS: ExtractedField[] = [
   'annualWithdrawalAmount',
   'withdrawalStartAge',
   'lifeExpectancy',
+  'socialSecurityAnnual',
+  'socialSecurityStartAge',
+  'pensionAnnual',
+  'pensionStartAge',
 ];
 
 /**
@@ -49,6 +66,12 @@ const RANGES: Record<ExtractedField, { min: number; max: number; integer: boolea
   // model can tell $8,000 a year from a monthly bill, which is exactly what the
   // rules could not do. The bound only rejects impossible magnitudes.
   annualWithdrawalAmount: { min: 1, max: 100_000_000, integer: false },
+  // Where the calculators that read the same figures accept them. Zero is a
+  // statement ("no pension"), so it is kept.
+  socialSecurityAnnual: { min: 0, max: 250_000, integer: false },
+  socialSecurityStartAge: { min: 50, max: 80, integer: true },
+  pensionAnnual: { min: 0, max: 10_000_000, integer: false },
+  pensionStartAge: { min: 30, max: 95, integer: true },
 };
 
 /** Drop anything outside the range a real plan occupies; keep the rest. */
@@ -66,6 +89,12 @@ export function validateExtractedInputs(raw: unknown): ExtractedRetirementInputs
     result[field] = value;
     const source = rawSources[field];
     if (typeof source === 'string' && source.trim()) result.sources[field] = source.trim();
+  }
+  const inflation = record.pensionInflation;
+  if (typeof inflation === 'string' && (INCOME_INFLATION_OPTIONS as readonly string[]).includes(inflation)) {
+    result.pensionInflation = inflation as IncomeInflation;
+    const source = rawSources.pensionInflation;
+    if (typeof source === 'string' && source.trim()) result.sources.pensionInflation = source.trim();
   }
 
   // Withdrawals start at retirement unless the conversation said otherwise.

@@ -117,6 +117,10 @@ Any resolved calculator lead skips the verification code when the signup page se
 
 `/your-numbers` gathers the figures Ask Linc plans with when no linked account says them: age (remembered personal context), balances (manual accounts, counted as entered balances), monthly take-home and spending (the Finances overrides), and the retirement plan, the only new storage (`StatedFigures`, `src/services/stated-figures.ts`). Nothing is saved without the user's action, on the page or through "Use these next time?" under an answer (`src/openai/save-offer.ts`), because a decision holds what-ifs as well as the plan; the offer covers only the main case's stated figures, and the invested balance only when nothing investment-like is linked or entered. Calculators read saved figures after the current decision's and before linked data or defaults, and say so with the save date. See `docs/YOUR_NUMBERS.md`.
 
+### Retirement income
+
+Social Security and a pension are separate incomes in every retirement calculator, each with its own start age and inflation treatment (`RetirementAnalysisInput.incomeStreams`). They resolve the same way everywhere: the current decision, then Your numbers, then named defaults (Social Security from 67, a pension from the retirement age, as a fixed dollar amount). A fixed pension is the dollars it pays and never rises; the engine lets each sequence's inflation erode it. Coast FIRE adds a disclosed reserve for the years before a later income starts, and values a fixed pension under a disclosed 2.5% inflation assumption. The holdings-based projection counts both, and its what-ifs inherit them. See `docs/RETIREMENT_INCOME.md`.
+
 ### Remembered personal context
 
 “What Linc remembers about you” is a bounded, field-level memory of user-stated biographical details such as age, location, household, and employment. It is encrypted at rest. Financial facts, goals, risk tolerance, and scenario assumptions belong to canonical data or active conversation context and must not be added to this memory. The extractor emits validated set/clear operations; it never appends free-form summaries.

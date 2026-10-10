@@ -204,6 +204,10 @@ export async function readRetirementLead(
         annualContributions: lead.annualContributions,
         socialSecurityAnnual: lead.socialSecurityAnnual,
         socialSecurityStartAge: lead.socialSecurityStartAge,
+        // The public page asks for no pension, so a lead never had one.
+        pensionAnnual: 0,
+        pensionStartAge: lead.retirementAge,
+        pensionInflationAdjusted: false,
         lifeExpectancy: lead.lifeExpectancy,
         allocation: lead.allocation as RetirementLeadInputs['allocation'],
       },

@@ -31,5 +31,9 @@
  *    reported as a substitution. A v9 analysis withheld every TIPS dollar from
  *    the simulation, so its coverage and its survival figures both describe a
  *    portfolio the user does not hold.
+ * 11: income is a list of streams, each with its own start, optional end and
+ *    inflation treatment, and the analysis reports the first-year portfolio
+ *    withdrawal it measured. A v10 analysis has no such figure, and any income
+ *    it modeled was a single stream assumed to rise with inflation.
  */
-export const RETIREMENT_ANALYSIS_VERSION = 10 as const;
+export const RETIREMENT_ANALYSIS_VERSION = 11 as const;

@@ -66,7 +66,7 @@ describe('withdrawal simulator income offset', () => {
     const withoutIncome = simulateWithdrawals(mapping, 100_000, flatSequence(months), 12_000);
     // Income covering the whole withdrawal, but only for the second year.
     const withIncome = simulateWithdrawals(mapping, 100_000, flatSequence(months), 12_000, {
-      incomeOffset: { annualAmount: 12_000, startMonth: 12 },
+      incomeStreams: [{ annualAmount: 12_000, startMonth: 12 }],
     });
 
     expect(withoutIncome.finalValue).toBeCloseTo(100_000 - 24_000, 6);
@@ -76,7 +76,7 @@ describe('withdrawal simulator income offset', () => {
   it('does not reinvest income above that year\'s spending', () => {
     const mapping = cashOnlyMapping();
     const withSurplus = simulateWithdrawals(mapping, 100_000, flatSequence(12), 12_000, {
-      incomeOffset: { annualAmount: 60_000, startMonth: 0 },
+      incomeStreams: [{ annualAmount: 60_000, startMonth: 0 }],
     });
 
     // Withdrawals floor at zero; the extra $48k is not credited to the portfolio.
@@ -87,7 +87,7 @@ describe('withdrawal simulator income offset', () => {
     const mapping = cashOnlyMapping();
     const outcome = simulateWithdrawals(mapping, 100_000, flatSequence(24), 12_000, {
       withdrawalDelayMonths: 12,
-      incomeOffset: { annualAmount: 12_000, startMonth: 0 },
+      incomeStreams: [{ annualAmount: 12_000, startMonth: 0 }],
     });
 
     // Year one: not withdrawing, and the income is not banked. Year two:
@@ -99,12 +99,12 @@ describe('withdrawal simulator income offset', () => {
     const mapping = cashOnlyMapping();
     expect(() =>
       simulateWithdrawals(mapping, 100_000, flatSequence(12), 12_000, {
-        incomeOffset: { annualAmount: -1, startMonth: 0 },
+        incomeStreams: [{ annualAmount: -1, startMonth: 0 }],
       })
     ).toThrow(/non-negative/);
     expect(() =>
       simulateWithdrawals(mapping, 100_000, flatSequence(12), 12_000, {
-        incomeOffset: { annualAmount: 12_000, startMonth: Number.NaN },
+        incomeStreams: [{ annualAmount: 12_000, startMonth: Number.NaN }],
       })
     ).toThrow(/start month/);
   });
@@ -114,6 +114,66 @@ describe('withdrawal simulator income offset', () => {
     const a = simulateWithdrawals(mapping, 100_000, flatSequence(24), 12_000);
     const b = simulateWithdrawals(mapping, 100_000, flatSequence(24), 12_000, {});
     expect(a).toEqual(b);
+  });
+
+  it('adds streams together and stops one at its end month', () => {
+    const mapping = cashOnlyMapping();
+    const outcome = simulateWithdrawals(mapping, 100_000, flatSequence(24), 24_000, {
+      incomeStreams: [
+        // Covers half the spending for the first year only.
+        { annualAmount: 12_000, startMonth: 0, endMonth: 12 },
+        // Covers a quarter of it from the second year.
+        { annualAmount: 6_000, startMonth: 12 },
+      ],
+    });
+
+    // Year one draws $12k, year two $18k.
+    expect(outcome.finalValue).toBeCloseTo(100_000 - 12_000 - 18_000, 6);
+    expect(outcome.realFirstYearPortfolioWithdrawal).toBeCloseTo(12_000, 6);
+  });
+
+  it('lets inflation erode a fixed amount but not an indexed one', () => {
+    const mapping = cashOnlyMapping();
+    const months = 24;
+    // 1% a month, about 27% over two years.
+    const inflating = {
+      ...flatSequence(months),
+      inflationRates: Array.from({ length: months }, () => 0.01),
+    };
+    const indexed = simulateWithdrawals(mapping, 1_000_000, inflating, 12_000, {
+      incomeStreams: [{ annualAmount: 12_000, startMonth: 0, indexed: true }],
+    });
+    const fixed = simulateWithdrawals(mapping, 1_000_000, inflating, 12_000, {
+      incomeStreams: [{ annualAmount: 12_000, startMonth: 0, indexed: false }],
+    });
+
+    // Indexed income keeps pace with the indexed spending it covers.
+    expect(indexed.finalValue).toBeCloseTo(1_000_000, 6);
+    expect(indexed.realFirstYearPortfolioWithdrawal).toBeCloseTo(0, 6);
+    // A fixed $1,000 a month falls behind spending that grows 1% a month.
+    expect(fixed.finalValue).toBeLessThan(1_000_000);
+    expect(fixed.realFirstYearPortfolioWithdrawal).toBeGreaterThan(0);
+  });
+
+  it('measures the first year of withdrawals in today\'s dollars, after a delay', () => {
+    const mapping = cashOnlyMapping();
+    const outcome = simulateWithdrawals(mapping, 500_000, flatSequence(36), 40_000, {
+      withdrawalDelayMonths: 12,
+      // Starts a year into retirement, so the first year is the portfolio's alone.
+      incomeStreams: [{ annualAmount: 30_000, startMonth: 24 }],
+    });
+
+    expect(outcome.realFirstYearPortfolioWithdrawal).toBeCloseTo(40_000, 6);
+    expect(outcome.finalValue).toBeCloseTo(500_000 - 40_000 - 10_000, 6);
+  });
+
+  it('rejects an income that ends before it starts', () => {
+    const mapping = cashOnlyMapping();
+    expect(() =>
+      simulateWithdrawals(mapping, 100_000, flatSequence(12), 12_000, {
+        incomeStreams: [{ annualAmount: 12_000, startMonth: 6, endMonth: 3 }],
+      })
+    ).toThrow(/end month/);
   });
 });
 
@@ -269,8 +329,9 @@ describe('quick plan results', () => {
     expect(limitations).toContain('July 1926');
     expect(limitations).toContain('all 7 years between retiring and claiming');
     expect(full.assumptions.some((line) => line.includes('Kenneth French'))).toBe(true);
-    expect(full.assumptions.some((line) => line.includes('$36,000 of annual retirement income begins at age 67')))
-      .toBe(true);
+    expect(full.assumptions.some((line) =>
+      line.includes('$36,000 a year of Social Security in today\'s dollars is paid from age 67 and rises with each historical sequence\'s CPI')
+    )).toBe(true);
   });
 
   it('charges the portfolio for the whole first year when Social Security starts later', () => {
@@ -560,5 +621,60 @@ describe('quick plan sensitivity to Social Security', () => {
     // Claiming at retirement takes the benefit straight off the first year's draw.
     expect(planOf(atSeventy).firstYearPortfolioWithdrawal).toBe(SHORT.annualSpending - 34_000);
     expect(planOf(atSeventyFive).firstYearPortfolioWithdrawal).toBe(SHORT.annualSpending);
+  }, 180_000);
+});
+
+describe('quick plan with a pension', () => {
+  const SHORT = {
+    currentAge: 68,
+    retirementAge: 70,
+    investableAssets: 500_000,
+    annualSpending: 70_000,
+    annualContributions: 10_000,
+    socialSecurityAnnual: 0,
+    lifeExpectancy: 85,
+    allocation: 'balanced' as const,
+  };
+
+  it('reads a blank pension as none, a blank start as retirement, and a blank inflation term as fixed', () => {
+    const blank = normalizeQuickPlanRequest(SHORT);
+    expect(blank.pensionAnnual).toBe(0);
+    expect(blank.pensionStartAge).toBe(SHORT.retirementAge);
+    expect(blank.pensionInflationAdjusted).toBe(false);
+
+    const stated = normalizeQuickPlanRequest({ ...SHORT, pensionAnnual: 20_000, pensionStartAge: 72, pensionInflationAdjusted: true });
+    expect(stated).toMatchObject({ pensionAnnual: 20_000, pensionStartAge: 72, pensionInflationAdjusted: true });
+  });
+
+  it('counts a pension beside Social Security, and a fixed one for less than an indexed one', async () => {
+    const none = await runRetirementQuickPlan(SHORT);
+    const fixed = await runRetirementQuickPlan({ ...SHORT, pensionAnnual: 24_000 });
+    const indexed = await runRetirementQuickPlan({ ...SHORT, pensionAnnual: 24_000, pensionInflationAdjusted: true });
+    const both = await runRetirementQuickPlan({
+      ...SHORT,
+      pensionAnnual: 24_000,
+      socialSecurityAnnual: 20_000,
+      socialSecurityStartAge: 70,
+    });
+
+    expect(planOf(fixed).survivalRate).toBeGreaterThan(planOf(none).survivalRate);
+    expect(planOf(indexed).survivalRate).toBeGreaterThanOrEqual(planOf(fixed).survivalRate);
+    expect(planOf(both).survivalRate).toBeGreaterThanOrEqual(planOf(fixed).survivalRate);
+
+    // An indexed pension in today's dollars comes straight off the first year.
+    expect(planOf(indexed).firstYearPortfolioWithdrawal).toBe(SHORT.annualSpending - 24_000);
+    // A fixed one has lost two years of inflation by the time it starts.
+    expect(planOf(fixed).firstYearPortfolioWithdrawal).toBeGreaterThan(SHORT.annualSpending - 24_000);
+    expect(planOf(both).firstYearPortfolioWithdrawal).toBeLessThan(planOf(fixed).firstYearPortfolioWithdrawal);
+  }, 180_000);
+
+  it('says the pension is fixed and names the years before it starts', async () => {
+    const run = await runRetirementQuickPlan({ ...SHORT, pensionAnnual: 24_000, pensionStartAge: 73 });
+    const limitations = run.limitations.join(' ');
+
+    expect(limitations).toContain('Your pension of $24,000 a year from age 73 is a fixed amount');
+    expect(limitations).toContain('all 3 years between retiring and the pension starting');
+    expect(limitations).not.toContain('pensions other than the income you entered');
+    expect(run.assumptions.some((line) => line.includes('as a fixed dollar amount'))).toBe(true);
   }, 180_000);
 });

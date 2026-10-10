@@ -46,8 +46,10 @@ import {
 } from '../openai/input-request';
 import {
   describeSavedFigures,
+  INCOME_INFLATION_OPTIONS,
   savedChoice,
   savedNumber,
+  type IncomeInflation,
   type StatedFigureKey,
 } from '../services/stated-figures';
 import type { SavableFigure, SaveOfferKey } from '../openai/save-offer';
@@ -63,14 +65,17 @@ const NUMERIC_FIELDS = [
   'annualContributions',
   'socialSecurityAnnual',
   'socialSecurityStartAge',
+  'pensionAnnual',
+  'pensionStartAge',
   'lifeExpectancy',
 ] as const;
 
 type NumericField = (typeof NUMERIC_FIELDS)[number];
-export type StatedRetirementPlanField = NumericField | 'allocation';
+export type StatedRetirementPlanField = NumericField | 'allocation' | 'pensionInflation';
 
 const ALLOCATION_OPTIONS = ['unspecified', 'conservative', 'balanced', 'growth'] as const;
-const ALL_FIELDS: readonly StatedRetirementPlanField[] = [...NUMERIC_FIELDS, 'allocation'];
+const PENSION_INFLATION_OPTIONS = ['unspecified', ...INCOME_INFLATION_OPTIONS] as const;
+const ALL_FIELDS: readonly StatedRetirementPlanField[] = [...NUMERIC_FIELDS, 'allocation', 'pensionInflation'];
 
 const NULLABLE_NUMBER = { type: ['number', 'null'] as const };
 const NULLABLE_STRING = { type: ['string', 'null'] as const };
@@ -82,6 +87,7 @@ const PLANNED_OVERRIDES_JSON_SCHEMA = {
   properties: {
     ...Object.fromEntries(NUMERIC_FIELDS.map((field) => [field, NULLABLE_NUMBER])),
     allocation: { type: 'string', enum: [...ALLOCATION_OPTIONS] },
+    pensionInflation: { type: 'string', enum: [...PENSION_INFLATION_OPTIONS] },
     sources: {
       type: 'object',
       additionalProperties: false,
@@ -117,8 +123,11 @@ export interface PlannedStatedRetirementOverrides {
   annualContributions?: number;
   socialSecurityAnnual?: number;
   socialSecurityStartAge?: number;
+  pensionAnnual?: number;
+  pensionStartAge?: number;
   lifeExpectancy?: number;
   allocation?: QuickPlanAllocationId;
+  pensionInflation?: IncomeInflation;
   sources: Partial<Record<StatedRetirementPlanField, string>>;
 }
 
@@ -243,6 +252,8 @@ const RANGES: Record<NumericField, { minimum: number; maximum: number; integer?:
   annualContributions: { minimum: 0, maximum: 5_000_000 },
   socialSecurityAnnual: { minimum: 0, maximum: 250_000 },
   socialSecurityStartAge: { minimum: 50, maximum: 80, integer: true },
+  pensionAnnual: { minimum: 0, maximum: 10_000_000 },
+  pensionStartAge: { minimum: 30, maximum: 95, integer: true },
   lifeExpectancy: { minimum: 60, maximum: 110, integer: true },
 };
 
@@ -254,6 +265,9 @@ const LABELS: Record<StatedRetirementPlanField, string> = {
   annualContributions: 'Annual saving until retirement, in today\'s dollars',
   socialSecurityAnnual: 'Annual Social Security, in today\'s dollars',
   socialSecurityStartAge: 'Social Security start age',
+  pensionAnnual: 'Pension or other income a year',
+  pensionStartAge: 'Pension start age',
+  pensionInflation: 'Whether the pension rises with inflation',
   lifeExpectancy: 'Planning horizon age',
   allocation: 'Preset asset mix',
 };
@@ -265,6 +279,11 @@ const SAVED_PHRASES: Partial<Record<StatedRetirementPlanField, (value: number | 
   annualContributions: (value) => `saving ${money(Number(value))} a year until then`,
   socialSecurityAnnual: (value) => `${money(Number(value))} a year of Social Security`,
   socialSecurityStartAge: (value) => `Social Security from ${value}`,
+  pensionAnnual: (value) => `a pension of ${money(Number(value))} a year`,
+  pensionStartAge: (value) => `the pension from ${value}`,
+  pensionInflation: (value) => value === 'rises_with_inflation'
+    ? 'the pension rising with inflation'
+    : 'the pension as a fixed amount',
   lifeExpectancy: (value) => `planning through age ${value}`,
   allocation: (value) => `the ${QUICKPLAN_ALLOCATIONS[value as QuickPlanAllocationId]?.label ?? value} preset`,
 };
@@ -297,6 +316,10 @@ function isAllocationId(value: unknown): value is QuickPlanAllocationId {
   return typeof value === 'string' && value in QUICKPLAN_ALLOCATIONS;
 }
 
+function isIncomeInflation(value: unknown): value is IncomeInflation {
+  return typeof value === 'string' && (INCOME_INFLATION_OPTIONS as readonly string[]).includes(value);
+}
+
 function parseOverrides(value: unknown): PlannedStatedRetirementOverrides | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
@@ -325,6 +348,11 @@ function parseOverrides(value: unknown): PlannedStatedRetirementOverrides | unde
   if (isAllocationId(record.allocation) && allocationSource) {
     overrides.allocation = record.allocation;
     overrides.sources.allocation = allocationSource;
+  }
+  const pensionInflationSource = shortSource(rawSources.pensionInflation);
+  if (isIncomeInflation(record.pensionInflation) && pensionInflationSource) {
+    overrides.pensionInflation = record.pensionInflation;
+    overrides.sources.pensionInflation = pensionInflationSource;
   }
 
   return ALL_FIELDS.some((field) => overrides[field] !== undefined) ? overrides : undefined;
@@ -437,6 +465,15 @@ function resolveVariant(
     return figure && { value: figure.value, origin: 'saved' as const, savedAt: figure.savedAt };
   };
   const savedMix = savedChoice(snapshot.statedFigures, 'allocation');
+  const savedInflationChoice = savedChoice(snapshot.statedFigures, 'retirementIncomeInflation');
+  const savedPensionInflation = savedInflationChoice && isIncomeInflation(savedInflationChoice.value)
+    ? { value: savedInflationChoice.value, savedAt: savedInflationChoice.savedAt }
+    : undefined;
+  // The pension the form would open on: what the user said here, else saved.
+  const savedPensionAmount = (known: KnownInput[]): number => {
+    const held = known.find((input) => input.key === 'pensionAnnual')?.value;
+    return typeof held === 'number' ? held : 0;
+  };
   const profileAge = snapshot.userProfileValues?.age;
   const knownAge = typeof profileAge === 'number' && Number.isInteger(profileAge) &&
     profileAge >= RANGES.currentAge.minimum && profileAge <= RANGES.currentAge.maximum
@@ -495,6 +532,8 @@ function resolveVariant(
       annualContributions: 'annualContribution',
       socialSecurityAnnual: 'socialSecurityAnnual',
       socialSecurityStartAge: 'socialSecurityStartAge',
+      pensionAnnual: 'retirementIncome',
+      pensionStartAge: 'retirementIncomeStartAge',
       lifeExpectancy: 'planThroughAge',
     };
     const usableSavedRetirementAge = (() => {
@@ -529,10 +568,20 @@ function resolveVariant(
           saved('socialSecurityAnnual')?.value;
         if (!(typeof benefit === 'number' && benefit > 0)) continue;
       }
+      if (field === 'pensionStartAge' && !(savedPensionAmount(known) > 0)) continue;
       known.push({ key: field, value: figure.value, origin: 'saved' });
     }
     if (savedMix && !known.some((input) => input.key === 'allocation')) {
       known.push({ key: 'allocation', value: savedMix.value, origin: 'saved' });
+    }
+    // Like a start age, how a pension keeps up with prices means nothing
+    // without a pension behind it.
+    if (
+      savedPensionInflation &&
+      savedPensionAmount(known) > 0 &&
+      !known.some((input) => input.key === 'pensionInflation')
+    ) {
+      known.push({ key: 'pensionInflation', value: savedPensionInflation.value, origin: 'saved' });
     }
     if (knownSpending !== undefined && !known.some((input) => input.key === 'annualSpending')) {
       known.push({ key: 'annualSpending', value: knownSpending, origin: 'snapshot', basis: spendingBasis });
@@ -573,6 +622,27 @@ function resolveVariant(
       saved('socialSecurityStartAge') ?? { value: DEFAULT_SOCIAL_SECURITY_START_AGE, origin: 'default' }
     )!
     : DEFAULT_SOCIAL_SECURITY_START_AGE;
+  // A pension most often starts when work stops, and most private pensions
+  // pay a fixed amount; overstating future income is the costlier mistake.
+  // Like Social Security's start age, neither is listed without a pension.
+  const pensionAnnual = take<number>(
+    'pensionAnnual',
+    saved('retirementIncome') ?? { value: 0, origin: 'default' }
+  )!;
+  const pensionStartAge = pensionAnnual > 0
+    ? take<number>(
+      'pensionStartAge',
+      saved('retirementIncomeStartAge') ?? { value: retirementAge, origin: 'default' }
+    )!
+    : retirementAge;
+  const pensionInflation = pensionAnnual > 0
+    ? take<IncomeInflation>(
+      'pensionInflation',
+      savedPensionInflation
+        ? { value: savedPensionInflation.value, origin: 'saved', savedAt: savedPensionInflation.savedAt }
+        : { value: 'fixed', origin: 'default' }
+    )!
+    : 'fixed';
   // A saved horizon the retirement would already run past is not used.
   const savedHorizon = saved('planThroughAge');
   const lifeExpectancy = take<number>(
@@ -597,6 +667,9 @@ function resolveVariant(
       annualContributions,
       socialSecurityAnnual,
       socialSecurityStartAge,
+      pensionAnnual,
+      pensionStartAge,
+      pensionInflationAdjusted: pensionInflation === 'rises_with_inflation',
       lifeExpectancy,
       allocation,
     },
@@ -621,22 +694,38 @@ function describeField(field: StatedRetirementPlanField, value: number | string)
     case 'annualContributions': return `saving ${money(Number(value))} a year`;
     case 'socialSecurityAnnual': return `${money(Number(value))} a year of Social Security`;
     case 'socialSecurityStartAge': return `Social Security from ${value}`;
+    case 'pensionAnnual': return `a ${money(Number(value))} pension`;
+    case 'pensionStartAge': return `the pension from ${value}`;
+    case 'pensionInflation': return value === 'rises_with_inflation'
+      ? 'a pension that rises with inflation'
+      : 'a fixed pension';
     case 'lifeExpectancy': return `planning through ${value}`;
     case 'allocation': return `the ${QUICKPLAN_ALLOCATIONS[value as QuickPlanAllocationId]?.label ?? value} mix`;
   }
 }
 
+/**
+ * A field's value as the run used it. The request carries the inflation
+ * choice as a flag, and a pension's terms mean nothing without a pension: its
+ * start age follows the retirement age then, which is no difference to name.
+ */
+function requestValue(variant: ResolvedVariant, field: StatedRetirementPlanField): number | string | undefined {
+  const hasPension = variant.request.pensionAnnual > 0;
+  if (field === 'pensionInflation') {
+    if (!hasPension) return undefined;
+    return variant.request.pensionInflationAdjusted ? 'rises_with_inflation' : 'fixed';
+  }
+  if ((field === 'pensionAnnual' || field === 'pensionStartAge') && !hasPension) return undefined;
+  return (variant.request as unknown as Record<string, number | string | undefined>)[field];
+}
+
 function variantLabel(own: ResolvedVariant, peer: ResolvedVariant | undefined): string {
   if (!peer) return 'Your plan';
-  const differing = ALL_FIELDS.filter((field) =>
-    (own.request as unknown as Record<string, unknown>)[field] !==
-      (peer.request as unknown as Record<string, unknown>)[field]
-  );
-  const values = own.request as unknown as Record<string, number | string | undefined>;
+  const differing = ALL_FIELDS.filter((field) => requestValue(own, field) !== requestValue(peer, field));
   const described = differing
-    .filter((field) => values[field] !== undefined)
+    .filter((field) => requestValue(own, field) !== undefined)
     .slice(0, 2)
-    .map((field) => describeField(field, values[field]!));
+    .map((field) => describeField(field, requestValue(own, field)!));
   return described.length > 0 ? capitalize(described.join(' and ')) : 'Your plan';
 }
 
@@ -825,6 +914,8 @@ const INPUT_UNITS: Record<NumericField, CanonicalFactUnit> = {
   annualContributions: 'usd',
   socialSecurityAnnual: 'usd',
   socialSecurityStartAge: 'age',
+  pensionAnnual: 'usd',
+  pensionStartAge: 'age',
   lifeExpectancy: 'age',
 };
 
@@ -862,11 +953,19 @@ export function statedRetirementPlanCanonicalFacts(execution: StatedRetirementPl
     };
 
     for (const assumption of scenario.assumptions) {
-      if (assumption.key === 'allocation' || typeof assumption.value !== 'number') continue;
-      // Zero contributions and zero Social Security are defaults, not figures
-      // worth quoting back.
+      if (typeof assumption.value !== 'number') continue;
+      // Zero contributions, Social Security and pension are defaults, not
+      // figures worth quoting back.
       if (assumption.value === 0) continue;
-      add('scenario_input', factId(assumption.key), assumption.label, assumption.value, INPUT_UNITS[assumption.key]);
+      const key = assumption.key as NumericField;
+      // A fixed pension is in the dollars it pays, not today's; the label says
+      // which, so the answer cannot restate it in the wrong units.
+      const label = key === 'pensionAnnual'
+        ? scenario.inputs.pensionInflationAdjusted
+          ? 'Pension or other income a year, in today\'s dollars, rising with inflation'
+          : 'Pension or other income a year, a fixed dollar amount that does not rise with inflation'
+        : assumption.label;
+      add('scenario_input', factId(key), label, assumption.value, INPUT_UNITS[key]);
     }
     const mix = `${scenario.allocation.label} preset`;
     add('scenario_input', 'us_stock_share', `${mix} share in US stocks`, scenario.allocation.usEquityPercent, 'percent');
@@ -929,6 +1028,40 @@ function assumptionOf(scenario: StatedRetirementPlanResult, key: StatedRetiremen
   return scenario.assumptions.find((assumption) => assumption.key === key);
 }
 
+/** The pension, and which of its terms were assumed, so they are the easiest to correct. */
+function describePension(scenario: StatedRetirementPlanResult): string {
+  const inputs = scenario.inputs;
+  if (!(inputs.pensionAnnual > 0)) return '';
+  const terms = inputs.pensionInflationAdjusted
+    ? `${money(inputs.pensionAnnual)} a year in today's dollars starts at ${inputs.pensionStartAge} and rises with inflation`
+    : `${money(inputs.pensionAnnual)} a year starts at ${inputs.pensionStartAge} as a fixed amount, so it buys less each year prices rise`;
+  const startAssumed = assumptionOf(scenario, 'pensionStartAge')?.origin === 'default'
+    ? ' I assumed it starts when you retire.'
+    : '';
+  const inflationAssumed = assumptionOf(scenario, 'pensionInflation')?.origin === 'default'
+    ? ' You did not say whether it rises with inflation, so I assumed it does not; tell me if it has a cost-of-living adjustment.'
+    : '';
+  return ` A pension of ${terms}.${startAssumed}${inflationAssumed}`;
+}
+
+/**
+ * The years between retiring and each income starting, when the portfolio
+ * covers that income's share on its own -- the stretch sequence risk punishes,
+ * so it is named rather than left inside the survival rate.
+ */
+function describeIncomeGaps(inputs: RetirementQuickPlanResult['inputs']): string {
+  const gaps: string[] = [];
+  const gap = (amount: number, startAge: number, name: string) => {
+    const years = startAge - inputs.retirementAge;
+    if (amount > 0 && years > 0) {
+      gaps.push(`${name}'s share for the ${years === 1 ? 'year' : `${years} years`} before it starts at ${startAge}`);
+    }
+  };
+  gap(inputs.socialSecurityAnnual, inputs.socialSecurityStartAge, 'Social Security');
+  gap(inputs.pensionAnnual, inputs.pensionStartAge, 'the pension');
+  return gaps.length > 0 ? ` The portfolio covers ${joinList(gaps)}.` : '';
+}
+
 /**
  * Deterministic disclosure appended to every stated-plan answer. It leads with
  * the one thing that most separates this from the real projection -- a preset
@@ -957,7 +1090,11 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
 
   const socialSecurity = inputs.socialSecurityAnnual > 0
     ? ` Social Security of ${money(inputs.socialSecurityAnnual)} a year starts at ${inputs.socialSecurityStartAge}.`
-    : ' No Social Security is included, so the portfolio funds every year on its own.';
+    : inputs.pensionAnnual > 0
+      ? ' No Social Security is included.'
+      : ' No Social Security is included, so the portfolio funds every year on its own.';
+  const pension = describePension(primary);
+  const bridge = describeIncomeGaps(inputs);
   const saving = inputs.annualContributions > 0
     ? ` You keep saving ${money(inputs.annualContributions)} a year until you retire.`
     : '';
@@ -1024,7 +1161,7 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
   return `Plan assumptions: ${standIn}, against every overlapping ` +
     `${primary.history.horizonYears}-year stretch of US market returns and inflation that began between ` +
     `${readableMonth(primary.history.firstStartMonth)} and ${readableMonth(primary.history.lastStartMonth)}.` +
-    `${comparison}${retirementAgeNotice}${spendingNotice}${socialSecurity}${saving}${horizon}${mixDefault}` +
+    `${comparison}${retirementAgeNotice}${spendingNotice}${socialSecurity}${pension}${bridge}${saving}${horizon}${mixDefault}` +
     `${assetsNotice}${ageNotice}${savedNotice}${comparisonNotice} ` +
     'Fund fees, taxes and account types are not modeled. Change any of these and I will re-run it.';
 }
@@ -1095,6 +1232,33 @@ const STATED_RETIREMENT_PLAN_INPUT_REQUEST: InputRequestSpec = {
       defaultNote: `${DEFAULT_SOCIAL_SECURITY_START_AGE} if left blank`,
     },
     {
+      id: 'pensionAnnual',
+      label: 'Pension or other income a year',
+      kind: 'usd_per_year',
+      ...RANGES.pensionAnnual,
+      sentence: 'I expect a pension or other income of {value} a year.',
+      defaultNote: 'None if left blank',
+    },
+    {
+      id: 'pensionStartAge',
+      label: 'Age the pension starts',
+      kind: 'age',
+      ...RANGES.pensionStartAge,
+      sentence: 'My pension starts at {value}.',
+      defaultNote: 'When you retire, if left blank',
+    },
+    {
+      id: 'pensionInflation',
+      label: 'Does the pension rise with inflation?',
+      kind: 'choice',
+      options: [
+        { value: 'fixed', label: 'No, a fixed amount' },
+        { value: 'rises_with_inflation', label: 'Yes, it rises with inflation' },
+      ],
+      sentence: 'Pension rises with inflation: {value}.',
+      defaultNote: 'A fixed amount if left blank',
+    },
+    {
       id: 'lifeExpectancy',
       label: 'Plan through age',
       kind: 'age',
@@ -1146,6 +1310,9 @@ const SAVE_KEYS: Partial<Record<StatedRetirementPlanField, SaveOfferKey>> = {
   annualContributions: 'annualContribution',
   socialSecurityAnnual: 'socialSecurityAnnual',
   socialSecurityStartAge: 'socialSecurityStartAge',
+  pensionAnnual: 'retirementIncome',
+  pensionStartAge: 'retirementIncomeStartAge',
+  pensionInflation: 'retirementIncomeInflation',
   lifeExpectancy: 'planThroughAge',
   allocation: 'allocation',
   investableAssets: 'investedBalance',
@@ -1185,6 +1352,9 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
     { id: 'annual_contributions', label: 'Annual saving until retirement', description: 'In today\'s dollars.', valueType: 'currency', minimum: 0, maximum: 5_000_000 },
     { id: 'social_security_annual', label: 'Annual Social Security', description: 'Inflation-adjusted income that reduces withdrawals once it starts.', valueType: 'currency', minimum: 0, maximum: 250_000 },
     { id: 'social_security_start_age', label: 'Social Security start age', description: 'Age the benefit begins.', valueType: 'age', minimum: 50, maximum: 80 },
+    { id: 'pension_annual', label: 'Pension or other income a year', description: 'Income other than Social Security that reduces withdrawals once it starts.', valueType: 'currency', minimum: 0, maximum: 10_000_000 },
+    { id: 'pension_start_age', label: 'Pension start age', description: 'Age the pension begins.', valueType: 'age', minimum: 30, maximum: 95 },
+    { id: 'pension_inflation', label: 'Pension inflation treatment', description: 'A fixed dollar amount, or today\'s dollars rising with inflation.', valueType: 'enum', options: ['fixed', 'rises_with_inflation'] },
     { id: 'life_expectancy', label: 'Planning horizon age', description: 'Age through which the plan is modeled.', valueType: 'age', minimum: 60, maximum: 110 },
     { id: 'allocation', label: 'Preset asset mix', description: 'Conservative, balanced, or growth.', valueType: 'enum', options: ['conservative', 'balanced', 'growth'] },
   ],
@@ -1194,6 +1364,9 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
     { id: 'social_security_start_age', value: DEFAULT_SOCIAL_SECURITY_START_AGE, description: 'Used only when a benefit is stated without a start age.' },
     { id: 'annual_contributions', value: 0, description: 'No saving before retirement unless stated.' },
     { id: 'social_security_annual', value: 0, description: 'No Social Security unless stated.' },
+    { id: 'pension_annual', value: 0, description: 'No pension unless stated.' },
+    { id: 'pension_start_age', value: 'retirement age', description: 'Used only when a pension is stated without a start age.' },
+    { id: 'pension_inflation', value: 'fixed', description: 'A stated pension is a fixed dollar amount unless the user says it rises with inflation.' },
   ],
   outputs: [
     { id: 'historical_survival_rate', label: 'Historical survival share', unit: 'percent', scope: 'variant', description: 'Share of overlapping historical sequences in which the money lasted the whole horizon.' },
@@ -1204,7 +1377,7 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
   ],
   planner: {
     jsonSchema: STATED_RETIREMENT_PLAN_JSON_SCHEMA,
-    instructions: `Request this for any question about whether the user can retire, whether their savings will last, how much they can spend in retirement, or a change to such a plan stated earlier in this decision, including a plan the free retirement calculator answered. Application code runs it only when no investment holdings are linked, or none of the linked ones can be simulated, as a stand-in for the holdings-based projection, so request it for those questions even when the user has stated nothing yet; it asks for whatever is missing. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, investableAssets (invested savings today), annualSpending (spending per year once retired, in today's dollars), annualContributions (saving per year until retirement), socialSecurityAnnual and socialSecurityStartAge, lifeExpectancy (the age the plan runs through), and allocation: conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets; otherwise unspecified with a null source. When the newest message changes an input of a plan stated earlier, put the earlier plan in primary and only the changed values in comparison. When the user gives a range for one value, put the low end in primary and only the high end in comparison. Never estimate or supply typical values; application code uses the conventional retirement age when none is stated, the user's current spending when their accounts show it, and otherwise reports what the mix sustained instead of a verdict. Do not request it for a Coast FIRE question unless the user also asks whether that plan survives market history. The overrides object and every field and source are always present. When there is no such retirement question, set requested=false, allocation=unspecified, and null for every other value and every source in both variants.`,
+    instructions: `Request this for any question about whether the user can retire, whether their savings will last, how much they can spend in retirement, or a change to such a plan stated earlier in this decision, including a plan the free retirement calculator answered. Application code runs it only when no investment holdings are linked, or none of the linked ones can be simulated, as a stand-in for the holdings-based projection, so request it for those questions even when the user has stated nothing yet; it asks for whatever is missing. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, investableAssets (invested savings today), annualSpending (spending per year once retired, in today's dollars), annualContributions (saving per year until retirement), socialSecurityAnnual and socialSecurityStartAge (Social Security only), pensionAnnual (a pension, annuity or other income in retirement that is not Social Security, per year) and pensionStartAge, pensionInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), lifeExpectancy (the age the plan runs through), and allocation: conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets; otherwise unspecified with a null source. When the newest message changes an input of a plan stated earlier, put the earlier plan in primary and only the changed values in comparison. When the user gives a range for one value, put the low end in primary and only the high end in comparison. Never estimate or supply typical values; application code uses the conventional retirement age when none is stated, the user's current spending when their accounts show it, and otherwise reports what the mix sustained instead of a verdict. Do not request it for a Coast FIRE question unless the user also asks whether that plan survives market history. The overrides object and every field and source are always present. When there is no such retirement question, set requested=false, allocation=unspecified, pensionInflation=unspecified, and null for every other value and every source in both variants.`,
     parsePlan: parseStatedRetirementPlan,
   },
   execution: {

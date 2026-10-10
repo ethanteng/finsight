@@ -6,6 +6,7 @@ import {
   statedRetirementPlanApplies,
   statedRetirementPlanCanonicalFacts,
   statedRetirementPlanInputRequest,
+  statedRetirementPlanSavableFigures,
   type CompletedStatedRetirementPlanExecution,
   type QuickPlanRunner,
 } from '../../scenarios/stated-retirement-plan-scenario';
@@ -25,10 +26,12 @@ const NUMERIC = [
   'annualContributions',
   'socialSecurityAnnual',
   'socialSecurityStartAge',
+  'pensionAnnual',
+  'pensionStartAge',
   'lifeExpectancy',
 ] as const;
 
-type Values = Partial<Record<(typeof NUMERIC)[number], number>> & { allocation?: string };
+type Values = Partial<Record<(typeof NUMERIC)[number], number>> & { allocation?: string; pensionInflation?: string };
 
 /** A strict-schema variant: every field present, null where unstated. */
 function variant(values: Values) {
@@ -36,12 +39,14 @@ function variant(values: Values) {
     overrides: {
       ...Object.fromEntries(NUMERIC.map((field) => [field, values[field] ?? null])),
       allocation: values.allocation ?? 'unspecified',
+      pensionInflation: values.pensionInflation ?? 'unspecified',
       sources: {
         ...Object.fromEntries(NUMERIC.map((field) => [
           field,
           values[field] !== undefined ? `stated ${field}` : null,
         ])),
         allocation: values.allocation ? 'the balanced preset' : null,
+        pensionInflation: values.pensionInflation ? 'stated pension inflation' : null,
       },
     },
   };
@@ -353,6 +358,103 @@ describe('retirement plan from stated figures', () => {
     expect(disclosure).not.toContain('You did not name a retirement age');
   });
 
+  it('counts a saved pension beside Social Security, assumed fixed from retirement, and says so', async () => {
+    const runner = fakeRunner();
+    const execution = await runStatedRetirementPlan(
+      {
+        ...NO_HOLDINGS,
+        statedFigures: {
+          retirementAge: { value: 62, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          retirementIncome: { value: 24_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          socialSecurityAnnual: { value: 28_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+        },
+      },
+      plan({ currentAge: 45, investableAssets: 800_000, annualSpending: 70_000 }),
+      runner as QuickPlanRunner
+    );
+
+    expect(runner.mock.calls[0][0]).toMatchObject({
+      socialSecurityAnnual: 28_000,
+      socialSecurityStartAge: 67,
+      pensionAnnual: 24_000,
+      pensionStartAge: 62,
+      pensionInflationAdjusted: false,
+    });
+    const disclosure = describeStatedRetirementPlanExecution(execution)!;
+    expect(disclosure).toContain(
+      'A pension of $24,000 a year starts at 62 as a fixed amount, so it buys less each year prices rise. ' +
+      'I assumed it starts when you retire. You did not say whether it rises with inflation, so I assumed it does not'
+    );
+    expect(disclosure).toContain('The portfolio covers Social Security\'s share for the 5 years before it starts at 67.');
+    expect(disclosure).toContain('a pension of $24,000 a year');
+    const facts = statedRetirementPlanCanonicalFacts(execution);
+    expect(facts.find((fact) => fact.id.endsWith('_pension_annual'))?.label).toContain(
+      'a fixed dollar amount that does not rise with inflation'
+    );
+  });
+
+  it('takes the pension terms the user states, and offers to save them', async () => {
+    const runner = fakeRunner();
+    const execution = await runStatedRetirementPlan(
+      NO_HOLDINGS,
+      plan({
+        currentAge: 50,
+        investableAssets: 600_000,
+        annualSpending: 65_000,
+        retirementAge: 60,
+        pensionAnnual: 30_000,
+        pensionStartAge: 65,
+        pensionInflation: 'rises_with_inflation',
+      }),
+      runner as QuickPlanRunner
+    );
+
+    expect(runner.mock.calls[0][0]).toMatchObject({
+      pensionAnnual: 30_000,
+      pensionStartAge: 65,
+      pensionInflationAdjusted: true,
+    });
+    const disclosure = describeStatedRetirementPlanExecution(execution)!;
+    expect(disclosure).toContain('A pension of $30,000 a year in today\'s dollars starts at 65 and rises with inflation.');
+    expect(disclosure).toContain('The portfolio covers the pension\'s share for the 5 years before it starts at 65.');
+    expect(disclosure).not.toContain('I assumed it');
+    expect(statedRetirementPlanSavableFigures(execution)).toEqual(expect.arrayContaining([
+      { key: 'retirementIncome', value: 30_000 },
+      { key: 'retirementIncomeStartAge', value: 65 },
+      { key: 'retirementIncomeInflation', value: 'rises_with_inflation' },
+    ]));
+  });
+
+  it('opens the form on a saved pension, but not on a start age with no pension behind it', async () => {
+    const withPension = await runStatedRetirementPlan(
+      {
+        ...NO_HOLDINGS,
+        statedFigures: {
+          retirementIncome: { value: 24_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          retirementIncomeInflation: { value: 'rises_with_inflation', savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+        },
+      },
+      plan({}),
+      fakeRunner() as QuickPlanRunner
+    );
+    const fields = statedRetirementPlanInputRequest(withPension)!.fields;
+    expect(fields.find((field) => field.id === 'pensionAnnual')).toMatchObject({ value: 24_000, valueNote: 'From Your numbers' });
+    expect(fields.find((field) => field.id === 'pensionInflation')).toMatchObject({ value: 'rises_with_inflation' });
+
+    const startOnly = await runStatedRetirementPlan(
+      {
+        ...NO_HOLDINGS,
+        statedFigures: {
+          retirementIncomeStartAge: { value: 63, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+        },
+      },
+      plan({}),
+      fakeRunner() as QuickPlanRunner
+    );
+    const startOnlyFields = statedRetirementPlanInputRequest(startOnly)!.fields;
+    expect(startOnlyFields.find((field) => field.id === 'pensionStartAge')?.value).toBeUndefined();
+  });
+
   it('answers with what the mix sustained when nobody knows the spending level', async () => {
     const runner = fakeRunner();
     const execution = await runStatedRetirementPlan(
@@ -402,6 +504,9 @@ describe('retirement plan from stated figures', () => {
       annualContributions: 0,
       socialSecurityAnnual: 0,
       socialSecurityStartAge: 67,
+      pensionAnnual: 0,
+      pensionStartAge: 60,
+      pensionInflationAdjusted: false,
       lifeExpectancy: 95,
       allocation: 'balanced',
     });

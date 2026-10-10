@@ -31,15 +31,40 @@ export interface WithdrawalSimulationOptions {
   /** Annual contribution in today's dollars, applied monthly before withdrawals begin. */
   annualContributionAmount?: number;
   /**
-   * A COLA-indexed income (Social Security, a pension) that pays the household
-   * directly and so reduces the portfolio withdrawal from `startMonth` onward.
-   * `annualAmount` is in today's dollars and is indexed by the sequence's own
-   * CPI, exactly like the withdrawal it offsets. Income above that month's
+   * Incomes (Social Security, pensions) that pay the household directly and so
+   * reduce the portfolio withdrawal from `startMonth` until `endMonth`.
+   * An `indexed` amount (the default) is in today's dollars and rises with the
+   * sequence's own CPI, exactly like the withdrawal it offsets; otherwise it is
+   * a fixed nominal amount for the whole sequence. Income above that month's
    * spending is dropped rather than reinvested -- the portfolio withdrawal is
    * floored at zero -- because a saved surplus is an assumption the caller has
    * not made.
    */
-  incomeOffset?: { annualAmount: number; startMonth: number };
+  incomeStreams?: SimulatedIncomeStream[];
+}
+
+export interface SimulatedIncomeStream {
+  annualAmount: number;
+  /** Months from the start of the sequence. */
+  startMonth: number;
+  /** First month it is no longer paid; omitted means never. */
+  endMonth?: number;
+  /** Rises with CPI when true or omitted; a fixed nominal amount when false. */
+  indexed?: boolean;
+}
+
+function validateIncomeStreams(streams: readonly SimulatedIncomeStream[]): void {
+  for (const stream of streams) {
+    if (!Number.isFinite(stream.annualAmount) || stream.annualAmount < 0) {
+      throw new Error('Retirement income must be a finite, non-negative amount');
+    }
+    if (!Number.isFinite(stream.startMonth) || stream.startMonth < 0) {
+      throw new Error('Retirement income start month must be a finite, non-negative number of months');
+    }
+    if (stream.endMonth !== undefined && (!Number.isFinite(stream.endMonth) || stream.endMonth < stream.startMonth)) {
+      throw new Error('Retirement income end month must be a finite month no earlier than its start');
+    }
+  }
 }
 
 function validateWithdrawalPolicy(policy: WithdrawalPolicy): void {
@@ -73,16 +98,16 @@ export function simulateWithdrawals(
   if (!Number.isFinite(annualContributionAmount) || annualContributionAmount < 0) {
     throw new Error('Annual contributions must be a finite, non-negative amount');
   }
-  const incomeOffset = options.incomeOffset;
-  if (incomeOffset) {
-    if (!Number.isFinite(incomeOffset.annualAmount) || incomeOffset.annualAmount < 0) {
-      throw new Error('Retirement income must be a finite, non-negative amount');
-    }
-    if (!Number.isFinite(incomeOffset.startMonth) || incomeOffset.startMonth < 0) {
-      throw new Error('Retirement income start month must be a finite, non-negative number of months');
-    }
-  }
-  const incomeStartMonth = incomeOffset ? Math.round(incomeOffset.startMonth) : 0;
+  const incomeStreams = options.incomeStreams ?? [];
+  validateIncomeStreams(incomeStreams);
+  const scheduledIncome = incomeStreams
+    .filter((stream) => stream.annualAmount > 0)
+    .map((stream) => ({
+      monthlyAmount: stream.annualAmount / 12,
+      startMonth: Math.round(stream.startMonth),
+      endMonth: stream.endMonth === undefined ? Number.POSITIVE_INFINITY : Math.round(stream.endMonth),
+      indexed: stream.indexed !== false,
+    }));
   let usEquity = initialPortfolioValue * w.usEquityWeight;
   let intlEquity = initialPortfolioValue * w.internationalEquityWeight;
   let bonds = initialPortfolioValue * w.nominalBondsWeight;
@@ -95,6 +120,7 @@ export function simulateWithdrawals(
   let cumulativeInflation = 1;
   let portfolioValueAtWithdrawalStart = initialPortfolioValue;
   let realPortfolioValueAtWithdrawalStart = initialPortfolioValue;
+  let realFirstYearPortfolioWithdrawal = 0;
 
   const portfolioValues: number[] = [initialPortfolioValue];
   let peakValue = initialPortfolioValue;
@@ -156,16 +182,23 @@ export function simulateWithdrawals(
         ? portfolioValue / cumulativeInflation
         : portfolioValue;
     }
-    // Income indexed on the same cumulative CPI as the withdrawal it offsets, so
-    // the two stay in the same real units for the whole sequence. It only
+    // Indexed income rises on the same cumulative CPI as the withdrawal it
+    // offsets, so the two stay in the same real units for the whole sequence; a
+    // fixed amount stays nominal and loses ground to that same CPI. Income only
     // applies while withdrawing: before that the household is not drawing on
     // the portfolio, and this simulation does not bank the difference.
-    const incomeThisMonth = incomeOffset && month >= incomeStartMonth
-      ? (incomeOffset.annualAmount / 12) * cumulativeInflation
-      : 0;
+    let incomeThisMonth = 0;
+    for (const stream of scheduledIncome) {
+      if (month >= stream.startMonth && month < stream.endMonth) {
+        incomeThisMonth += stream.indexed ? stream.monthlyAmount * cumulativeInflation : stream.monthlyAmount;
+      }
+    }
     const withdrawalThisMonth = withdrawing
       ? Math.max(0, monthlyWithdrawal - incomeThisMonth)
       : 0;
+    if (withdrawing && month < withdrawalDelayMonths + 12 && cumulativeInflation > 0) {
+      realFirstYearPortfolioWithdrawal += withdrawalThisMonth / cumulativeInflation;
+    }
     portfolioValue = Math.max(0, portfolioValue - withdrawalThisMonth);
 
     if (portfolioValue <= 0) {
@@ -174,6 +207,7 @@ export function simulateWithdrawals(
         yearsUntilDepletion: Math.max(0, month - withdrawalDelayMonths) / 12,
         portfolioValueAtWithdrawalStart,
         realPortfolioValueAtWithdrawalStart,
+        realFirstYearPortfolioWithdrawal,
         finalValue: 0,
         maximumDrawdown: maxDrawdown,
         timeToRecovery: recoveryMonth != null ? recoveryMonth - (drawdownStartMonth ?? 0) : null,
@@ -218,6 +252,7 @@ export function simulateWithdrawals(
     yearsUntilDepletion: null,
     portfolioValueAtWithdrawalStart,
     realPortfolioValueAtWithdrawalStart,
+    realFirstYearPortfolioWithdrawal,
     finalValue: usEquity + intlEquity + bonds + tips + cash,
     maximumDrawdown: maxDrawdown,
     timeToRecovery: recoveryMonth != null ? recoveryMonth - (drawdownStartMonth ?? 0) : null,

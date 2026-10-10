@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import {
   coastFireContributionPath,
   coastFireInputRequest,
+  coastFireSavableFigures,
   coastFireScenarioCanonicalFacts,
   describeCoastFireScenarioExecution,
   parseCoastFireScenarioPlan,
@@ -70,25 +71,31 @@ const FIELDS = [
   'currentSavings',
   'annualRetirementSpending',
   'annualRetirementIncome',
+  'retirementIncomeStartAge',
+  'socialSecurityAnnual',
+  'socialSecurityStartAge',
   'realReturnRatePercent',
   'withdrawalRatePercent',
   'annualContribution',
 ] as const;
 
 type Field = (typeof FIELDS)[number];
+type Values = Partial<Record<Field, number>> & { allocation?: string; retirementIncomeInflation?: string };
 
 /** A strict-schema variant: every field present, null where unstated. */
-function variant(values: Partial<Record<Field, number>> & { allocation?: string }, sources: Partial<Record<Field, string>> = {}) {
+function variant(values: Values, sources: Partial<Record<Field, string>> = {}) {
   return {
     overrides: {
       ...Object.fromEntries(FIELDS.map((field) => [field, values[field] ?? null])),
       allocation: values.allocation ?? 'unspecified',
+      retirementIncomeInflation: values.retirementIncomeInflation ?? 'unspecified',
       sources: {
         ...Object.fromEntries(FIELDS.map((field) => [
           field,
           sources[field] ?? (values[field] !== undefined ? `stated ${field}` : null),
         ])),
         allocation: values.allocation ? 'a growth mix' : null,
+        retirementIncomeInflation: values.retirementIncomeInflation ? 'stated pension inflation' : null,
       },
     },
   };
@@ -104,10 +111,7 @@ const STATED = {
   withdrawalRatePercent: 4,
 };
 
-function plan(
-  primary: Partial<Record<Field, number>> & { allocation?: string },
-  comparison?: Partial<Record<Field, number>> & { allocation?: string }
-) {
+function plan(primary: Values, comparison?: Values) {
   const parsed = parseCoastFireScenarioPlan({
     requested: true,
     primary: variant(primary),
@@ -439,9 +443,104 @@ describe('Coast FIRE calculator', () => {
     const execution = await runCoastFireScenario(EMPTY_SNAPSHOT, plan(STATED));
     const disclosure = describeCoastFireScenarioExecution(execution)!;
 
-    expect(disclosure).toContain('5% a year after inflation, a 4% withdrawal rate, and no retirement income counted');
+    expect(disclosure).toContain('5% a year after inflation and a 4% withdrawal rate. No Social Security or pension is counted');
     expect(disclosure).toContain('single straight line');
     expect(disclosure).not.toContain('You did not give a growth rate');
+  });
+
+  describe('Social Security and a pension, each on its own schedule', () => {
+    it('sets aside the years before Social Security starts, and names them', async () => {
+      const execution = await runCoastFireScenario(
+        EMPTY_SNAPSHOT,
+        plan({ ...STATED, socialSecurityAnnual: 30_000 })
+      ) as CompletedCoastFireScenarioExecution;
+      const [scenario] = execution.scenarios;
+
+      expect(scenario.metrics.incomes).toEqual([
+        expect.objectContaining({ kind: 'social_security', startAge: 67, levelAmount: 30_000, gapYears: 12 }),
+      ]);
+      expect(scenario.metrics.bridgeReserve).toBeGreaterThan(0);
+      const disclosure = describeCoastFireScenarioExecution(execution)!;
+      expect(disclosure).toContain(
+        'Social Security of $30,000 a year in today\'s dollars starts at 67 (you did not say when it starts, so I used 67).'
+      );
+      expect(disclosure).toMatch(/The target includes \$[\d,]+ set aside at 55 to pay Social Security's share for the 12 years before it starts\./);
+      const facts = coastFireScenarioCanonicalFacts(execution);
+      expect(facts.find((fact) => fact.id.endsWith('_bridge_reserve'))?.value).toBeCloseTo(scenario.metrics.bridgeReserve!, 2);
+      expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+    });
+
+    it('counts a fixed pension at what it is worth over retirement, and says how', async () => {
+      const execution = await runCoastFireScenario(
+        EMPTY_SNAPSHOT,
+        plan({ ...STATED, annualRetirementIncome: 24_000 })
+      ) as CompletedCoastFireScenarioExecution;
+      const [scenario] = execution.scenarios;
+      const pension = scenario.metrics.incomes![0];
+
+      expect(pension).toMatchObject({ kind: 'pension', startAge: 55, inflationAdjusted: false });
+      expect(pension.levelAmount).toBeLessThan(24_000);
+      const disclosure = describeCoastFireScenarioExecution(execution)!;
+      expect(disclosure).toContain('A pension of $24,000 a year starts at 55 as a fixed amount.');
+      expect(disclosure).toContain('its average worth through age 95 if prices rise 2.5% a year.');
+      expect(disclosure).toContain('I assumed it starts when you retire.');
+      expect(disclosure).toContain('You did not say whether it rises with inflation, so I assumed it does not');
+      const facts = coastFireScenarioCanonicalFacts(execution);
+      expect(facts.find((fact) => fact.id.endsWith('_annual_retirement_income'))?.label).toContain('a fixed dollar amount');
+      expect(facts.find((fact) => fact.id.endsWith('_assumed_inflation'))?.value).toBe(2.5);
+      expect(facts.find((fact) => fact.id.endsWith('_pension_counted_value'))?.value).toBeCloseTo(pension.levelAmount, 2);
+      expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+    });
+
+    it('reads Social Security and the pension terms saved in Your numbers', async () => {
+      const execution = await runCoastFireScenario(
+        {
+          statedFigures: {
+            socialSecurityAnnual: { value: 28_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+            socialSecurityStartAge: { value: 70, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+            retirementIncome: { value: 18_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+            retirementIncomeStartAge: { value: 60, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+            retirementIncomeInflation: { value: 'rises_with_inflation', savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+          },
+        },
+        plan(STATED)
+      ) as CompletedCoastFireScenarioExecution;
+      const [scenario] = execution.scenarios;
+
+      expect(scenario.metrics.incomes).toEqual([
+        expect.objectContaining({ kind: 'social_security', annualAmount: 28_000, startAge: 70 }),
+        expect.objectContaining({ kind: 'pension', annualAmount: 18_000, startAge: 60, inflationAdjusted: true, levelAmount: 18_000 }),
+      ]);
+      const disclosure = describeCoastFireScenarioExecution(execution)!;
+      expect(disclosure).toContain('A pension of $18,000 a year in today\'s dollars starts at 60 and rises with inflation.');
+      expect(disclosure).toContain(
+        'From Your numbers: a pension of $18,000 a year, the pension from 60, $28,000 a year of Social Security, ' +
+        'Social Security from 70, and the pension rising with inflation, saved Sep 14, 2026.'
+      );
+      expect(disclosure).not.toContain('I assumed it');
+    });
+
+    it('offers the income terms the user stated for Your numbers', async () => {
+      const execution = await runCoastFireScenario(
+        EMPTY_SNAPSHOT,
+        plan({
+          ...STATED,
+          annualRetirementIncome: 24_000,
+          retirementIncomeStartAge: 60,
+          retirementIncomeInflation: 'rises_with_inflation',
+          socialSecurityAnnual: 30_000,
+          socialSecurityStartAge: 67,
+        })
+      );
+
+      expect(coastFireSavableFigures(execution)).toEqual(expect.arrayContaining([
+        { key: 'retirementIncome', value: 24_000 },
+        { key: 'retirementIncomeStartAge', value: 60 },
+        { key: 'retirementIncomeInflation', value: 'rises_with_inflation' },
+        { key: 'socialSecurityAnnual', value: 30_000 },
+        { key: 'socialSecurityStartAge', value: 67 },
+      ]));
+    });
   });
 
   describe('market-history test while nothing is linked', () => {
@@ -463,6 +562,9 @@ describe('Coast FIRE calculator', () => {
         annualContributions: 0,
         socialSecurityAnnual: 0,
         socialSecurityStartAge: 67,
+        pensionAnnual: 0,
+        pensionStartAge: 55,
+        pensionInflationAdjusted: false,
         allocation: 'balanced',
       });
       expect(execution.scenarios[0].historicalTest).toMatchObject({
@@ -488,17 +590,26 @@ describe('Coast FIRE calculator', () => {
       expect(disclosure).toContain('You did not name a mix, so I used the Balanced preset.');
     });
 
-    it('counts retirement income from the retirement date and uses a named mix', async () => {
+    it('runs each income on the schedule the straight line counted it on, with a named mix', async () => {
       const runner = fakeRunner();
       await runCoastFireScenario(
         EMPTY_SNAPSHOT,
-        plan({ ...STATED, annualRetirementIncome: 20_000, allocation: 'growth' }),
+        plan({
+          ...STATED,
+          annualRetirementIncome: 20_000,
+          socialSecurityAnnual: 30_000,
+          socialSecurityStartAge: 67,
+          allocation: 'growth',
+        }),
         runner as QuickPlanRunner
       );
 
       expect(runner.mock.calls[0][0]).toMatchObject({
-        socialSecurityAnnual: 20_000,
-        socialSecurityStartAge: 55,
+        socialSecurityAnnual: 30_000,
+        socialSecurityStartAge: 67,
+        pensionAnnual: 20_000,
+        pensionStartAge: 55,
+        pensionInflationAdjusted: false,
         allocation: 'growth',
       });
     });
@@ -530,14 +641,14 @@ describe('Coast FIRE calculator', () => {
       expect(execution.scenarios[0].historicalTest).toBeDefined();
     });
 
-    it('skips an income the engine cannot start that early, rather than bending it', async () => {
+    it('tests a pension that starts with an early retirement, now that it is not run as Social Security', async () => {
       const runner = fakeRunner();
       await runCoastFireScenario(
         EMPTY_SNAPSHOT,
         plan({ ...STATED, retirementAge: 45, annualRetirementIncome: 20_000 }),
         runner as QuickPlanRunner
       );
-      expect(runner).not.toHaveBeenCalled();
+      expect(runner.mock.calls[0][0]).toMatchObject({ pensionAnnual: 20_000, pensionStartAge: 45, socialSecurityAnnual: 0 });
     });
 
     it('never costs the user the straight-line answer when the engine fails', async () => {

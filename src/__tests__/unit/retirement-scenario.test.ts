@@ -133,6 +133,33 @@ describe('retirement scenario runner', () => {
     ]));
   });
 
+  it('keeps the baseline\'s income in every variant, moving only a pension that starts when the user retires', async () => {
+    const analyzer = jest.fn(async (input: any) => analysis(input.incomeStreams?.length ? 0.8 : 0.7));
+    const data = snapshot();
+    data.retirementAnalysis._storedInputParams.incomeStreams = [
+      { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
+      { label: 'pension or other income', annualAmount: 20_000, startAge: 60, inflationAdjusted: false },
+    ];
+    data.retirementAnalysis._incomeOrigins = {
+      socialSecurity: { amount: 'stated', startAge: 'stated' },
+      pension: { amount: 'stated', startAge: 'default', inflation: 'default' },
+    };
+    const execution = await runRetirementScenario(data, {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: { retirementAge: 55, withdrawalStartAge: 55, sources: { retirementAge: 'retire at 55', withdrawalStartAge: 'retire at 55' } },
+      },
+    }, analyzer);
+
+    expect(execution.status).toBe('completed');
+    const [variantInput] = analyzer.mock.calls.map(([input]) => input);
+    expect(variantInput.incomeStreams).toEqual([
+      { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
+      { label: 'pension or other income', annualAmount: 20_000, startAge: 55, inflationAdjusted: false },
+    ]);
+  });
+
   it('compares one requested policy with the existing CPI baseline and discloses the fixed-growth default', async () => {
     const analyzer = jest.fn(async () => analysis(0.7));
     const execution = await runRetirementScenario(snapshot(), {
