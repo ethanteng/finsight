@@ -92,6 +92,20 @@ const SCENARIO_OVERRIDE_INPUT_FIELDS = [
 ] as const;
 
 /**
+ * Income the holdings what-if cannot change. It is not in the scenario
+ * override shape, so when a what-if rebuilds the baseline those fields must be
+ * copied through explicitly — otherwise "retire at 62 with $30k of Social
+ * Security" would strip the benefit from both the baseline and the variant
+ * that inherits it.
+ */
+const BASELINE_INCOME_FIELDS = [
+  'socialSecurityAnnual',
+  'socialSecurityStartAge',
+  'pensionAnnual',
+  'pensionStartAge',
+] as const;
+
+/**
  * Keep hypothetical scenario values out of the canonical baseline. The same
  * semantic pass extracts both shapes, so without this boundary an age or
  * spending override can rebuild the baseline before the scenario runner sees
@@ -128,6 +142,15 @@ export function retirementInputsForBaseline(
     if (overridden.has(field) || inputs[field] === undefined) continue;
     baseline[field] = inputs[field];
     if (inputs.sources[field]) baseline.sources[field] = inputs.sources[field];
+  }
+  for (const field of BASELINE_INCOME_FIELDS) {
+    if (inputs[field] === undefined) continue;
+    baseline[field] = inputs[field];
+    if (inputs.sources[field]) baseline.sources[field] = inputs.sources[field];
+  }
+  if (inputs.pensionInflation !== undefined) {
+    baseline.pensionInflation = inputs.pensionInflation;
+    if (inputs.sources.pensionInflation) baseline.sources.pensionInflation = inputs.sources.pensionInflation;
   }
   return baseline;
 }

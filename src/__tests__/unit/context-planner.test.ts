@@ -496,6 +496,61 @@ describe('context planner', () => {
     });
   });
 
+  it('keeps stated Social Security and pension in the baseline when a what-if overrides age', () => {
+    const raw = rawPlan(['retirement_analysis']);
+    raw.retirementInputs.socialSecurityAnnual = 30_000;
+    raw.retirementInputs.socialSecurityStartAge = 67;
+    raw.retirementInputs.pensionAnnual = 20_000;
+    raw.retirementInputs.pensionStartAge = 65;
+    raw.retirementInputs.pensionInflation = 'fixed';
+    raw.retirementInputs.sources.socialSecurityAnnual = '$30k of Social Security';
+    raw.retirementInputs.sources.socialSecurityStartAge = 'from 67';
+    raw.retirementInputs.sources.pensionAnnual = '$20k pension';
+    raw.retirementInputs.sources.pensionStartAge = 'pension at 65';
+    raw.retirementInputs.sources.pensionInflation = 'fixed amount';
+    raw.scenarios.retirement = {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        annualRate: null,
+        source: null,
+        overrides: {
+          annualWithdrawalAmount: null,
+          annualContributionAmount: null,
+          retirementAge: 62,
+          withdrawalStartAge: null,
+          lifeExpectancy: null,
+          sources: {
+            annualWithdrawalAmount: null,
+            annualContributionAmount: null,
+            retirementAge: 'what if I retire at 62',
+            withdrawalStartAge: null,
+            lifeExpectancy: null,
+          },
+        },
+      },
+      comparison: { type: 'none', annualRate: null, source: null, overrides: {} },
+    };
+
+    const plan = parseContextPlan(raw);
+
+    expect(plan.retirementInputs).toMatchObject({
+      currentAge: 45,
+      annualWithdrawalAmount: 120_000,
+      socialSecurityAnnual: 30_000,
+      socialSecurityStartAge: 67,
+      pensionAnnual: 20_000,
+      pensionStartAge: 65,
+      pensionInflation: 'fixed',
+    });
+    expect(plan.retirementInputs?.retirementAge).toBeUndefined();
+    expect(plan.retirementInputs?.sources).toMatchObject({
+      socialSecurityAnnual: '$30k of Social Security',
+      pensionAnnual: '$20k pension',
+      pensionInflation: 'fixed amount',
+    });
+  });
+
   it('falls back to the variant values when the baseline has nothing to run on', () => {
     const scenario: any = {
       requested: true,
