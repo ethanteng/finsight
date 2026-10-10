@@ -247,10 +247,13 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           holdings: holdings,
           securities: securities,
           // Reduced here to one small figure, so two years of activity rows
-          // never travel with the snapshot.
+          // never travel with the snapshot. Manual balances have no activity
+          // stream, so only provider accounts that hold these holdings count.
           ...(questionNeeds.needsRetirement && (() => {
             const accountIds = new Set<string>(
-              holdings.map((holding: any) => String(holding?.account_id ?? '')).filter(Boolean)
+              holdings
+                .map((holding: any) => String(holding?.account_id ?? ''))
+                .filter((id: string) => id.length > 0 && !id.startsWith('manual-'))
             );
             return {
               linkedContributions: linkedContributions(

@@ -41,7 +41,7 @@ A Plaid error naming a token rather than an account cannot be placed on one, so 
 - with fewer than 3 complete months of history;
 - with no contribution or withdrawal at all. Some institutions report contributions only as purchases, so silence is not evidence of saving nothing.
 
-The month in progress never counts. Neither do months before the first activity on record for those accounts, because months before the connected history begins are unknown, not empty.
+The month in progress never counts. Neither do months before the first activity on record for those accounts, because months before the connected history begins are unknown, not empty. Manual balances are not in the account set: they have no activity stream.
 
 ## In the projection
 

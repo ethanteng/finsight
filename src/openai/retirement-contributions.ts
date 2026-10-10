@@ -128,6 +128,14 @@ function median(values: number[]): number {
  * Only complete months count -- the month in progress never does -- and none
  * before the first activity on record for those accounts, since months before
  * the connected history begins are unknown, not empty.
+ *
+ * An account with holdings and no activity on record, or one the snapshot
+ * records a fetch error for, is not read: a provider can return holdings while
+ * an account's activity fetch failed (SnapTrade does this per account), and
+ * that silence is not months of saving nothing. The figure reads the accounts
+ * whose activity came through and says how many of how many, so the answer
+ * can say the others may add more. Declining the figure instead would fall
+ * through to counting none, which understates further.
  */
 export function linkedContributions(
   activities: readonly unknown[] | undefined,
