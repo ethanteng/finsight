@@ -84,6 +84,15 @@ describe('contributions from linked investment accounts', () => {
     expect(linkedContributions(activity, { accountIds: PLAID, asOf: AS_OF })?.annualAmount).toBe(9_600);
   });
 
+  it('does not count a contribution twice where the cash and its buy are both reported', () => {
+    const cash = monthly(800);
+    const buys = cash.map((row) => ({ ...row, type: 'buy' }));
+    expect(linkedContributions([...cash, ...buys], { accountIds: PLAID, asOf: AS_OF })).toMatchObject({
+      annualAmount: 9_600,
+      contributed: 9_600,
+    });
+  });
+
   it('says nothing from silence, too little history, or the month in progress', () => {
     // Trades and dividends only: no evidence either way.
     expect(linkedContributions([plaid('2026-05-01', 300, 'dividend', 'cash')], { accountIds: PLAID, asOf: AS_OF })).toBeNull();

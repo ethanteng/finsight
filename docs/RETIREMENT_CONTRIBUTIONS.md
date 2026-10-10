@@ -21,7 +21,7 @@ Plaid and SnapTrade investment activity is already fetched for about two years a
 
 | Provider | In | Out | Ignored |
 | --- | --- | --- | --- |
-| Plaid | subtype `contribution` or `deposit`, whatever the type (a buy made with a contribution counts) | subtype `withdrawal` | transfers between institutions (a rollover, an account moved over) and `distribution`, which can be a fund's payout as easily as a withdrawal |
+| Plaid | subtype `contribution` or `deposit`, whatever the type (a buy made with a contribution counts, except in an account that also reports the cash contribution, where it would count the same money twice) | subtype `withdrawal` | transfers between institutions (a rollover, an account moved over) and `distribution`, which can be a fund's payout as easily as a withdrawal |
 | SnapTrade | `CONTRIBUTION`, `DEPOSIT` | `WITHDRAWAL` | `TRANSFER` |
 
 Only accounts that hold the projection's holdings count.

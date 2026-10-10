@@ -1034,8 +1034,8 @@ export const retirementScenarioCalculator: ScenarioCalculatorDefinition<
     },
     {
       id: 'annual_contribution_amount',
-      value: 0,
-      description: 'No additional contributions before withdrawals begin.',
+      value: 'baseline contribution',
+      description: 'The baseline\'s own contribution: what the user stated, saved in Your numbers, or what linked accounts receive in a typical month, and zero only when nothing says. Dropped for a variant whose withdrawals begin now.',
     },
     {
       id: 'life_expectancy',

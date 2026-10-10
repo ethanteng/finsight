@@ -87,7 +87,7 @@ describe('scenario calculator registry', () => {
         expect.objectContaining({ id: 'life_expectancy' }),
       ]),
       defaults: expect.arrayContaining([
-        expect.objectContaining({ id: 'annual_contribution_amount', value: 0 }),
+        expect.objectContaining({ id: 'annual_contribution_amount', value: 'baseline contribution' }),
         expect.objectContaining({ id: 'annual_withdrawal_growth_rate', value: 0.03 }),
       ]),
       outputs: expect.arrayContaining([

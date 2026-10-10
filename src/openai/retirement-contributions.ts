@@ -94,6 +94,16 @@ function directionOf(activity: Record<string, any>): Direction | null {
   return null;
 }
 
+/**
+ * A Plaid buy marked as a contribution: the purchase a contribution paid for.
+ * Some institutions report only this; others report the cash contribution as
+ * well, and counting both would double the saving.
+ */
+function isContributionBuy(activity: Record<string, any>): boolean {
+  const isSnapTrade = activity.source === 'snaptrade' || Boolean(activity.snapTradeData);
+  return !isSnapTrade && text(activity.type) === 'buy' && directionOf(activity) === 'in';
+}
+
 function amountOf(activity: Record<string, any>): number | null {
   const raw = activity.source_amount ?? activity.amount;
   const amount = typeof raw === 'number' ? raw : Number(raw);
@@ -150,20 +160,29 @@ export function linkedContributions(
   const currentMonth = options.asOf.toISOString().slice(0, 7);
   const windowStart = addMonths(currentMonth, -LINKED_CONTRIBUTION_MONTHS);
 
+  const rows = activities.filter((value): value is Record<string, any> => {
+    if (!value || typeof value !== 'object') return false;
+    const accountId = String((value as Record<string, any>).account_id ?? '');
+    return options.accountIds.has(accountId) && !options.incompleteAccountIds?.has(accountId);
+  });
+  // An account that reports its cash contributions has its contribution buys
+  // counted already: those buys spend the same money.
+  const reportsCashContributions = new Set(rows
+    .filter((activity) => directionOf(activity) === 'in' && !isContributionBuy(activity))
+    .map((activity) => String(activity.account_id)));
+
   let earliest: string | null = null;
   const byMonth = new Map<string, { in: number; out: number }>();
   const accountsRead = new Set<string>();
   let sawMovement = false;
-  for (const value of activities) {
-    if (!value || typeof value !== 'object') continue;
-    const activity = value as Record<string, any>;
-    const accountId = String(activity.account_id ?? '');
-    if (!options.accountIds.has(accountId) || options.incompleteAccountIds?.has(accountId)) continue;
+  for (const activity of rows) {
+    const accountId = String(activity.account_id);
     const month = monthOf(activity);
     if (!month || month >= currentMonth) continue;
     accountsRead.add(accountId);
     if (earliest === null || month < earliest) earliest = month;
     if (month < windowStart) continue;
+    if (reportsCashContributions.has(accountId) && isContributionBuy(activity)) continue;
     const direction = directionOf(activity);
     const amount = amountOf(activity);
     if (!direction || amount === null) continue;
