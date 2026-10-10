@@ -427,9 +427,10 @@ export interface PortfolioOutcome {
   realPortfolioValueAtWithdrawalStart: number;
   finalValue: number; // inflation-adjusted
   /**
-   * What the portfolio had to pay in the first twelve months of withdrawals,
-   * in today's dollars: spending less income. A sequence that ran out within
-   * that year reports the need up to that month.
+   * What the plan required the portfolio to cover in the first twelve months
+   * of withdrawals, in today's dollars: spending less income under that
+   * sequence's inflation. Finished for the full twelve months even when the
+   * portfolio ran out earlier — the metric is the need, not cash remaining.
    */
   realFirstYearPortfolioWithdrawal: number;
   maximumDrawdown: number; // peak-to-trough decline

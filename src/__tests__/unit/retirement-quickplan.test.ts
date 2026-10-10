@@ -175,6 +175,19 @@ describe('withdrawal simulator income offset', () => {
       })
     ).toThrow(/end month/);
   });
+
+  it('finishes the first-year portfolio need when the portfolio runs out mid-year', () => {
+    const mapping = cashOnlyMapping();
+    // $1,000 lasts one month of a $12,000 year; the first-year metric is still
+    // the full year's scheduled draw after income, not the month paid.
+    const outcome = simulateWithdrawals(mapping, 1_000, flatSequence(12), 12_000, {
+      incomeStreams: [{ annualAmount: 0, startMonth: 0 }],
+    });
+
+    expect(outcome.withdrawalSustainability).toBe(false);
+    expect(outcome.yearsUntilDepletion).toBeCloseTo(0, 6);
+    expect(outcome.realFirstYearPortfolioWithdrawal).toBeCloseTo(12_000, 6);
+  });
 });
 
 describe('quick plan input validation', () => {

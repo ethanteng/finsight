@@ -202,6 +202,34 @@ export function simulateWithdrawals(
     portfolioValue = Math.max(0, portfolioValue - withdrawalThisMonth);
 
     if (portfolioValue <= 0) {
+      // Finish the first-year scheduled draw under this sequence's inflation
+      // even though the portfolio is gone. The metric is the plan's need in
+      // those twelve months (spending less income), not cash remaining to pay
+      // it — otherwise a sequence that fails in month one understates the
+      // median first-year figure for underfunded plans.
+      const firstYearEnd = withdrawalDelayMonths + 12;
+      for (let m = month + 1; m < months && m < firstYearEnd; m++) {
+        const laterInflation = sequence.inflationRates[m] ?? 0;
+        cumulativeInflation *= 1 + laterInflation;
+        if (withdrawalPolicy.type === 'historical_cpi' || m <= withdrawalDelayMonths) {
+          monthlyWithdrawal *= 1 + laterInflation;
+        } else if (
+          withdrawalPolicy.type === 'fixed_growth' &&
+          m > withdrawalDelayMonths &&
+          (m - withdrawalDelayMonths) % 12 === 0
+        ) {
+          monthlyWithdrawal *= 1 + withdrawalPolicy.annualRate;
+        }
+        let laterIncome = 0;
+        for (const stream of scheduledIncome) {
+          if (m >= stream.startMonth && m < stream.endMonth) {
+            laterIncome += stream.indexed ? stream.monthlyAmount * cumulativeInflation : stream.monthlyAmount;
+          }
+        }
+        if (cumulativeInflation > 0) {
+          realFirstYearPortfolioWithdrawal += Math.max(0, monthlyWithdrawal - laterIncome) / cumulativeInflation;
+        }
+      }
       return {
         withdrawalSustainability: false,
         yearsUntilDepletion: Math.max(0, month - withdrawalDelayMonths) / 12,
