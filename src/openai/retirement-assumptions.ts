@@ -182,12 +182,22 @@ function describeContribution(
       const linked = origin.linked;
       if (!linked) return [saving];
       const span = `${monthName(linked.firstMonth)} to ${monthName(linked.lastMonth)}`;
-      const onceAYear = 'a deposit made once a year, like an IRA contribution, is not part of a typical month, so tell me if you make one';
+      // An account whose activity did not come through is left out, not read
+      // as saving nothing, and the answer says so.
+      const partial = typeof linked.accountsRead === 'number' && typeof linked.accountsHeld === 'number' &&
+        linked.accountsRead < linked.accountsHeld;
+      const accounts = partial
+        ? `the ${linked.accountsRead} of your ${linked.accountsHeld} linked investment accounts whose activity came through`
+        : 'your linked investment accounts';
+      const notes = [
+        ...(partial ? ['the others may add more'] : []),
+        'a deposit made once a year, like an IRA contribution, is not part of a typical month, so tell me if you make one',
+      ].join('; ');
       return amount > 0
-        ? [`${saving}: what your linked investment accounts received in a typical month from ${span}, less withdrawals, ` +
-          `times twelve (${onceAYear})`]
-        : [`no new contributions, since in a typical month from ${span} your linked investment accounts received ` +
-          `nothing after withdrawals (${onceAYear})`];
+        ? [`${saving}: what ${accounts} received in a typical month from ${span}, less withdrawals, ` +
+          `times twelve (${notes})`]
+        : [`no new contributions, since in a typical month from ${span} ${accounts} received ` +
+          `nothing after withdrawals (${notes})`];
     }
     case 'none':
       return ['no new contributions before withdrawals begin, since I have none for you (tell me what you add each year and I will count it)'];

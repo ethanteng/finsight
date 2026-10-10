@@ -39,6 +39,15 @@ export interface LinkedContributions {
   /** Totals over those months, for the answer to cite beside the typical month. */
   contributed: number;
   withdrawn: number;
+  /**
+   * How many of the accounts holding these investments the figure reads, of
+   * how many there are. An account whose activity did not come through (a
+   * provider error, or an institution that reports none) would otherwise read
+   * as saving nothing; it is left out and the answer says how many were read.
+   * Absent on figures recorded before coverage was counted.
+   */
+  accountsRead?: number;
+  accountsHeld?: number;
 }
 
 export interface RetirementContributionOrigin {
@@ -122,7 +131,12 @@ function median(values: number[]): number {
  */
 export function linkedContributions(
   activities: readonly unknown[] | undefined,
-  options: { accountIds: ReadonlySet<string>; asOf: Date }
+  options: {
+    accountIds: ReadonlySet<string>;
+    asOf: Date;
+    /** Accounts whose latest activity fetch failed: whatever rows they have are not the whole history. */
+    incompleteAccountIds?: ReadonlySet<string>;
+  }
 ): LinkedContributions | null {
   if (!activities?.length || options.accountIds.size === 0 || Number.isNaN(options.asOf.getTime())) return null;
   const currentMonth = options.asOf.toISOString().slice(0, 7);
@@ -130,13 +144,16 @@ export function linkedContributions(
 
   let earliest: string | null = null;
   const byMonth = new Map<string, { in: number; out: number }>();
+  const accountsRead = new Set<string>();
   let sawMovement = false;
   for (const value of activities) {
     if (!value || typeof value !== 'object') continue;
     const activity = value as Record<string, any>;
-    if (!options.accountIds.has(String(activity.account_id ?? ''))) continue;
+    const accountId = String(activity.account_id ?? '');
+    if (!options.accountIds.has(accountId) || options.incompleteAccountIds?.has(accountId)) continue;
     const month = monthOf(activity);
     if (!month || month >= currentMonth) continue;
+    accountsRead.add(accountId);
     if (earliest === null || month < earliest) earliest = month;
     if (month < windowStart) continue;
     const direction = directionOf(activity);
@@ -170,7 +187,32 @@ export function linkedContributions(
     lastMonth: months[months.length - 1],
     contributed: sum('in'),
     withdrawn: sum('out'),
+    accountsRead: accountsRead.size,
+    accountsHeld: options.accountIds.size,
   };
+}
+
+/**
+ * The accounts a snapshot records an activity or data error for, from its
+ * quality ledger (`provider:error:<account id>`). An advisory means the data
+ * arrived and is not counted; an error naming a token rather than an account
+ * cannot be placed on one and is left to the coverage count.
+ */
+export function accountsWithErrors(
+  quality: unknown,
+  accountIds: ReadonlySet<string>
+): Set<string> {
+  const errors = quality && typeof quality === 'object' && Array.isArray((quality as any).errors)
+    ? (quality as any).errors as unknown[]
+    : [];
+  const failed = new Set<string>();
+  for (const error of errors) {
+    const sourceId = error && typeof error === 'object' ? (error as any).sourceId : undefined;
+    if (typeof sourceId !== 'string') continue;
+    const match = /^[a-z]+:error:(.+)$/.exec(sourceId);
+    if (match && accountIds.has(match[1])) failed.add(match[1]);
+  }
+  return failed;
 }
 
 /**

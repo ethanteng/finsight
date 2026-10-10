@@ -33,6 +33,7 @@ import type { PersonalContextValues } from '../profile/personal-context';
 import { parseStatedFigures, savedNumber, type StatedFigures } from '../services/stated-figures';
 import { resolveRetirementIncome, sameIncomeStreams, type RetirementIncomeOrigins } from './retirement-income';
 import {
+  accountsWithErrors,
   linkedContributions,
   resolveRetirementContribution,
   type LinkedContributions,
@@ -247,15 +248,21 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           securities: securities,
           // Reduced here to one small figure, so two years of activity rows
           // never travel with the snapshot.
-          ...(questionNeeds.needsRetirement && {
-            linkedContributions: linkedContributions(
-              Array.isArray(snapshot.activities) ? snapshot.activities as unknown[] : [],
-              {
-                accountIds: new Set(holdings.map((holding: any) => String(holding?.account_id ?? '')).filter(Boolean)),
-                asOf: snapshot.computedAt instanceof Date ? snapshot.computedAt : new Date(snapshot.computedAt as any),
-              }
-            ),
-          }),
+          ...(questionNeeds.needsRetirement && (() => {
+            const accountIds = new Set<string>(
+              holdings.map((holding: any) => String(holding?.account_id ?? '')).filter(Boolean)
+            );
+            return {
+              linkedContributions: linkedContributions(
+                Array.isArray(snapshot.activities) ? snapshot.activities as unknown[] : [],
+                {
+                  accountIds,
+                  asOf: snapshot.computedAt instanceof Date ? snapshot.computedAt : new Date(snapshot.computedAt as any),
+                  incompleteAccountIds: accountsWithErrors(snapshot.quality, accountIds),
+                }
+              ),
+            };
+          })()),
         };
 
         if (questionNeeds.needsRetirement) {

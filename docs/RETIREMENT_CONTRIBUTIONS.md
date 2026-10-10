@@ -26,6 +26,14 @@ Plaid and SnapTrade investment activity is already fetched for about two years a
 
 Only accounts that hold the projection's holdings count.
 
+**Accounts whose activity did not come through.** Activity can be missing for an account: a provider error on this refresh, or an institution that reports none. Read naively, that account would look like it saves nothing, and the figure would be understated without saying so. Instead:
+
+- An account the snapshot's quality ledger records an error for (`provider:error:<account id>`) is left out, even if it has some rows. Advisories are not errors: their data arrived.
+- An account with no activity on record is not read.
+- When the figure reads fewer accounts than hold the investments, the disclosure says how many of how many, and that the others may add more. The fact pack publishes both counts.
+
+A Plaid error naming a token rather than an account cannot be placed on one, so it is covered by that count alone.
+
 **The typical month.** The figure is the median of each complete month's net (in less out) over the last 12 complete months, never below zero, times twelve. A sum would treat a one-off transfer in, such as an inheritance or savings moved over, as yearly saving until retirement; the median barely moves for it, or for a one-off withdrawal. The cost is that a deposit made once a year, like an IRA contribution, is missed, and a biweekly paycheck reads slightly low. Understating future saving is the safer mistake, and the disclosure says a once-a-year deposit is not part of a typical month.
 
 **When the history cannot say.** No linked figure is produced:
@@ -49,3 +57,4 @@ The month in progress never counts. Neither do months before the first activity 
 - **Employer match, separately.** Nothing on file holds a salary, so no default match can be computed. A match is counted when the provider reports it as a contribution, or when the user includes it in their figure.
 - **Other calculators.** The stated plan and Coast FIRE read stated and saved contributions, not linked ones. Coast FIRE's market-history test assumes none by design, since coasting means none.
 - **Contribution changes over time.** A raise, a catch-up contribution at 50, or saving that stops before retirement.
+- **Planner fallback.** When the context planner request fails, the fallback plan extracts only the core inputs (ages, spending), so a contribution stated in words is not read, as with Social Security and a pension on that path. The disclosure still says which source it used.

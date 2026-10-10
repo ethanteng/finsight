@@ -1,5 +1,10 @@
 import { describe, expect, it } from '@jest/globals';
-import { linkedContributions, resolveRetirementContribution } from '../../openai/retirement-contributions';
+import {
+  accountsWithErrors,
+  linkedContributions,
+  resolveRetirementContribution,
+} from '../../openai/retirement-contributions';
+import { describeRetirementAssumptions } from '../../openai/retirement-assumptions';
 
 const ACCOUNTS = new Set(['plaid-401k', 'snaptrade-ira']);
 const AS_OF = new Date('2026-10-10T00:00:00.000Z');
@@ -87,6 +92,58 @@ describe('contributions from linked investment accounts', () => {
       { accountIds: ACCOUNTS, asOf: AS_OF }
     )).toBeNull();
     expect(linkedContributions([], { accountIds: ACCOUNTS, asOf: AS_OF })).toBeNull();
+  });
+
+  it('reads only the accounts whose activity came through, and says how many', () => {
+    const ira = (date: string, amount: number) => ({
+      account_id: 'snaptrade-ira',
+      date,
+      amount,
+      type: 'contribution',
+      source: 'snaptrade',
+      snapTradeData: { type: 'CONTRIBUTION' },
+    });
+    const activity = [...monthly(1_000), ...monthly(1_000).map((row) => ira(row.date, 400))];
+
+    // The IRA's fetch failed this refresh: its rows are not its whole history.
+    const failed = accountsWithErrors(
+      { errors: [{ sourceId: 'snaptrade:error:snaptrade-ira', message: 'SnapTrade activities incomplete: timeout' }] },
+      ACCOUNTS
+    );
+    expect([...failed]).toEqual(['snaptrade-ira']);
+    const partial = linkedContributions(activity, { accountIds: ACCOUNTS, asOf: AS_OF, incompleteAccountIds: failed })!;
+    expect(partial).toMatchObject({ annualAmount: 12_000, accountsRead: 1, accountsHeld: 2 });
+
+    // Both came through.
+    expect(linkedContributions(activity, { accountIds: ACCOUNTS, asOf: AS_OF })).toMatchObject({
+      annualAmount: 16_800,
+      accountsRead: 2,
+      accountsHeld: 2,
+    });
+
+    const line = describeRetirementAssumptions({
+      retirementAnalysis: {
+        _storedInputParams: { currentAge: 45, withdrawalStartAge: 60, annualContributionAmount: 12_000 },
+        _contributionOrigin: { origin: 'linked', linked: partial },
+      },
+    } as any)!;
+    expect(line).toContain(
+      'adding $12,000 a year in today\'s dollars until withdrawals begin at 60: what the 1 of your 2 linked investment ' +
+      'accounts whose activity came through received in a typical month from October 2025 to September 2026, less ' +
+      'withdrawals, times twelve (the others may add more;'
+    );
+  });
+
+  it('places an error on an account only when it names one, and never an advisory', () => {
+    const quality = {
+      errors: [
+        { sourceId: 'plaid:error:token-abc', message: 'Investment transactions failed' },
+        { sourceId: 'snaptrade:advisory:snaptrade-ira', message: 'Connection could not be verified' },
+        { sourceId: 'plaid:error:plaid-401k', message: 'Holdings unavailable' },
+      ],
+    };
+    expect([...accountsWithErrors(quality, ACCOUNTS)]).toEqual(['plaid-401k']);
+    expect(accountsWithErrors(undefined, ACCOUNTS).size).toBe(0);
   });
 
   it('counts the months with nothing in them since the history began', () => {

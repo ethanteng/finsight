@@ -867,6 +867,10 @@ export function buildCanonicalFactPack(
         addSnapshotFact('retirement_linked_typical_monthly_contribution', `Typical month's contributions less withdrawals into the linked investment accounts, ${span}`, linked.typicalMonthlyNet, 'usd', 'retirementAnalysis.contributions.linked.typicalMonthlyNet');
         addSnapshotFact('retirement_linked_contributions_total', `Total contributions into the linked investment accounts, ${span}`, linked.contributed, 'usd', 'retirementAnalysis.contributions.linked.contributed');
         addSnapshotFact('retirement_linked_withdrawals_total', `Total withdrawals from the linked investment accounts, ${span}`, linked.withdrawn, 'usd', 'retirementAnalysis.contributions.linked.withdrawn');
+        if (typeof linked.accountsRead === 'number' && typeof linked.accountsHeld === 'number' && linked.accountsRead < linked.accountsHeld) {
+          addSnapshotFact('retirement_linked_contribution_accounts_read', 'Linked investment accounts whose activity the contribution figure reads', linked.accountsRead, 'count', 'retirementAnalysis.contributions.linked.accountsRead');
+          addSnapshotFact('retirement_linked_investment_accounts', 'Linked investment accounts holding the projection\'s investments', linked.accountsHeld, 'count', 'retirementAnalysis.contributions.linked.accountsHeld');
+        }
       }
     }
 
