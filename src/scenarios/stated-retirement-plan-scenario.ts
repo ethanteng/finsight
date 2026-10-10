@@ -1252,10 +1252,12 @@ const STATED_RETIREMENT_PLAN_INPUT_REQUEST: InputRequestSpec = {
       label: 'Does the pension rise with inflation?',
       kind: 'choice',
       options: [
-        { value: 'fixed', label: 'No, a fixed amount' },
-        { value: 'rises_with_inflation', label: 'Yes, it rises with inflation' },
+        { value: 'fixed', label: 'a fixed amount that does not rise with inflation' },
+        { value: 'rises_with_inflation', label: 'adjusted for inflation' },
       ],
-      sentence: 'Pension rises with inflation: {value}.',
+      // Neutral wording: a prefix like "Pension rises with inflation" would
+      // contradict the fixed choice and bias the next planner extraction.
+      sentence: 'My pension is {value}.',
       defaultNote: 'A fixed amount if left blank',
     },
     {
