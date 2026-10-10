@@ -48,6 +48,8 @@ const LABELS: Record<SaveOfferKey, string> = {
   annualRetirementSpending: 'Spending in retirement',
   annualContribution: 'Saving each year until you retire',
   retirementIncome: 'Pension or other income in retirement',
+  retirementIncomeStartAge: 'Pension starts at',
+  retirementIncomeInflation: 'Pension rises with inflation',
   socialSecurityAnnual: 'Social Security',
   socialSecurityStartAge: 'Social Security starts at',
   planThroughAge: 'Plan through age',
@@ -55,13 +57,26 @@ const LABELS: Record<SaveOfferKey, string> = {
   investedBalance: 'Invested today',
 };
 
-const MIX_LABELS: Record<string, string> = { conservative: 'Conservative', balanced: 'Balanced', growth: 'Growth' };
+const CHOICE_LABELS: Record<string, string> = {
+  conservative: 'Conservative',
+  balanced: 'Balanced',
+  growth: 'Growth',
+  fixed: 'No, a fixed amount',
+  rises_with_inflation: 'Yes',
+};
+
+const AGE_KEYS: ReadonlySet<SaveOfferKey> = new Set([
+  'retirementAge',
+  'retirementIncomeStartAge',
+  'socialSecurityStartAge',
+  'planThroughAge',
+]);
 
 function display(key: SaveOfferKey, value: number | string): string {
-  if (typeof value === 'string') return MIX_LABELS[value] ?? value;
+  if (typeof value === 'string') return CHOICE_LABELS[value] ?? value;
   const dollars = `$${Math.round(value).toLocaleString('en-US')}`;
   if (key === 'investedBalance') return dollars;
-  if (key === 'retirementAge' || key === 'socialSecurityStartAge' || key === 'planThroughAge') return String(value);
+  if (AGE_KEYS.has(key)) return String(value);
   return `${dollars} a year`;
 }
 

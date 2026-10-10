@@ -14,6 +14,9 @@
  */
 
 import type { FinancialContextSnapshot } from './types';
+import { PENSION_LABEL, type RetirementIncomeOrigins } from './retirement-income';
+import { savedOn } from '../services/stated-figures';
+import type { RetirementIncomeStream } from '../retirement-analytics/types';
 import {
   RETIREMENT_CALCULATOR_ID,
   describeRetirementScenarioExecution,
@@ -93,9 +96,49 @@ export function describeRetirementAssumptions(
           : `${LABELS[field]} ${formatValue(field, value)}`
     );
   }
+  parts.push(...describeIncome(values.incomeStreams, analysis._incomeOrigins));
   if (parts.length === 0) return null;
 
   return `This projection assumes ${parts.join('; ')}. Tell me if any of that is wrong and I will re-run it.`;
+}
+
+function money(value: number): string {
+  return `$${Math.round(value).toLocaleString('en-US')}`;
+}
+
+/**
+ * Each income the projection counted, when it starts, and which of its terms
+ * were assumed or came from Your numbers. A projection that counts none says
+ * so, because Social Security is the largest figure most plans leave out.
+ * Analyses recorded before income was resolved say nothing either way.
+ */
+function describeIncome(
+  streams: readonly RetirementIncomeStream[] | undefined,
+  origins: RetirementIncomeOrigins | undefined
+): string[] {
+  if (!origins) return [];
+  if (!streams || streams.length === 0) {
+    return ['no Social Security or pension, since I have none for you (tell me yours and I will count it)'];
+  }
+  const savedNote = origins.savedAt ? ` (from Your numbers, saved ${savedOn(origins.savedAt)})` : '';
+  return streams.map((stream) => {
+    if (stream.label !== PENSION_LABEL) {
+      const assumedStart = origins.socialSecurity?.startAge === 'default' ? ', an age I assumed' : '';
+      const saved = origins.socialSecurity?.amount === 'saved' ? savedNote : '';
+      return `Social Security ${money(stream.annualAmount)} a year in today's dollars from ${stream.startAge}${assumedStart}${saved}`;
+    }
+    const pension = origins.pension;
+    const terms = stream.inflationAdjusted
+      ? `a pension of ${money(stream.annualAmount)} a year in today's dollars from ${stream.startAge}, rising with inflation`
+      : `a pension of ${money(stream.annualAmount)} a year from ${stream.startAge}, a fixed amount that buys less each year prices rise`;
+    const assumed = [
+      pension?.startAge === 'default' ? 'that it starts when you retire' : null,
+      pension?.inflation === 'default' ? 'that it does not rise with inflation' : null,
+    ].filter((item): item is string => Boolean(item));
+    const assumedNote = assumed.length > 0 ? ` (I assumed ${assumed.join(' and ')})` : '';
+    const saved = pension?.amount === 'saved' ? savedNote : '';
+    return `${terms}${assumedNote}${saved}`;
+  });
 }
 
 /** Deterministic disclosure for what-if results appended after model validation. */

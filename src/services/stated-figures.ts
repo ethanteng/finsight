@@ -20,6 +20,8 @@ export const STATED_FIGURE_KEYS = [
   'annualRetirementSpending',
   'annualContribution',
   'retirementIncome',
+  'retirementIncomeStartAge',
+  'retirementIncomeInflation',
   'socialSecurityAnnual',
   'socialSecurityStartAge',
   'planThroughAge',
@@ -39,6 +41,14 @@ export interface StatedFigure {
 export type StatedFigures = Partial<Record<StatedFigureKey, StatedFigure>>;
 
 export const ALLOCATION_PRESETS = ['conservative', 'balanced', 'growth'] as const;
+
+/**
+ * Whether a pension keeps pace with prices. `fixed` is a dollar amount, as a
+ * pension statement quotes it, that never changes; `rises_with_inflation` is
+ * in today's dollars and indexed, the way Social Security is.
+ */
+export const INCOME_INFLATION_OPTIONS = ['fixed', 'rises_with_inflation'] as const;
+export type IncomeInflation = (typeof INCOME_INFLATION_OPTIONS)[number];
 
 export interface StatedFigureDefinition {
   label: string;
@@ -62,10 +72,16 @@ export const STATED_FIGURE_DEFINITIONS: Record<StatedFigureKey, StatedFigureDefi
   },
   annualContribution: { label: 'What you save a year until you retire', kind: 'usd_per_year', minimum: 0, maximum: 5_000_000 },
   retirementIncome: {
-    label: 'Pension or other income a year from when you retire, in today\'s dollars',
+    label: 'Pension or other income a year',
     kind: 'usd_per_year',
     minimum: 0,
     maximum: 10_000_000,
+  },
+  retirementIncomeStartAge: { label: 'Age the pension or other income starts', kind: 'age', minimum: 30, maximum: 95 },
+  retirementIncomeInflation: {
+    label: 'Whether the pension rises with inflation',
+    kind: 'choice',
+    options: INCOME_INFLATION_OPTIONS,
   },
   socialSecurityAnnual: { label: 'Social Security a year, in today\'s dollars', kind: 'usd_per_year', minimum: 0, maximum: 250_000 },
   socialSecurityStartAge: { label: 'Age Social Security starts', kind: 'age', minimum: 50, maximum: 80 },

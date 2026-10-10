@@ -21,6 +21,7 @@
 import {
   analyzeRetirementPortfolio,
   type RetirementAnalysisOutput,
+  type RetirementIncomeStream,
 } from '../retirement-analytics';
 import type { Holding, Security } from './financial-data-service';
 
@@ -151,6 +152,16 @@ export interface RetirementQuickPlanRequest {
   /** Annual Social Security estimate in today's dollars. */
   socialSecurityAnnual: number;
   socialSecurityStartAge?: number;
+  /**
+   * A pension or other income, a year. A fixed dollar amount unless
+   * `pensionInflationAdjusted`, in which case it is in today's dollars and
+   * rises with prices the way Social Security does.
+   */
+  pensionAnnual?: number;
+  /** When the pension starts; defaults to the retirement age. */
+  pensionStartAge?: number;
+  /** Whether the pension rises with inflation; defaults to false, a fixed amount. */
+  pensionInflationAdjusted?: boolean;
   allocation?: QuickPlanAllocationId;
   lifeExpectancy?: number;
 }
@@ -289,6 +300,8 @@ const RULES: Record<string, NumericRule> = {
   annualContributions: { min: 0, max: 5_000_000, label: 'Annual contributions' },
   socialSecurityAnnual: { min: 0, max: 250_000, label: 'Social Security estimate' },
   socialSecurityStartAge: { min: 50, max: 80, integer: true, label: 'Social Security start age' },
+  pensionAnnual: { min: 0, max: 10_000_000, label: 'Pension or other income' },
+  pensionStartAge: { min: 30, max: 95, integer: true, label: 'Pension start age' },
   lifeExpectancy: { min: 60, max: 110, integer: true, label: 'Life expectancy' },
 };
 
@@ -407,6 +420,12 @@ export function resolveQuickPlanRequest(raw: unknown): NormalizedQuickPlan {
   const annualContributions = optionalNumber('annualContributions', body.annualContributions) ?? 0;
   const socialSecurityStartAge = optionalNumber('socialSecurityStartAge', body.socialSecurityStartAge)
     ?? DEFAULT_SOCIAL_SECURITY_START_AGE;
+  // A pension most often starts when work stops, and most private pensions
+  // pay a fixed amount, so those are the readings of a blank. Overstating
+  // future income is the more expensive mistake.
+  const pensionAnnual = optionalNumber('pensionAnnual', body.pensionAnnual) ?? 0;
+  const pensionStartAge = optionalNumber('pensionStartAge', body.pensionStartAge) ?? retirementAge;
+  const pensionInflationAdjusted = body.pensionInflationAdjusted === true || body.pensionInflationAdjusted === 'true';
 
   const allocationId = body.allocation == null || body.allocation === ''
     ? DEFAULT_ALLOCATION_ID
@@ -438,6 +457,9 @@ export function resolveQuickPlanRequest(raw: unknown): NormalizedQuickPlan {
       annualContributions,
       socialSecurityAnnual,
       socialSecurityStartAge,
+      pensionAnnual,
+      pensionStartAge,
+      pensionInflationAdjusted,
       lifeExpectancy,
       allocation: allocationId as QuickPlanAllocationId,
     },
@@ -534,13 +556,14 @@ function toScenario(
   analysis: RetirementAnalysisOutput
 ): QuickPlanScenario {
   const projected = analysis.metrics.projectedPortfolioAtWithdrawalStart;
-  // Social Security only offsets spending once it starts. When it starts after
-  // this scenario's retirement age, the portfolio funds the whole of the first
-  // year on its own -- which is exactly the stretch that sequence risk punishes.
-  const socialSecurityHasStarted = inputs.socialSecurityStartAge <= retirementAge;
-  const firstYearPortfolioWithdrawal = Math.max(
+  // Income only offsets spending once it starts. When it starts after this
+  // scenario's retirement age, the portfolio funds the whole of the first year
+  // on its own -- which is exactly the stretch that sequence risk punishes.
+  // Measured by the engine rather than subtracted here: a fixed pension is
+  // worth whatever each sequence's inflation left of it by then.
+  const firstYearPortfolioWithdrawal = analysis.metrics.firstYearPortfolioWithdrawal ?? Math.max(
     0,
-    annualSpending - (socialSecurityHasStarted ? inputs.socialSecurityAnnual : 0)
+    annualSpending - (inputs.socialSecurityStartAge <= retirementAge ? inputs.socialSecurityAnnual : 0)
   );
   // The engine's maximum drawdown is deliberately not surfaced here. It measures
   // the portfolio's peak-to-trough path including withdrawals, so a sequence
@@ -589,8 +612,33 @@ function buildLimitations(
     'Taxes, account types, required minimum distributions, and Roth conversions are not modeled.',
     'Health insurance before Medicare, one-off expenses, and changes in spending over retirement are not modeled — ' +
       'spending is held constant in real terms.',
-    'Home equity, rental income, pensions other than the income you entered, and inheritances are not included.',
+    inputs.pensionAnnual > 0
+      ? 'Home equity, rental income, other pensions, and inheritances are not included.'
+      : 'Home equity, rental income, pensions other than the income you entered, and inheritances are not included.',
   ];
+  if (inputs.pensionAnnual > 0) {
+    const pension = `$${Math.round(inputs.pensionAnnual).toLocaleString('en-US')} a year`;
+    limitations.push(
+      inputs.pensionInflationAdjusted
+        ? `Your pension of ${pension} is in today's dollars and rises with inflation from age ${inputs.pensionStartAge}.`
+        : `Your pension of ${pension} from age ${inputs.pensionStartAge} is a fixed amount: it never rises, so each year ` +
+          'it buys less than the year before, and it is worth less by the time it starts than it is today.'
+    );
+    if (inputs.pensionStartAge > inputs.retirementAge) {
+      const gapYears = inputs.pensionStartAge - inputs.retirementAge;
+      limitations.push(
+        `The pension starts at ${inputs.pensionStartAge}, so the portfolio funds ` +
+          (gapYears === 1
+            ? 'its share of the year between retiring and the pension starting on its own.'
+            : `its share of all ${gapYears} years between retiring and the pension starting on its own.`)
+      );
+    } else if (inputs.pensionStartAge < inputs.retirementAge) {
+      limitations.push(
+        `The pension starts at ${inputs.pensionStartAge}, before you retire at ${inputs.retirementAge}; the payments ` +
+          'before you retire are not added to the portfolio — this model only uses income to reduce a withdrawal.'
+      );
+    }
+  }
   // Claiming before retiring is unusual but reachable from the form, and the
   // simulation neither spends nor banks the benefit in those years: it offsets
   // a withdrawal, and there is no withdrawal yet. Say so rather than let a
@@ -632,6 +680,28 @@ function buildLimitations(
   return limitations;
 }
 
+/** Social Security and the pension, each on its own schedule. */
+export function quickPlanIncomeStreams(inputs: RetirementQuickPlanResult['inputs']): RetirementIncomeStream[] {
+  const streams: RetirementIncomeStream[] = [];
+  if (inputs.socialSecurityAnnual > 0) {
+    streams.push({
+      label: 'Social Security',
+      annualAmount: inputs.socialSecurityAnnual,
+      startAge: inputs.socialSecurityStartAge,
+      inflationAdjusted: true,
+    });
+  }
+  if (inputs.pensionAnnual > 0) {
+    streams.push({
+      label: 'pension or other income',
+      annualAmount: inputs.pensionAnnual,
+      startAge: inputs.pensionStartAge,
+      inflationAdjusted: inputs.pensionInflationAdjusted,
+    });
+  }
+  return streams;
+}
+
 /**
  * Run the visitor's plan plus a small set of variants.
  *
@@ -657,9 +727,7 @@ async function computeRetirementQuickPlan(
       lifeExpectancy: inputs.lifeExpectancy,
       annualWithdrawalAmount: annualSpending,
       annualContributionAmount: inputs.annualContributions,
-      retirementIncome: inputs.socialSecurityAnnual > 0
-        ? { annualAmount: inputs.socialSecurityAnnual, startAge: inputs.socialSecurityStartAge }
-        : undefined,
+      incomeStreams: quickPlanIncomeStreams(inputs),
     });
 
   const primaryAnalysis = await analyze(inputs.retirementAge, inputs.annualSpending);
@@ -819,6 +887,9 @@ export async function runRetirementQuickPlan(
     inputs.annualContributions,
     inputs.socialSecurityAnnual,
     inputs.socialSecurityStartAge,
+    inputs.pensionAnnual,
+    inputs.pensionStartAge,
+    inputs.pensionInflationAdjusted,
     inputs.lifeExpectancy,
     inputs.allocation,
   ]);

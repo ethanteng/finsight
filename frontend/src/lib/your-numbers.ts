@@ -9,6 +9,8 @@ export const STATED_FIGURE_KEYS = [
   'annualRetirementSpending',
   'annualContribution',
   'retirementIncome',
+  'retirementIncomeStartAge',
+  'retirementIncomeInflation',
   'socialSecurityAnnual',
   'socialSecurityStartAge',
   'planThroughAge',

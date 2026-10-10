@@ -92,6 +92,20 @@ const SCENARIO_OVERRIDE_INPUT_FIELDS = [
 ] as const;
 
 /**
+ * Income the holdings what-if cannot change. It is not in the scenario
+ * override shape, so when a what-if rebuilds the baseline those fields must be
+ * copied through explicitly — otherwise "retire at 62 with $30k of Social
+ * Security" would strip the benefit from both the baseline and the variant
+ * that inherits it.
+ */
+const BASELINE_INCOME_FIELDS = [
+  'socialSecurityAnnual',
+  'socialSecurityStartAge',
+  'pensionAnnual',
+  'pensionStartAge',
+] as const;
+
+/**
  * Keep hypothetical scenario values out of the canonical baseline. The same
  * semantic pass extracts both shapes, so without this boundary an age or
  * spending override can rebuild the baseline before the scenario runner sees
@@ -128,6 +142,15 @@ export function retirementInputsForBaseline(
     if (overridden.has(field) || inputs[field] === undefined) continue;
     baseline[field] = inputs[field];
     if (inputs.sources[field]) baseline.sources[field] = inputs.sources[field];
+  }
+  for (const field of BASELINE_INCOME_FIELDS) {
+    if (inputs[field] === undefined) continue;
+    baseline[field] = inputs[field];
+    if (inputs.sources[field]) baseline.sources[field] = inputs.sources[field];
+  }
+  if (inputs.pensionInflation !== undefined) {
+    baseline.pensionInflation = inputs.pensionInflation;
+    if (inputs.sources.pensionInflation) baseline.sources.pensionInflation = inputs.sources.pensionInflation;
   }
   return baseline;
 }
@@ -187,7 +210,12 @@ const RETIREMENT_FIELDS = [
   'annualWithdrawalAmount',
   'withdrawalStartAge',
   'lifeExpectancy',
+  'socialSecurityAnnual',
+  'socialSecurityStartAge',
+  'pensionAnnual',
+  'pensionStartAge',
 ] as const;
+const RETIREMENT_SOURCE_FIELDS = [...RETIREMENT_FIELDS, 'pensionInflation'] as const;
 const NULLABLE_NUMBER = { type: ['number', 'null'] as const };
 const NULLABLE_STRING = { type: ['string', 'null'] as const };
 
@@ -208,18 +236,15 @@ export const CONTEXT_PLAN_JSON_SCHEMA = {
     retirementInputs: {
       type: 'object',
       additionalProperties: false,
-      required: [...RETIREMENT_FIELDS, 'sources'],
+      required: [...RETIREMENT_SOURCE_FIELDS, 'sources'],
       properties: {
-        currentAge: NULLABLE_NUMBER,
-        retirementAge: NULLABLE_NUMBER,
-        annualWithdrawalAmount: NULLABLE_NUMBER,
-        withdrawalStartAge: NULLABLE_NUMBER,
-        lifeExpectancy: NULLABLE_NUMBER,
+        ...Object.fromEntries(RETIREMENT_FIELDS.map((field) => [field, NULLABLE_NUMBER])),
+        pensionInflation: { type: 'string', enum: ['unspecified', 'fixed', 'rises_with_inflation'] },
         sources: {
           type: 'object',
           additionalProperties: false,
-          required: [...RETIREMENT_FIELDS],
-          properties: Object.fromEntries(RETIREMENT_FIELDS.map((field) => [field, NULLABLE_STRING])),
+          required: [...RETIREMENT_SOURCE_FIELDS],
+          properties: Object.fromEntries(RETIREMENT_SOURCE_FIELDS.map((field) => [field, NULLABLE_STRING])),
         },
       },
     },
@@ -243,7 +268,7 @@ Important boundaries:
 - needsSecondaryValidation is true for projections, comparisons, recommendations, affordability judgments, simulations, optimization, tax reasoning, or other conclusions where an independent reasoning review is useful.
 - The application enforces access, subscription, dependencies and calculations. You only plan context.
 
-Also extract retirement inputs the user actually stated in this decision. Never estimate or supply typical values. annualWithdrawalAmount means intended annual retirement spending in today's dollars, not salary, savings, portfolio value, or current spending. Convert a monthly amount only when it clearly refers to that retirement spending. A short answer takes its meaning from the assistant question immediately before it. The newest revision wins. Put the user's own short wording in sources; use null for an absent value and source.
+Also extract retirement inputs the user actually stated in this decision. Never estimate or supply typical values. annualWithdrawalAmount means intended annual retirement spending in today's dollars, not salary, savings, portfolio value, or current spending. Convert a monthly amount only when it clearly refers to that retirement spending. socialSecurityAnnual and socialSecurityStartAge are the user's Social Security benefit per year and the age it starts; pensionAnnual and pensionStartAge are a pension, annuity or other retirement income that is not Social Security, per year, and when it starts; pensionInflation is fixed when the user says that pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has one or rises with inflation, and otherwise unspecified with a null source. Convert a monthly benefit to a year only when it clearly is one. A short answer takes its meaning from the assistant question immediately before it. The newest revision wins. Put the user's own short wording in sources; use null for an absent value and source.
 
 Registered calculator contracts:
 ${scenarioCalculatorRegistry.plannerInstructions()}

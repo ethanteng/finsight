@@ -51,6 +51,8 @@ Numbers in the user's earlier messages in the same decision are `user_input` fac
 | Coast FIRE | Retirement age | 65, while still ahead of the user | Named in the disclosure |
 | Coast FIRE | Spending | Current spending from cash flow | Named in the disclosure |
 | Home affordability | Cash, income, spending | Stated take-home pay, spending and cash; an unlinked zero is unknown, never a shortfall | Assumption ledger and disclosure |
+| Every retirement calculator | Social Security start age | 67, for a benefit the user stated or saved | Named in the disclosure |
+| Every retirement calculator | Pension start age and inflation | The retirement age, and a fixed amount | "I assumed it starts when you retire" / "I assumed it does not rise with inflation" |
 
 Current age, how much someone has invested, and (for Coast FIRE) spending with nothing to read it from are still asked for. Nothing the application holds can stand in for them.
 

@@ -8,6 +8,7 @@ import {
   type WithdrawalPolicy,
 } from '../retirement-analytics';
 import type { ScenarioCalculatorDefinition } from './calculator-registry';
+import { incomeForRetirementAge, type RetirementIncomeOrigins } from '../openai/retirement-income';
 
 export const RETIREMENT_SCENARIO_VERSION = 2 as const;
 export const RETIREMENT_CALCULATOR_ID = 'retirement' as const;
@@ -331,7 +332,8 @@ const OVERRIDE_ASSUMPTIONS: Record<RetirementOverrideField, {
 
 function resolveVariant(
   baseInput: RetirementAnalysisInput,
-  planned: PlannedRetirementVariant
+  planned: PlannedRetirementVariant,
+  incomeOrigins?: RetirementIncomeOrigins
 ): {
   input: RetirementAnalysisInput;
   policy: WithdrawalPolicy;
@@ -357,6 +359,12 @@ function resolveVariant(
       origin: 'user',
       source,
     });
+  }
+  // A pension whose start was only ever "when you retire" moves with a
+  // what-if that retires at another age; everything else the user stated
+  // about their income stays as it is.
+  if (input.incomeStreams?.length && input.retirementAge !== baseInput.retirementAge) {
+    input.incomeStreams = incomeForRetirementAge(input.incomeStreams, incomeOrigins, input.retirementAge);
   }
 
   return { input, policy: resolvedPolicy.policy, assumptions };
@@ -386,6 +394,7 @@ function inputKey(input: RetirementAnalysisInput, policy: WithdrawalPolicy): str
     annualWithdrawalAmount: input.annualWithdrawalAmount,
     withdrawalStartAge: input.withdrawalStartAge,
     annualContributionAmount: input.annualContributionAmount ?? 0,
+    incomeStreams: input.incomeStreams ?? [],
     policy,
   });
 }
@@ -434,6 +443,7 @@ function scenarioId(
     annualWithdrawalAmount: input.annualWithdrawalAmount,
     withdrawalStartAge: input.withdrawalStartAge,
     annualContributionAmount: input.annualContributionAmount ?? 0,
+    incomeStreams: input.incomeStreams ?? [],
     policy,
     result: {
       metrics: analysis.metrics,
@@ -570,6 +580,9 @@ export async function runRetirementScenario(
     annualWithdrawalAmount: stored.annualWithdrawalAmount,
     withdrawalStartAge: stored.withdrawalStartAge,
     annualContributionAmount: 0,
+    // The baseline's Social Security and pension, so a what-if changes only
+    // what the user asked to change.
+    incomeStreams: stored.incomeStreams ?? [],
     // Variants must exclude exactly what the baseline excluded, or a scenario
     // comparison would attribute a coverage difference to the change modeled.
     unmodeledInvestments: snapshot.investments?.unmodeledInvestments ?? null,
@@ -588,7 +601,7 @@ export async function runRetirementScenario(
 
   const unique = new Map<string, ReturnType<typeof resolveVariant>>();
   for (const planned of plannedVariants.slice(0, 2)) {
-    const resolved = resolveVariant(baseInput, planned);
+    const resolved = resolveVariant(baseInput, planned, baseline._incomeOrigins);
     const invalidReason = validateVariantInput(resolved.input);
     if (invalidReason) return unavailable(startedAt, invalidReason);
     const key = inputKey(resolved.input, resolved.policy);
