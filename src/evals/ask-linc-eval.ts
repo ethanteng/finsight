@@ -290,6 +290,45 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
     },
   });
 
+  // The same projection for someone whose linked accounts show what they add:
+  // the typical month reaches the run, the disclosure says where it came from,
+  // and the answer can cite it and the totals behind it.
+  const contributionSnapshot = retirementSnapshot();
+  contributionSnapshot.retirementAnalysis = {
+    ...contributionSnapshot.retirementAnalysis!,
+    dataQuality: {
+      ...contributionSnapshot.retirementAnalysis!.dataQuality,
+      assumptions: ['Portfolio grows for 20 years before withdrawals begin with $18,000 in annual contributions, indexed with historical CPI'],
+      missingData: [],
+    },
+    _storedInputParams: { ...contributionSnapshot.retirementAnalysis!._storedInputParams, annualContributionAmount: 18_000 },
+    _contributionOrigin: {
+      origin: 'linked',
+      linked: {
+        annualAmount: 18_000,
+        typicalMonthlyNet: 1_500,
+        months: 12,
+        firstMonth: '2025-10',
+        lastMonth: '2026-09',
+        contributed: 19_000,
+        withdrawn: 1_000,
+      },
+    },
+  };
+  const contribution = await runAskLincAnalysis({
+    question: 'Am I saving enough for retirement?',
+    enableValidation: false,
+    evaluation: {
+      snapshot: contributionSnapshot,
+      skipToneConfig: true,
+      model: () => jsonResponse(
+        'Your projection adds $18,000 a year until withdrawals begin, what your linked accounts receive in a typical month.',
+        { annual_contribution: { value: 18_000, unit: 'usd', provenance: 'retirement_annual_contribution' } }
+      ),
+    },
+  });
+  const contributionFacts = contribution.showTheMathData!.evidenceManifest.facts;
+
   // The first follow-up of someone the Coast FIRE calculator sent here: the
   // same question, asked again in Ask Linc, with nothing linked. This used to
   // end on "link an investment account" and told them the calculator's own
@@ -602,6 +641,19 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
         keyNumberValue(retirement, 'withdrawal_rate') === 4 &&
         retirement.showTheMathData!.evidenceManifest.validation.deterministic.valid,
       detail: 'The real pipeline explains deterministic retirement-start facts and carries the accumulation assumption.',
+    },
+    {
+      id: 'linked-contributions-reach-the-projection',
+      category: 'retirement',
+      passed: contribution.structuredResponse.summary.includes(
+        'adding $18,000 a year in today\'s dollars until withdrawals begin at 65: what your linked investment accounts ' +
+        'received in a typical month from October 2025 to September 2026, less withdrawals, times twelve'
+      ) &&
+        keyNumberValue(contribution, 'annual_contribution') === 18_000 &&
+        contributionFacts.some(fact => fact.id === 'retirement_linked_contributions_total' && fact.value === 19_000) &&
+        contributionFacts.some(fact => fact.id === 'retirement_linked_withdrawals_total' && fact.value === 1_000) &&
+        contribution.showTheMathData!.evidenceManifest.validation.deterministic.valid,
+      detail: 'A contribution read from linked investment activity is disclosed with its months and method, and the answer can cite it and the totals behind it.',
     },
     {
       id: 'calculator-follow-up-answers-without-linked-holdings',

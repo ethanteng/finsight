@@ -594,6 +594,45 @@ describe('context planner', () => {
     expect(whatIf?.socialSecurityStartAge).toBeUndefined();
   });
 
+  it('keeps the contribution the plan states and withholds only a what-if contribution', () => {
+    const withContribution = (stated: number, whatIf: number) => {
+      const raw = rawPlan(['retirement_analysis']);
+      raw.retirementInputs.annualContributionAmount = stated;
+      raw.retirementInputs.sources.annualContributionAmount = `I save $${stated} a year`;
+      raw.scenarios.retirement = {
+        requested: true,
+        primary: {
+          type: 'historical_cpi',
+          annualRate: null,
+          source: null,
+          overrides: {
+            annualWithdrawalAmount: null,
+            annualContributionAmount: whatIf,
+            retirementAge: null,
+            withdrawalStartAge: null,
+            lifeExpectancy: null,
+            socialSecurityStartAge: null,
+            sources: {
+              annualWithdrawalAmount: null,
+              annualContributionAmount: `what if I saved $${whatIf}`,
+              retirementAge: null,
+              withdrawalStartAge: null,
+              lifeExpectancy: null,
+              socialSecurityStartAge: null,
+            },
+          },
+        },
+        comparison: { type: 'none', annualRate: null, source: null, overrides: {} },
+      };
+      return parseContextPlan(raw).retirementInputs;
+    };
+
+    // "I save $20,000 a year; what if I saved $30,000?": $20,000 is the plan.
+    expect(withContribution(20_000, 30_000)).toMatchObject({ annualContributionAmount: 20_000 });
+    // The what-if read twice is not the plan.
+    expect(withContribution(30_000, 30_000)?.annualContributionAmount).toBeUndefined();
+  });
+
   it('falls back to the variant values when the baseline has nothing to run on', () => {
     const scenario: any = {
       requested: true,

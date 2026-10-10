@@ -15,6 +15,7 @@
 
 import type { FinancialContextSnapshot } from './types';
 import { PENSION_LABEL, type RetirementIncomeOrigins } from './retirement-income';
+import type { RetirementContributionOrigin } from './retirement-contributions';
 import { savedOn } from '../services/stated-figures';
 import { describeClaimingAdjustmentBriefly } from '../services/social-security-claiming';
 import type { RetirementIncomeStream } from '../retirement-analytics/types';
@@ -98,6 +99,7 @@ export function describeRetirementAssumptions(
     );
   }
   parts.push(...describeIncome(values.incomeStreams, analysis._incomeOrigins));
+  parts.push(...describeContribution(values, analysis._contributionOrigin));
   if (parts.length === 0) return null;
 
   return `This projection assumes ${parts.join('; ')}. Tell me if any of that is wrong and I will re-run it.`;
@@ -142,6 +144,54 @@ function describeIncome(
     const saved = pension?.amount === 'saved' ? savedNote : '';
     return `${terms}${assumedNote}${saved}`;
   });
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function monthName(month: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  return match ? `${MONTH_NAMES[Number(match[2]) - 1]} ${match[1]}` : month;
+}
+
+/**
+ * What the projection adds each year until withdrawals begin, and where that
+ * came from. Linked accounts give a typical month, which a once-a-year deposit
+ * is not part of, so that figure says so. Silent for a projection whose
+ * withdrawals have begun, and for one recorded before contributions resolved.
+ */
+function describeContribution(
+  values: NonNullable<NonNullable<FinancialContextSnapshot['retirementAnalysis']>['_storedInputParams']>,
+  origin: RetirementContributionOrigin | undefined
+): string[] {
+  if (!origin) return [];
+  const { currentAge, withdrawalStartAge } = values;
+  if (typeof currentAge !== 'number' || typeof withdrawalStartAge !== 'number' || withdrawalStartAge <= currentAge) {
+    return [];
+  }
+  const amount = values.annualContributionAmount ?? 0;
+  const saving = `adding ${money(amount)} a year in today's dollars until withdrawals begin at ${withdrawalStartAge}`;
+  switch (origin.origin) {
+    case 'stated':
+      return [`${saving}, the figure you gave me`];
+    case 'saved':
+      return [`${saving}${origin.savedAt ? ` (from Your numbers, saved ${savedOn(origin.savedAt)})` : ' (from Your numbers)'}`];
+    case 'linked': {
+      const linked = origin.linked;
+      if (!linked) return [saving];
+      const span = `${monthName(linked.firstMonth)} to ${monthName(linked.lastMonth)}`;
+      const onceAYear = 'a deposit made once a year, like an IRA contribution, is not part of a typical month, so tell me if you make one';
+      return amount > 0
+        ? [`${saving}: what your linked investment accounts received in a typical month from ${span}, less withdrawals, ` +
+          `times twelve (${onceAYear})`]
+        : [`no new contributions, since in a typical month from ${span} your linked investment accounts received ` +
+          `nothing after withdrawals (${onceAYear})`];
+    }
+    case 'none':
+      return ['no new contributions before withdrawals begin, since I have none for you (tell me what you add each year and I will count it)'];
+  }
 }
 
 /** Deterministic disclosure for what-if results appended after model validation. */

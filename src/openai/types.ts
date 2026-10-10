@@ -8,6 +8,7 @@ import type { UnmodeledInvestmentValue } from '../services/investment-coverage';
 import type { PersonalContextValues } from '../profile/personal-context';
 import type { StatedFigures } from '../services/stated-figures';
 import type { RetirementIncomeStream } from '../retirement-analytics/types';
+import type { LinkedContributions, RetirementContributionOrigin } from './retirement-contributions';
 import type { RetirementIncomeOrigins } from './retirement-income';
 import type { CashFlowForecastContext } from './cash-flow-forecast-context';
 
@@ -60,6 +61,12 @@ export interface InvestmentSnapshot {
    * the canonical total. Present only when something is actually excluded.
    */
   unmodeledInvestments?: UnmodeledInvestmentValue | null;
+  /**
+   * The typical month's contributions to the linked accounts that hold these
+   * holdings, read from their activity when a retirement question loads it;
+   * null when the history cannot say. See `retirement-contributions.ts`.
+   */
+  linkedContributions?: LinkedContributions | null;
 }
 
 export interface InvestmentExternalData {
@@ -350,6 +357,8 @@ export interface FinancialContextSnapshot {
       lifeExpectancy?: number;
       /** Social Security and a pension, each on its own schedule; absent before version 11. */
       incomeStreams?: RetirementIncomeStream[];
+      /** A year until withdrawals begin, in today's dollars; absent on runs that counted none. */
+      annualContributionAmount?: number;
     };
     _evidence?: {
       recordId: string;
@@ -365,6 +374,8 @@ export interface FinancialContextSnapshot {
     _assumedInputs?: Partial<Record<'retirementAge' | 'annualWithdrawalAmount', 'earlier' | 'current_spending' | 'convention'>>;
     /** Where each income's terms came from. See `retirement-income.ts`. */
     _incomeOrigins?: RetirementIncomeOrigins;
+    /** Where the contribution came from. See `retirement-contributions.ts`. */
+    _contributionOrigin?: RetirementContributionOrigin;
     _inputSources?: {
       currentAge?: string;
       retirementAge?: string;
