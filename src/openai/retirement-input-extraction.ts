@@ -20,6 +20,8 @@ export interface ExtractedRetirementInputs {
   /** Social Security a year, in today's dollars. */
   socialSecurityAnnual?: number;
   socialSecurityStartAge?: number;
+  /** The claiming age the user's Social Security figure is for, when they named one. */
+  socialSecurityAmountAge?: number;
   /** A pension or other income that is not Social Security, a year. */
   pensionAnnual?: number;
   pensionStartAge?: number;
@@ -36,6 +38,7 @@ type ExtractedField =
   | 'lifeExpectancy'
   | 'socialSecurityAnnual'
   | 'socialSecurityStartAge'
+  | 'socialSecurityAmountAge'
   | 'pensionAnnual'
   | 'pensionStartAge';
 
@@ -47,6 +50,7 @@ const FIELDS: ExtractedField[] = [
   'lifeExpectancy',
   'socialSecurityAnnual',
   'socialSecurityStartAge',
+  'socialSecurityAmountAge',
   'pensionAnnual',
   'pensionStartAge',
 ];
@@ -70,6 +74,8 @@ const RANGES: Record<ExtractedField, { min: number; max: number; integer: boolea
   // statement ("no pension"), so it is kept.
   socialSecurityAnnual: { min: 0, max: 250_000, integer: false },
   socialSecurityStartAge: { min: 50, max: 80, integer: true },
+  // Ages a retirement benefit can be claimed at, and so be quoted for.
+  socialSecurityAmountAge: { min: 62, max: 70, integer: true },
   pensionAnnual: { min: 0, max: 10_000_000, integer: false },
   pensionStartAge: { min: 30, max: 95, integer: true },
 };

@@ -16,6 +16,7 @@
 import type { FinancialContextSnapshot } from './types';
 import { PENSION_LABEL, type RetirementIncomeOrigins } from './retirement-income';
 import { savedOn } from '../services/stated-figures';
+import { describeClaimingAdjustmentBriefly } from '../services/social-security-claiming';
 import type { RetirementIncomeStream } from '../retirement-analytics/types';
 import {
   RETIREMENT_CALCULATOR_ID,
@@ -125,7 +126,9 @@ function describeIncome(
     if (stream.label !== PENSION_LABEL) {
       const assumedStart = origins.socialSecurity?.startAge === 'default' ? ', an age I assumed' : '';
       const saved = origins.socialSecurity?.amount === 'saved' ? savedNote : '';
-      return `Social Security ${money(stream.annualAmount)} a year in today's dollars from ${stream.startAge}${assumedStart}${saved}`;
+      const claiming = origins.socialSecurity?.claiming;
+      const claimed = claiming ? ` (${describeClaimingAdjustmentBriefly(claiming)})` : '';
+      return `Social Security ${money(stream.annualAmount)} a year in today's dollars from ${stream.startAge}${assumedStart}${claimed}${saved}`;
     }
     const pension = origins.pension;
     const terms = stream.inflationAdjusted

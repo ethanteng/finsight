@@ -11,6 +11,11 @@
 
 import type { RetirementIncomeStream } from '../retirement-analytics/types';
 import {
+  benefitAtClaimingAge,
+  socialSecurityQuoteAge,
+  type ClaimingAdjustment,
+} from '../services/social-security-claiming';
+import {
   INCOME_INFLATION_OPTIONS,
   savedChoice,
   savedNumber,
@@ -28,7 +33,15 @@ export const PENSION_LABEL = 'pension or other income';
 export type IncomeTermOrigin = 'stated' | 'saved' | 'default';
 
 export interface RetirementIncomeOrigins {
-  socialSecurity?: { amount: Exclude<IncomeTermOrigin, 'default'>; startAge: IncomeTermOrigin };
+  socialSecurity?: {
+    amount: Exclude<IncomeTermOrigin, 'default'>;
+    startAge: IncomeTermOrigin;
+    /**
+     * Set when the figure was for another claiming age: the stream is then the
+     * benefit at its start age by Social Security's claiming rules.
+     */
+    claiming?: ClaimingAdjustment;
+  };
   pension?: {
     amount: Exclude<IncomeTermOrigin, 'default'>;
     startAge: IncomeTermOrigin;
@@ -42,6 +55,8 @@ export interface RetirementIncomeOrigins {
 export interface StatedRetirementIncome {
   socialSecurityAnnual?: number;
   socialSecurityStartAge?: number;
+  /** The claiming age the stated figure is for, when the user named one. */
+  socialSecurityAmountAge?: number;
   pensionAnnual?: number;
   pensionStartAge?: number;
   pensionInflation?: IncomeInflation;
@@ -59,13 +74,16 @@ function isIncomeInflation(value: unknown): value is IncomeInflation {
 /**
  * The incomes the projection counts. A stated amount wins even when it is
  * zero: "I won't get a pension" is a statement about the plan, not a blank.
+ * A Social Security figure for one claiming age, claimed at another, counts
+ * as what Social Security's own rules pay there.
  */
 export function resolveRetirementIncome(args: {
   stated?: StatedRetirementIncome;
   statedFigures?: StatedFigures;
   retirementAge: number;
+  currentAge: number;
 }): ResolvedRetirementIncome {
-  const { stated = {}, statedFigures, retirementAge } = args;
+  const { stated = {}, statedFigures, retirementAge, currentAge } = args;
   const streams: RetirementIncomeStream[] = [];
   const origins: RetirementIncomeOrigins = {};
   const savedDates: string[] = [];
@@ -79,10 +97,29 @@ export function resolveRetirementIncome(args: {
   if (socialSecurityAnnual !== undefined && socialSecurityAnnual > 0) {
     const savedStart = savedNumber(statedFigures, 'socialSecurityStartAge');
     const startAge = stated.socialSecurityStartAge ?? fromSaved(savedStart) ?? DEFAULT_PROJECTION_SOCIAL_SECURITY_START_AGE;
-    streams.push({ label: SOCIAL_SECURITY_LABEL, annualAmount: socialSecurityAnnual, startAge, inflationAdjusted: true });
+    const amountFromSaved = stated.socialSecurityAnnual === undefined;
+    const claiming = benefitAtClaimingAge({
+      amount: socialSecurityAnnual,
+      quotedAtAge: socialSecurityQuoteAge({
+        namedAge: stated.socialSecurityAmountAge,
+        ...(amountFromSaved && {
+          saved: { startAge: savedStart?.value, defaultStartAge: DEFAULT_PROJECTION_SOCIAL_SECURITY_START_AGE },
+        }),
+        claimAge: startAge,
+      }),
+      claimAge: startAge,
+      currentAge,
+    });
+    streams.push({
+      label: SOCIAL_SECURITY_LABEL,
+      annualAmount: claiming?.amount ?? socialSecurityAnnual,
+      startAge,
+      inflationAdjusted: true,
+    });
     origins.socialSecurity = {
-      amount: stated.socialSecurityAnnual !== undefined ? 'stated' : 'saved',
+      amount: amountFromSaved ? 'saved' : 'stated',
       startAge: stated.socialSecurityStartAge !== undefined ? 'stated' : savedStart ? 'saved' : 'default',
+      ...(claiming && { claiming }),
     };
   }
 
@@ -127,6 +164,46 @@ export function incomeForRetirementAge(
 ): RetirementIncomeStream[] {
   if (retirementAge === null || origins?.pension?.startAge !== 'default') return [...streams];
   return streams.map((stream) => stream.label === PENSION_LABEL ? { ...stream, startAge: retirementAge } : stream);
+}
+
+/**
+ * The same incomes with Social Security claimed at another age: the benefit
+ * the baseline counts is the one for its own start age, so Social Security's
+ * claiming rules move it from there. `claiming` is absent when the rules
+ * change nothing (both ages at or past 70). A benefit the plan has not got,
+ * one already being paid, or a claiming age already past cannot be moved, and
+ * the reason says which.
+ */
+export function incomeClaimedAt(
+  streams: readonly RetirementIncomeStream[],
+  claimAge: number,
+  currentAge: number
+): { streams: RetirementIncomeStream[]; claiming?: ClaimingAdjustment } | { unavailableReason: string } {
+  const socialSecurity = streams.find((stream) => stream.label !== PENSION_LABEL);
+  if (!socialSecurity) {
+    return {
+      unavailableReason: 'This plan has no Social Security benefit to claim at another age. Tell me what Social ' +
+        'Security expects to pay you, and for which claiming age, and I will compare.',
+    };
+  }
+  if (socialSecurity.startAge <= currentAge) {
+    return { unavailableReason: 'Social Security is already being paid in this plan, so when it is claimed cannot change.' };
+  }
+  if (claimAge < currentAge) {
+    return { unavailableReason: `Claiming Social Security at ${claimAge} is already in the past at ${currentAge}.` };
+  }
+  const claiming = benefitAtClaimingAge({
+    amount: socialSecurity.annualAmount,
+    quotedAtAge: socialSecurity.startAge,
+    claimAge,
+    currentAge,
+  });
+  return {
+    streams: streams.map((stream) => stream === socialSecurity
+      ? { ...stream, startAge: claimAge, annualAmount: claiming?.amount ?? stream.annualAmount }
+      : stream),
+    ...(claiming && { claiming }),
+  };
 }
 
 /**

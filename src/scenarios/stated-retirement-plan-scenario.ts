@@ -53,6 +53,15 @@ import {
   type StatedFigureKey,
 } from '../services/stated-figures';
 import type { SavableFigure, SaveOfferKey } from '../openai/save-offer';
+import {
+  benefitAtClaimingAge,
+  describeClaimingAdjustment,
+  EARLIEST_CLAIMING_AGE,
+  LATEST_CREDIT_AGE,
+  socialSecurityQuoteAge,
+  withClaimedBenefit,
+  type ClaimingAdjustment,
+} from '../services/social-security-claiming';
 
 export const STATED_RETIREMENT_PLAN_CALCULATOR_ID = 'stated_retirement_plan' as const;
 export const STATED_RETIREMENT_PLAN_VERSION = 1 as const;
@@ -65,6 +74,7 @@ const NUMERIC_FIELDS = [
   'annualContributions',
   'socialSecurityAnnual',
   'socialSecurityStartAge',
+  'socialSecurityAmountAge',
   'pensionAnnual',
   'pensionStartAge',
   'lifeExpectancy',
@@ -123,6 +133,8 @@ export interface PlannedStatedRetirementOverrides {
   annualContributions?: number;
   socialSecurityAnnual?: number;
   socialSecurityStartAge?: number;
+  /** The age the user's Social Security figure is for, when they named one. */
+  socialSecurityAmountAge?: number;
   pensionAnnual?: number;
   pensionStartAge?: number;
   lifeExpectancy?: number;
@@ -207,6 +219,12 @@ export interface StatedRetirementPlanResult {
   sustainableSpending?: { p10: number; p50: number };
   /** The engine's fixed levers -- retiring later, spending less -- for the primary case only. */
   alternatives?: StatedRetirementAlternative[];
+  /**
+   * Set when the Social Security figure was for another claiming age and the
+   * run claims at this one: `inputs.socialSecurityAnnual` is then the benefit
+   * by Social Security's claiming rules, and this names both.
+   */
+  claiming?: ClaimingAdjustment;
 }
 
 export interface CompletedStatedRetirementPlanExecution {
@@ -252,6 +270,8 @@ const RANGES: Record<NumericField, { minimum: number; maximum: number; integer?:
   annualContributions: { minimum: 0, maximum: 5_000_000 },
   socialSecurityAnnual: { minimum: 0, maximum: 250_000 },
   socialSecurityStartAge: { minimum: 50, maximum: 80, integer: true },
+  // Ages a retirement benefit can be claimed at, and so be quoted for.
+  socialSecurityAmountAge: { minimum: EARLIEST_CLAIMING_AGE, maximum: LATEST_CREDIT_AGE, integer: true },
   pensionAnnual: { minimum: 0, maximum: 10_000_000 },
   pensionStartAge: { minimum: 30, maximum: 95, integer: true },
   lifeExpectancy: { minimum: 60, maximum: 110, integer: true },
@@ -265,6 +285,7 @@ const LABELS: Record<StatedRetirementPlanField, string> = {
   annualContributions: 'Annual saving until retirement, in today\'s dollars',
   socialSecurityAnnual: 'Annual Social Security, in today\'s dollars',
   socialSecurityStartAge: 'Social Security start age',
+  socialSecurityAmountAge: 'Age your Social Security figure is for',
   pensionAnnual: 'Pension or other income a year',
   pensionStartAge: 'Pension start age',
   pensionInflation: 'Whether the pension rises with inflation',
@@ -408,6 +429,9 @@ interface ResolvedVariant {
   /** No spending level runs the engine in `rates` mode. */
   request: Omit<Required<RetirementQuickPlanRequest>, 'annualSpending'> & { annualSpending?: number };
   assumptions: StatedRetirementAssumption[];
+  /** The Social Security figure as given and the age it is for, before any claiming rule. */
+  socialSecurityQuote?: { amount: number; age: number };
+  claiming?: ClaimingAdjustment;
 }
 
 /**
@@ -419,7 +443,9 @@ interface ResolvedVariant {
  */
 function resolveVariant(
   snapshot: FinancialContextSnapshot,
-  overrides: PlannedStatedRetirementOverrides
+  overrides: PlannedStatedRetirementOverrides,
+  /** For a comparison that only moves the claiming age: the age the main case's figure was for. */
+  inheritedQuoteAge?: number
 ): ResolvedVariant | { missing: string[]; missingFields: StatedRetirementPlanField[]; known: KnownInput[] } {
   const assumptions: StatedRetirementAssumption[] = [];
   const missing: string[] = [];
@@ -610,18 +636,45 @@ function resolveVariant(
     'annualContributions',
     saved('annualContribution') ?? { value: 0, origin: 'default' }
   )!;
-  const socialSecurityAnnual = take<number>(
+  const statedSocialSecurity = take<number>(
     'socialSecurityAnnual',
     saved('socialSecurityAnnual') ?? { value: 0, origin: 'default' }
   )!;
   // A claiming age with no benefit behind it is only the form's default, and
   // listing it would narrate money this plan does not contain.
-  const socialSecurityStartAge = socialSecurityAnnual > 0
+  const socialSecurityStartAge = statedSocialSecurity > 0
     ? take<number>(
       'socialSecurityStartAge',
       saved('socialSecurityStartAge') ?? { value: DEFAULT_SOCIAL_SECURITY_START_AGE, origin: 'default' }
     )!
     : DEFAULT_SOCIAL_SECURITY_START_AGE;
+  // A benefit belongs to an age. Claimed at another, it is the benefit Social
+  // Security's own rules pay there, not the same amount started later.
+  const socialSecurityQuote = statedSocialSecurity > 0
+    ? {
+      amount: statedSocialSecurity,
+      age: socialSecurityQuoteAge({
+        namedAge: take<number>('socialSecurityAmountAge'),
+        inheritedAge: inheritedQuoteAge,
+        ...(assumptions.find((assumption) => assumption.key === 'socialSecurityAnnual')?.origin === 'saved' && {
+          saved: {
+            startAge: saved('socialSecurityStartAge')?.value,
+            defaultStartAge: DEFAULT_SOCIAL_SECURITY_START_AGE,
+          },
+        }),
+        claimAge: socialSecurityStartAge,
+      }),
+    }
+    : undefined;
+  const claiming = socialSecurityQuote
+    ? benefitAtClaimingAge({
+      amount: socialSecurityQuote.amount,
+      quotedAtAge: socialSecurityQuote.age,
+      claimAge: socialSecurityStartAge,
+      currentAge: currentAge!,
+    })
+    : null;
+  const socialSecurityAnnual = claiming?.amount ?? statedSocialSecurity;
   // A pension most often starts when work stops, and most private pensions
   // pay a fixed amount; overstating future income is the costlier mistake.
   // Like Social Security's start age, neither is listed without a pension.
@@ -674,6 +727,8 @@ function resolveVariant(
       allocation,
     },
     assumptions,
+    ...(socialSecurityQuote && { socialSecurityQuote }),
+    ...(claiming && { claiming }),
   };
 }
 
@@ -685,6 +740,11 @@ function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+/** Mid-sentence, a label keeps its proper nouns: "claiming Social Security at 70". */
+function decapitalize(value: string): string {
+  return value.charAt(0).toLowerCase() + value.slice(1);
+}
+
 function describeField(field: StatedRetirementPlanField, value: number | string): string {
   switch (field) {
     case 'currentAge': return `age ${value}`;
@@ -693,7 +753,8 @@ function describeField(field: StatedRetirementPlanField, value: number | string)
     case 'annualSpending': return `spending ${money(Number(value))} a year`;
     case 'annualContributions': return `saving ${money(Number(value))} a year`;
     case 'socialSecurityAnnual': return `${money(Number(value))} a year of Social Security`;
-    case 'socialSecurityStartAge': return `Social Security from ${value}`;
+    case 'socialSecurityStartAge': return `claiming Social Security at ${value}`;
+    case 'socialSecurityAmountAge': return `a Social Security figure for ${value}`;
     case 'pensionAnnual': return `a ${money(Number(value))} pension`;
     case 'pensionStartAge': return `the pension from ${value}`;
     case 'pensionInflation': return value === 'rises_with_inflation'
@@ -719,9 +780,19 @@ function requestValue(variant: ResolvedVariant, field: StatedRetirementPlanField
   return (variant.request as unknown as Record<string, number | string | undefined>)[field];
 }
 
+/** The same benefit in both cases, so any difference in its amount is the claiming rule. */
+function sameSocialSecurityQuote(own: ResolvedVariant, peer: ResolvedVariant): boolean {
+  return own.socialSecurityQuote !== undefined &&
+    own.socialSecurityQuote.amount === peer.socialSecurityQuote?.amount &&
+    own.socialSecurityQuote.age === peer.socialSecurityQuote.age;
+}
+
 function variantLabel(own: ResolvedVariant, peer: ResolvedVariant | undefined): string {
   if (!peer) return 'Your plan';
-  const differing = ALL_FIELDS.filter((field) => requestValue(own, field) !== requestValue(peer, field));
+  const differing = ALL_FIELDS.filter((field) =>
+    requestValue(own, field) !== requestValue(peer, field) &&
+    !(field === 'socialSecurityAnnual' && sameSocialSecurityQuote(own, peer))
+  );
   const described = differing
     .filter((field) => requestValue(own, field) !== undefined)
     .slice(0, 2)
@@ -816,6 +887,7 @@ function toResult(
     ...(run.sustainableSpending && {
       sustainableSpending: { p10: run.sustainableSpending.p10, p50: run.sustainableSpending.p50 },
     }),
+    ...(variant.claiming && { claiming: variant.claiming }),
     ...(includeAlternatives && run.alternatives.length > 0 && {
       alternatives: run.alternatives.map((alternative) => ({
         id: alternative.id,
@@ -847,9 +919,19 @@ export async function runStatedRetirementPlan(
   const layers = [primaryOverrides];
   if (plan.comparison?.overrides) layers.push(layer(primaryOverrides, plan.comparison.overrides));
 
+  // "What if I claim at 70?" moves the main case's benefit to another age; a
+  // comparison that names its own figure, or the age it is for, does not.
+  const comparisonOwn = plan.comparison?.overrides;
+  const comparisonMovesSameBenefit = comparisonOwn !== undefined &&
+    comparisonOwn.socialSecurityAnnual === undefined &&
+    comparisonOwn.socialSecurityAmountAge === undefined;
+
   const variants: ResolvedVariant[] = [];
-  for (const overrides of layers) {
-    const variant = resolveVariant(snapshot, overrides);
+  for (const [index, overrides] of layers.entries()) {
+    const inheritedQuoteAge = index > 0 && comparisonMovesSameBenefit
+      ? variants[0]?.socialSecurityQuote?.age
+      : undefined;
+    const variant = resolveVariant(snapshot, overrides, inheritedQuoteAge);
     // The comparison inherits every primary value, so it can only be missing
     // what the primary was missing.
     if ('missing' in variant) {
@@ -914,6 +996,7 @@ const INPUT_UNITS: Record<NumericField, CanonicalFactUnit> = {
   annualContributions: 'usd',
   socialSecurityAnnual: 'usd',
   socialSecurityStartAge: 'age',
+  socialSecurityAmountAge: 'age',
   pensionAnnual: 'usd',
   pensionStartAge: 'age',
   lifeExpectancy: 'age',
@@ -959,13 +1042,21 @@ export function statedRetirementPlanCanonicalFacts(execution: StatedRetirementPl
       if (assumption.value === 0) continue;
       const key = assumption.key as NumericField;
       // A fixed pension is in the dollars it pays, not today's; the label says
-      // which, so the answer cannot restate it in the wrong units.
+      // which, so the answer cannot restate it in the wrong units. A Social
+      // Security figure for another claiming age is not the one this case ran.
       const label = key === 'pensionAnnual'
         ? scenario.inputs.pensionInflationAdjusted
           ? 'Pension or other income a year, in today\'s dollars, rising with inflation'
           : 'Pension or other income a year, a fixed dollar amount that does not rise with inflation'
-        : assumption.label;
+        : key === 'socialSecurityAnnual' && scenario.claiming
+          ? `Annual Social Security as given, for claiming at ${scenario.claiming.fromAge}, in today's dollars`
+          : assumption.label;
       add('scenario_input', factId(key), label, assumption.value, INPUT_UNITS[key]);
+    }
+    if (scenario.claiming) {
+      const { claiming } = scenario;
+      add('scenario_calculation', 'social_security_at_claiming_age', `Annual Social Security claimed at ${claiming.toAge}, by Social Security's claiming rules, in today's dollars`, claiming.amount, 'usd');
+      add('scenario_calculation', 'social_security_claiming_change', `Change in annual Social Security from claiming at ${claiming.toAge} instead of ${claiming.fromAge}`, asPercent(claiming.amount / claiming.fromAmount - 1), 'percent');
     }
     const mix = `${scenario.allocation.label} preset`;
     add('scenario_input', 'us_stock_share', `${mix} share in US stocks`, scenario.allocation.usEquityPercent, 'percent');
@@ -997,7 +1088,7 @@ export function statedRetirementPlanCanonicalFacts(execution: StatedRetirementPl
     for (const alternative of scenario.alternatives ?? []) {
       const altPrefix = `alternative_${factId(alternative.id)}`;
       // A lever on this plan, with every other input as stated.
-      const subject = `${alternative.label} instead, everything else as in ${scenario.label.toLowerCase()}`;
+      const subject = `${alternative.label} instead, everything else as in ${decapitalize(scenario.label)}`;
       if (alternative.annualSpending !== scenario.inputs.annualSpending) {
         add('scenario_input', `${altPrefix}_annual_spending`, 'annual spending', alternative.annualSpending, 'usd', subject);
       }
@@ -1093,6 +1184,10 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
     : inputs.pensionAnnual > 0
       ? ' No Social Security is included.'
       : ' No Social Security is included, so the portfolio funds every year on its own.';
+  // Each benefit moved to another claiming age, once, with both amounts.
+  const claimingNotice = [...new Set(execution.scenarios.flatMap((scenario) =>
+    scenario.claiming ? [` ${describeClaimingAdjustment(scenario.claiming)}`] : []
+  ))].join('');
   const pension = describePension(primary);
   const bridge = describeIncomeGaps(inputs);
   const saving = inputs.annualContributions > 0
@@ -1119,7 +1214,7 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
   const age = assumptionOf(primary, 'currentAge');
   const ageNotice = age?.origin === 'profile' ? ` Your age, ${age.value}, is the one you told me earlier.` : '';
   const comparison = execution.scenarios.length > 1
-    ? ` I compared ${execution.scenarios.map((scenario) => scenario.label.toLowerCase()).join(' with ')}.`
+    ? ` I compared ${execution.scenarios.map((scenario) => decapitalize(scenario.label)).join(' with ')}.`
     : '';
   const comparisonNotice = execution.comparisonUnavailableReason
     ? ` I could not run the comparison case: ${execution.comparisonUnavailableReason}`
@@ -1161,7 +1256,7 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
   return `Plan assumptions: ${standIn}, against every overlapping ` +
     `${primary.history.horizonYears}-year stretch of US market returns and inflation that began between ` +
     `${readableMonth(primary.history.firstStartMonth)} and ${readableMonth(primary.history.lastStartMonth)}.` +
-    `${comparison}${retirementAgeNotice}${spendingNotice}${socialSecurity}${pension}${bridge}${saving}${horizon}${mixDefault}` +
+    `${comparison}${retirementAgeNotice}${spendingNotice}${socialSecurity}${claimingNotice}${pension}${bridge}${saving}${horizon}${mixDefault}` +
     `${assetsNotice}${ageNotice}${savedNotice}${comparisonNotice} ` +
     'Fund fees, taxes and account types are not modeled. Change any of these and I will re-run it.';
 }
@@ -1328,10 +1423,13 @@ export function statedRetirementPlanSavableFigures(execution: StatedRetirementPl
   if (execution.status !== 'completed') return [];
   const [primary] = execution.scenarios;
   if (!primary) return [];
-  return primary.assumptions.flatMap((assumption) => {
+  const figures = primary.assumptions.flatMap((assumption) => {
     const key = assumption.origin === 'user' ? SAVE_KEYS[assumption.key] : undefined;
     return key ? [{ key, value: assumption.value }] : [];
   });
+  return withClaimedBenefit(figures, primary.claiming, primary.assumptions.some((assumption) =>
+    assumption.key === 'socialSecurityAmountAge' && assumption.origin === 'user'
+  ));
 }
 
 export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
@@ -1353,7 +1451,8 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
     { id: 'annual_spending', label: 'Annual retirement spending', description: 'In today\'s dollars.', valueType: 'currency', minimum: 1_000, maximum: 10_000_000 },
     { id: 'annual_contributions', label: 'Annual saving until retirement', description: 'In today\'s dollars.', valueType: 'currency', minimum: 0, maximum: 5_000_000 },
     { id: 'social_security_annual', label: 'Annual Social Security', description: 'Inflation-adjusted income that reduces withdrawals once it starts.', valueType: 'currency', minimum: 0, maximum: 250_000 },
-    { id: 'social_security_start_age', label: 'Social Security start age', description: 'Age the benefit begins.', valueType: 'age', minimum: 50, maximum: 80 },
+    { id: 'social_security_start_age', label: 'Social Security start age', description: 'Age the benefit begins; a benefit for another age is rescaled by Social Security\'s claiming rules.', valueType: 'age', minimum: 50, maximum: 80 },
+    { id: 'social_security_amount_age', label: 'Age the Social Security figure is for', description: 'The claiming age a stated benefit was quoted for, when it differs from the start age.', valueType: 'age', minimum: EARLIEST_CLAIMING_AGE, maximum: LATEST_CREDIT_AGE },
     { id: 'pension_annual', label: 'Pension or other income a year', description: 'Income other than Social Security that reduces withdrawals once it starts.', valueType: 'currency', minimum: 0, maximum: 10_000_000 },
     { id: 'pension_start_age', label: 'Pension start age', description: 'Age the pension begins.', valueType: 'age', minimum: 30, maximum: 95 },
     { id: 'pension_inflation', label: 'Pension inflation treatment', description: 'A fixed dollar amount, or today\'s dollars rising with inflation.', valueType: 'enum', options: ['fixed', 'rises_with_inflation'] },
@@ -1379,7 +1478,7 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
   ],
   planner: {
     jsonSchema: STATED_RETIREMENT_PLAN_JSON_SCHEMA,
-    instructions: `Request this for any question about whether the user can retire, whether their savings will last, how much they can spend in retirement, or a change to such a plan stated earlier in this decision, including a plan the free retirement calculator answered. Application code runs it only when no investment holdings are linked, or none of the linked ones can be simulated, as a stand-in for the holdings-based projection, so request it for those questions even when the user has stated nothing yet; it asks for whatever is missing. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, investableAssets (invested savings today), annualSpending (spending per year once retired, in today's dollars), annualContributions (saving per year until retirement), socialSecurityAnnual and socialSecurityStartAge (Social Security only), pensionAnnual (a pension, annuity or other income in retirement that is not Social Security, per year) and pensionStartAge, pensionInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), lifeExpectancy (the age the plan runs through), and allocation: conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets; otherwise unspecified with a null source. When the newest message changes an input of a plan stated earlier, put the earlier plan in primary and only the changed values in comparison. When the user gives a range for one value, put the low end in primary and only the high end in comparison. Never estimate or supply typical values; application code uses the conventional retirement age when none is stated, the user's current spending when their accounts show it, and otherwise reports what the mix sustained instead of a verdict. Do not request it for a Coast FIRE question unless the user also asks whether that plan survives market history. The overrides object and every field and source are always present. When there is no such retirement question, set requested=false, allocation=unspecified, pensionInflation=unspecified, and null for every other value and every source in both variants.`,
+    instructions: `Request this for any question about whether the user can retire, whether their savings will last, how much they can spend in retirement, or a change to such a plan stated earlier in this decision, including a plan the free retirement calculator answered. Application code runs it only when no investment holdings are linked, or none of the linked ones can be simulated, as a stand-in for the holdings-based projection, so request it for those questions even when the user has stated nothing yet; it asks for whatever is missing. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, investableAssets (invested savings today), annualSpending (spending per year once retired, in today's dollars), annualContributions (saving per year until retirement), socialSecurityAnnual and socialSecurityStartAge (Social Security only; socialSecurityStartAge is when the user claims it), socialSecurityAmountAge (only when the user says which claiming age their Social Security figure is for, such as a statement showing $2,500 a month at 67; otherwise null), pensionAnnual (a pension, annuity or other income in retirement that is not Social Security, per year) and pensionStartAge, pensionInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), lifeExpectancy (the age the plan runs through), and allocation: conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets; otherwise unspecified with a null source. When the newest message changes an input of a plan stated earlier, put the earlier plan in primary and only the changed values in comparison; for claiming Social Security at another age, that is only socialSecurityStartAge, never a new amount, because application code applies Social Security's own claiming rules to the benefit. When the user gives a range for one value, put the low end in primary and only the high end in comparison. Never estimate or supply typical values; application code uses the conventional retirement age when none is stated, the user's current spending when their accounts show it, and otherwise reports what the mix sustained instead of a verdict. Do not request it for a Coast FIRE question unless the user also asks whether that plan survives market history. The overrides object and every field and source are always present. When there is no such retirement question, set requested=false, allocation=unspecified, pensionInflation=unspecified, and null for every other value and every source in both variants.`,
     parsePlan: parseStatedRetirementPlan,
   },
   execution: {

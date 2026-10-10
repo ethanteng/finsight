@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import {
+  incomeClaimedAt,
   incomeForRetirementAge,
   PENSION_LABEL,
   resolveRetirementIncome,
@@ -15,13 +16,14 @@ const saved = (value: number | string) => ({ value, savedAt: SAVED_AT, source: '
 
 describe('income for the holdings-based projection', () => {
   it('counts nothing when nobody said or saved any', () => {
-    expect(resolveRetirementIncome({ retirementAge: 65 })).toEqual({ streams: [], origins: {} });
+    expect(resolveRetirementIncome({ retirementAge: 65, currentAge: 50 })).toEqual({ streams: [], origins: {} });
   });
 
   it('takes Your numbers, defaulting only the terms of an income the user has', () => {
     const { streams, origins } = resolveRetirementIncome({
       statedFigures: { socialSecurityAnnual: saved(28_000), retirementIncome: saved(24_000) },
       retirementAge: 62,
+      currentAge: 55,
     });
 
     expect(streams).toEqual([
@@ -44,6 +46,7 @@ describe('income for the holdings-based projection', () => {
         retirementIncomeInflation: saved('fixed'),
       },
       retirementAge: 65,
+      currentAge: 50,
     });
 
     expect(streams).toEqual([
@@ -53,17 +56,66 @@ describe('income for the holdings-based projection', () => {
   });
 
   it('moves a pension that only ever started "when you retire" with a what-if retirement age', () => {
-    const resolved = resolveRetirementIncome({ stated: { pensionAnnual: 20_000, socialSecurityAnnual: 25_000 }, retirementAge: 65 });
+    const resolved = resolveRetirementIncome({ stated: { pensionAnnual: 20_000, socialSecurityAnnual: 25_000 }, retirementAge: 65, currentAge: 50 });
     const moved = incomeForRetirementAge(resolved.streams, resolved.origins, 60);
     expect(moved.find((stream) => stream.label === PENSION_LABEL)?.startAge).toBe(60);
     expect(moved.find((stream) => stream.label === SOCIAL_SECURITY_LABEL)?.startAge).toBe(67);
 
-    const named = resolveRetirementIncome({ stated: { pensionAnnual: 20_000, pensionStartAge: 63 }, retirementAge: 65 });
+    const named = resolveRetirementIncome({ stated: { pensionAnnual: 20_000, pensionStartAge: 63 }, retirementAge: 65, currentAge: 50 });
     expect(incomeForRetirementAge(named.streams, named.origins, 60)[0].startAge).toBe(63);
   });
 
+  it('counts a benefit quoted for one claiming age as Social Security pays it at another', () => {
+    const named = resolveRetirementIncome({
+      stated: { socialSecurityAnnual: 30_000, socialSecurityAmountAge: 67, socialSecurityStartAge: 70 },
+      retirementAge: 65,
+      currentAge: 50,
+    });
+    expect(named.streams).toEqual([
+      { label: SOCIAL_SECURITY_LABEL, annualAmount: 37_200, startAge: 70, inflationAdjusted: true },
+    ]);
+    expect(named.origins.socialSecurity?.claiming).toMatchObject({ fromAmount: 30_000, fromAge: 67, toAge: 70 });
+
+    // A saved benefit is the one for its saved start age.
+    const saved62 = resolveRetirementIncome({
+      stated: { socialSecurityStartAge: 62 },
+      statedFigures: { socialSecurityAnnual: saved(30_000), socialSecurityStartAge: saved(67) },
+      retirementAge: 65,
+      currentAge: 50,
+    });
+    expect(saved62.streams[0]).toMatchObject({ annualAmount: 21_000, startAge: 62 });
+
+    // A figure with no age named is the one for when it starts.
+    const plain = resolveRetirementIncome({
+      stated: { socialSecurityAnnual: 30_000, socialSecurityStartAge: 70 },
+      retirementAge: 65,
+      currentAge: 50,
+    });
+    expect(plain.streams[0]).toMatchObject({ annualAmount: 30_000, startAge: 70 });
+    expect(plain.origins.socialSecurity?.claiming).toBeUndefined();
+  });
+
+  it('moves the baseline\'s Social Security to another claiming age, and nothing else', () => {
+    const streams = [
+      { label: SOCIAL_SECURITY_LABEL, annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
+      { label: PENSION_LABEL, annualAmount: 20_000, startAge: 60, inflationAdjusted: false },
+    ];
+    const claimed = incomeClaimedAt(streams, 70, 50);
+    expect(claimed).toEqual({
+      streams: [
+        { label: SOCIAL_SECURITY_LABEL, annualAmount: 37_200, startAge: 70, inflationAdjusted: true },
+        streams[1],
+      ],
+      claiming: expect.objectContaining({ fromAmount: 30_000, amount: 37_200 }),
+    });
+    // Nothing to move, already paid, or a claim in the past: said, not run as no change.
+    expect(incomeClaimedAt([streams[1]], 70, 50)).toEqual({ unavailableReason: expect.stringMatching(/no Social Security/) });
+    expect(incomeClaimedAt(streams, 70, 68)).toEqual({ unavailableReason: expect.stringMatching(/already being paid/) });
+    expect(incomeClaimedAt(streams, 62, 64)).toEqual({ unavailableReason: expect.stringMatching(/already in the past/) });
+  });
+
   it('matches a stored run whatever order its keys came back in', () => {
-    const { streams } = resolveRetirementIncome({ stated: { socialSecurityAnnual: 30_000, pensionAnnual: 20_000 }, retirementAge: 65 });
+    const { streams } = resolveRetirementIncome({ stated: { socialSecurityAnnual: 30_000, pensionAnnual: 20_000 }, retirementAge: 65, currentAge: 50 });
     // What a jsonb column hands back: same terms, keys reordered.
     const stored = JSON.parse(JSON.stringify(streams.map((stream) => ({
       startAge: stream.startAge,
@@ -97,6 +149,7 @@ describe('income for the holdings-based projection', () => {
     const resolved = resolveRetirementIncome({
       statedFigures: { socialSecurityAnnual: saved(28_000), retirementIncome: saved(24_000) },
       retirementAge: 62,
+      currentAge: 55,
     });
 
     it('names each income, its start, and the terms it assumed', () => {
@@ -107,6 +160,33 @@ describe('income for the holdings-based projection', () => {
         'a pension of $24,000 a year from 62, a fixed amount that buys less each year prices rise ' +
         '(I assumed that it starts when you retire and that it does not rise with inflation)'
       );
+    });
+
+    it('says when Social Security was moved to its claiming age, and publishes both amounts', () => {
+      const claimed = resolveRetirementIncome({
+        stated: { socialSecurityAnnual: 30_000, socialSecurityAmountAge: 67, socialSecurityStartAge: 70 },
+        retirementAge: 62,
+        currentAge: 55,
+      });
+      const line = describeRetirementAssumptions(analysis(claimed.streams, claimed.origins) as any)!;
+      expect(line).toContain(
+        'Social Security $37,200 a year in today\'s dollars from 70 (the $30,000 a year you gave for claiming at 67, ' +
+        'moved to 70 by Social Security\'s own rules, with full retirement age 67 from your age)'
+      );
+
+      const data = {
+        accounts: [],
+        metadata: { lastUpdated: new Date(), dataSources: {}, errors: [] },
+        tierContext: { tierInfo: { currentTier: 'starter', availableSources: [] }, upgradeHints: [] },
+        financialSummary: { computedAt: '2026-10-01T00:00:00.000Z', financialOverview: { netWorth: 1_000_000, totalInvestments: 1_000_000 } },
+        ...analysis(claimed.streams, claimed.origins),
+      } as any;
+      const pack = buildCanonicalFactPack(data, 'Am I on track for retirement?', questionNeedsFromPacks(['retirement_analysis'], false));
+      const fact = (id: string) => pack.facts.find((item) => item.id === id);
+      expect(fact('retirement_social_security_annual')).toMatchObject({ value: 37_200 });
+      expect(fact('retirement_social_security_annual')?.label).toContain('claimed at 70 by Social Security\'s claiming rules');
+      expect(fact('retirement_social_security_as_given')).toMatchObject({ value: 30_000 });
+      expect(validateCanonicalFactPack(pack)).toEqual([]);
     });
 
     it('says when it counts no income, but not for an analysis that predates income', () => {

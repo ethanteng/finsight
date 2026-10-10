@@ -26,6 +26,7 @@ const NUMERIC = [
   'annualContributions',
   'socialSecurityAnnual',
   'socialSecurityStartAge',
+  'socialSecurityAmountAge',
   'pensionAnnual',
   'pensionStartAge',
   'lifeExpectancy',
@@ -525,6 +526,92 @@ describe('retirement plan from stated figures', () => {
 
     expect(execution).toMatchObject({ status: 'unavailable', reason: expect.stringMatching(/Retirement age/) });
     expect(describeStatedRetirementPlanExecution(execution)).toMatch(/^I could not run your plan against market history/);
+  });
+
+  it('claims the same benefit later by Social Security\'s rules, not the same amount started later', async () => {
+    const runner = fakeRunner();
+    const execution = await runStatedRetirementPlan(
+      NO_HOLDINGS,
+      plan(LEAD, { socialSecurityStartAge: 70 }),
+      runner as QuickPlanRunner
+    );
+
+    expect(runner.mock.calls.map(([request]) => [request.socialSecurityAnnual, request.socialSecurityStartAge]))
+      .toEqual([[30_000, 67], [37_200, 70]]);
+    const completed = execution as CompletedStatedRetirementPlanExecution;
+    expect(completed.scenarios.map((scenario) => scenario.label))
+      .toEqual(['Claiming Social Security at 67', 'Claiming Social Security at 70']);
+    expect(completed.scenarios[1].claiming).toMatchObject({ fromAmount: 30_000, fromAge: 67, toAge: 70, amount: 37_200 });
+
+    const disclosure = describeStatedRetirementPlanExecution(execution)!;
+    expect(disclosure).toContain('I compared claiming Social Security at 67 with claiming Social Security at 70.');
+    expect(disclosure).toContain(
+      'Claimed at 70 instead of 67, Social Security of $30,000 a year becomes $37,200 by Social Security\'s own rules'
+    );
+
+    const facts = statedRetirementPlanCanonicalFacts(execution);
+    const comparisonId = completed.scenarios[1].id.replace(/^stated_retirement_plan_/, '');
+    const comparisonFact = (suffix: string) =>
+      facts.find((fact) => fact.id === `stated_retirement_plan_${comparisonId}_${suffix}`);
+    expect(comparisonFact('social_security_at_claiming_age')).toMatchObject({ value: 37_200, unit: 'usd' });
+    expect(comparisonFact('social_security_claiming_change')).toMatchObject({ value: 24, unit: 'percent' });
+    expect(comparisonFact('social_security_annual')?.label).toContain('as given, for claiming at 67');
+    expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+    // A what-if is never offered for saving.
+    expect(statedRetirementPlanSavableFigures(execution)).toEqual(expect.arrayContaining([
+      { key: 'socialSecurityAnnual', value: 30_000 },
+      { key: 'socialSecurityStartAge', value: 67 },
+    ]));
+  });
+
+  it('rescales a benefit quoted for one age and claimed at another, and saves it as paid', async () => {
+    const runner = fakeRunner();
+    const execution = await runStatedRetirementPlan(
+      NO_HOLDINGS,
+      plan({ ...LEAD, socialSecurityAmountAge: 67, socialSecurityStartAge: 62 }),
+      runner as QuickPlanRunner
+    );
+
+    expect(runner.mock.calls[0][0]).toMatchObject({ socialSecurityAnnual: 21_000, socialSecurityStartAge: 62 });
+    expect(describeStatedRetirementPlanExecution(execution)).toContain(
+      'Social Security of $21,000 a year starts at 62. Claimed at 62 instead of 67, Social Security of $30,000 a year ' +
+      'becomes $21,000 by Social Security\'s own rules (a reduction for each month before full retirement age'
+    );
+    // Saved as the benefit at the age it starts, so it reads back the same.
+    const saved = statedRetirementPlanSavableFigures(execution);
+    expect(saved).toEqual(expect.arrayContaining([
+      { key: 'socialSecurityAnnual', value: 21_000 },
+      { key: 'socialSecurityStartAge', value: 62 },
+    ]));
+    expect(saved).not.toContainEqual({ key: 'socialSecurityAnnual', value: 30_000 });
+  });
+
+  it('reads a saved benefit as the one for its saved start age', async () => {
+    const runner = fakeRunner();
+    await runStatedRetirementPlan(
+      {
+        ...NO_HOLDINGS,
+        statedFigures: {
+          socialSecurityAnnual: { value: 30_000, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' },
+        },
+      },
+      plan({ currentAge: 45, investableAssets: 800_000, annualSpending: 70_000, socialSecurityStartAge: 70 }),
+      runner as QuickPlanRunner
+    );
+
+    // Saved with no start age, it is the benefit from 67.
+    expect(runner.mock.calls[0][0]).toMatchObject({ socialSecurityAnnual: 37_200, socialSecurityStartAge: 70 });
+  });
+
+  it('leaves a comparison\'s own Social Security figure as stated', async () => {
+    const runner = fakeRunner();
+    await runStatedRetirementPlan(
+      NO_HOLDINGS,
+      plan(LEAD, { socialSecurityAnnual: 40_000, socialSecurityStartAge: 70 }),
+      runner as QuickPlanRunner
+    );
+
+    expect(runner.mock.calls.map(([request]) => request.socialSecurityAnnual)).toEqual([30_000, 40_000]);
   });
 
   it('promotes the verdict, the inputs, and the levers as citeable facts', async () => {

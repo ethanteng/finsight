@@ -68,6 +68,15 @@ import {
   type StatedFigureKey,
 } from '../services/stated-figures';
 import type { SavableFigure, SaveOfferKey } from '../openai/save-offer';
+import {
+  benefitAtClaimingAge,
+  describeClaimingAdjustment,
+  EARLIEST_CLAIMING_AGE,
+  LATEST_CREDIT_AGE,
+  socialSecurityQuoteAge,
+  withClaimedBenefit,
+  type ClaimingAdjustment,
+} from '../services/social-security-claiming';
 
 export const COAST_FIRE_CALCULATOR_ID = 'coast_fire' as const;
 /**
@@ -91,6 +100,7 @@ const COAST_FIRE_OVERRIDE_FIELDS = [
   'retirementIncomeStartAge',
   'socialSecurityAnnual',
   'socialSecurityStartAge',
+  'socialSecurityAmountAge',
   'realReturnRatePercent',
   'withdrawalRatePercent',
   'annualContribution',
@@ -151,6 +161,8 @@ export interface PlannedCoastFireOverrides {
   retirementIncomeStartAge?: number;
   socialSecurityAnnual?: number;
   socialSecurityStartAge?: number;
+  /** The age the user's Social Security figure is for, when they named one. */
+  socialSecurityAmountAge?: number;
   realReturnRatePercent?: number;
   withdrawalRatePercent?: number;
   annualContribution?: number;
@@ -258,6 +270,12 @@ export interface CoastFireScenarioResult {
   metrics: CoastFireScenarioMetrics;
   contributionPath?: CoastFireContributionPath;
   historicalTest?: CoastFireHistoricalTest;
+  /**
+   * Set when the Social Security figure was for another claiming age: the
+   * income counted is the benefit at this case's claiming age by Social
+   * Security's rules, and this names both.
+   */
+  claiming?: ClaimingAdjustment;
 }
 
 export type QuickPlanRunner = (request: RetirementQuickPlanRequest) => Promise<RetirementQuickPlanResult>;
@@ -307,6 +325,8 @@ const OVERRIDE_RANGES: Record<CoastFireOverrideField, { minimum: number; maximum
   // straight line accepts.
   socialSecurityAnnual: { minimum: 0, maximum: 250_000 },
   socialSecurityStartAge: { minimum: 50, maximum: 80, integer: true },
+  // Ages a retirement benefit can be claimed at, and so be quoted for.
+  socialSecurityAmountAge: { minimum: EARLIEST_CLAIMING_AGE, maximum: LATEST_CREDIT_AGE, integer: true },
   realReturnRatePercent: { minimum: 0, maximum: 12 },
   withdrawalRatePercent: { minimum: 2, maximum: 8 },
   annualContribution: { minimum: 0, maximum: 10_000_000 },
@@ -454,6 +474,7 @@ const ASSUMPTION_LABELS: Record<CoastFireOverrideField, { label: string; unit: C
   retirementIncomeStartAge: { label: 'Pension start age', unit: 'age' },
   socialSecurityAnnual: { label: 'Social Security a year, in today\'s dollars', unit: 'usd' },
   socialSecurityStartAge: { label: 'Social Security start age', unit: 'age' },
+  socialSecurityAmountAge: { label: 'Age your Social Security figure is for', unit: 'age' },
   realReturnRatePercent: { label: 'Annual growth after inflation', unit: 'percent' },
   withdrawalRatePercent: { label: 'Withdrawal rate', unit: 'percent' },
   annualContribution: { label: 'Annual contributions until savings can coast, in today\'s dollars', unit: 'usd' },
@@ -511,6 +532,9 @@ interface ResolvedCoastFireVariant {
   annualContribution: number;
   assumptions: CoastFireAssumption[];
   allocation: { id: QuickPlanAllocationId; origin: 'user' | 'saved' | 'default'; savedAt?: string };
+  /** The Social Security figure as given and the age it is for, before any claiming rule. */
+  socialSecurityQuote?: { amount: number; age: number };
+  claiming?: ClaimingAdjustment;
 }
 
 /** Whether the pension rises with prices: the user's words, then Your numbers, then fixed. */
@@ -544,7 +568,9 @@ function pensionLabel(inflation: IncomeInflation): string {
  */
 function resolveVariant(
   snapshot: FinancialContextSnapshot,
-  overrides: PlannedCoastFireOverrides
+  overrides: PlannedCoastFireOverrides,
+  /** For a comparison that only moves the claiming age: the age the main case's figure was for. */
+  inheritedQuoteAge?: number
 ): ResolvedCoastFireVariant | { missing: string[]; missingFields: CoastFireOverrideField[]; known: KnownInput[] } {
   const assumptions: CoastFireAssumption[] = [];
   const missing: string[] = [];
@@ -641,6 +667,24 @@ function resolveVariant(
       saved('socialSecurityStartAge') ?? { value: DEFAULT_SOCIAL_SECURITY_START_AGE, origin: 'default' }
     )!
     : undefined;
+  // A benefit belongs to an age. Claimed at another, it is the benefit Social
+  // Security's own rules pay there, not the same amount started later.
+  const socialSecurityQuote = socialSecurityStartAge !== undefined
+    ? {
+      amount: socialSecurityAnnual,
+      age: socialSecurityQuoteAge({
+        namedAge: take('socialSecurityAmountAge'),
+        inheritedAge: inheritedQuoteAge,
+        ...(assumptions.find((assumption) => assumption.key === 'socialSecurityAnnual')?.origin === 'saved' && {
+          saved: {
+            startAge: saved('socialSecurityStartAge')?.value,
+            defaultStartAge: DEFAULT_SOCIAL_SECURITY_START_AGE,
+          },
+        }),
+        claimAge: socialSecurityStartAge,
+      }),
+    }
+    : undefined;
   const realReturnRate = take('realReturnRatePercent', {
     value: DEFAULT_COAST_FIRE_REAL_RETURN_PERCENT,
     origin: 'default',
@@ -674,11 +718,19 @@ function resolveVariant(
     }
     return { missing, missingFields, known };
   }
+  const claiming = socialSecurityQuote
+    ? benefitAtClaimingAge({
+      amount: socialSecurityQuote.amount,
+      quotedAtAge: socialSecurityQuote.age,
+      claimAge: socialSecurityStartAge!,
+      currentAge: currentAge!,
+    })
+    : null;
   const incomes: CoastFireIncome[] = [];
   if (socialSecurityAnnual > 0) {
     incomes.push({
       kind: 'social_security',
-      annualAmount: socialSecurityAnnual,
+      annualAmount: claiming?.amount ?? socialSecurityAnnual,
       startAge: socialSecurityStartAge!,
       inflationAdjusted: true,
     });
@@ -706,6 +758,8 @@ function resolveVariant(
     annualContribution: statedContribution ?? 0,
     assumptions,
     allocation: allocationFor(snapshot, overrides),
+    ...(socialSecurityQuote && { socialSecurityQuote }),
+    ...(claiming && { claiming }),
   };
 }
 
@@ -783,7 +837,8 @@ function describeField(field: CoastFireOverrideField, value: number): string {
     case 'annualRetirementIncome': return `a ${money(value)} pension`;
     case 'retirementIncomeStartAge': return `the pension from ${value}`;
     case 'socialSecurityAnnual': return `${money(value)} a year of Social Security`;
-    case 'socialSecurityStartAge': return `Social Security from ${value}`;
+    case 'socialSecurityStartAge': return `claiming Social Security at ${value}`;
+    case 'socialSecurityAmountAge': return `a Social Security figure for ${value}`;
     case 'realReturnRatePercent': return `${rate(value)} growth after inflation`;
     case 'withdrawalRatePercent': return `a ${rate(value)} withdrawal rate`;
     case 'annualContribution': return `investing ${money(value)} a year`;
@@ -792,6 +847,11 @@ function describeField(field: CoastFireOverrideField, value: number): string {
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** Mid-sentence, a label keeps its proper nouns: "claiming Social Security at 70". */
+function decapitalize(value: string): string {
+  return value.charAt(0).toLowerCase() + value.slice(1);
 }
 
 function variantLabel(own: ResolvedCoastFireVariant, peer: ResolvedCoastFireVariant | undefined): string {
@@ -947,11 +1007,23 @@ export async function runCoastFireScenario(
   const layers = [primaryOverrides];
   if (plan.comparison?.overrides) layers.push(layer(primaryOverrides, plan.comparison.overrides));
 
+  // "What if I claim at 70?" moves the main case's benefit to another age; a
+  // comparison that names its own figure, or the age it is for, does not.
+  const comparisonOwn = plan.comparison?.overrides;
+  const comparisonMovesSameBenefit = comparisonOwn !== undefined &&
+    comparisonOwn.socialSecurityAnnual === undefined &&
+    comparisonOwn.socialSecurityAmountAge === undefined;
+
   const resolved: ResolvedCoastFireVariant[] = [];
   const results: Array<{ variant: ResolvedCoastFireVariant; metrics: CoastFireIncomeResult }> = [];
   let comparisonUnavailableReason: string | undefined;
+  let primaryQuoteAge: number | undefined;
   for (const [index, overrides] of layers.entries()) {
-    const variant = resolveVariant(snapshot, overrides);
+    const variant = resolveVariant(
+      snapshot,
+      overrides,
+      index > 0 && comparisonMovesSameBenefit ? primaryQuoteAge : undefined
+    );
     if ('missing' in variant) {
       // The comparison inherits every primary value, so it can only be missing
       // something the primary was missing too.
@@ -961,6 +1033,7 @@ export async function runCoastFireScenario(
         { prompts: variant.missing, fields: variant.missingFields, known: variant.known }
       );
     }
+    if (index === 0) primaryQuoteAge = variant.socialSecurityQuote?.age;
     try {
       const { currentAge, retirementAge, currentSavings, annualRetirementSpending, realReturnRate, withdrawalRate } = variant.inputs;
       // Valued through the market-history test's own horizon.
@@ -1001,6 +1074,7 @@ export async function runCoastFireScenario(
         contributionPath: coastFireContributionPath(metrics, variant.annualContribution),
       }),
       ...(historicalTest && { historicalTest }),
+      ...(variant.claiming && { claiming: variant.claiming }),
     });
   }
 
@@ -1071,10 +1145,19 @@ export function coastFireScenarioCanonicalFacts(execution: CoastFireScenarioExec
     for (const assumption of scenario.assumptions) {
       // No pension and no Social Security are defaults, not figures worth quoting.
       if ((assumption.key === 'annualRetirementIncome' || assumption.key === 'socialSecurityAnnual') && assumption.value === 0) continue;
+      // A Social Security figure for another claiming age is not the one counted.
+      const label = assumption.key === 'socialSecurityAnnual' && scenario.claiming
+        ? `Social Security a year as given, for claiming at ${scenario.claiming.fromAge}, in today's dollars`
+        : assumption.label;
       inputIds.set(
         assumption.key,
-        add('scenario_input', factId(assumption.key), assumption.label, assumption.value, assumption.unit)
+        add('scenario_input', factId(assumption.key), label, assumption.value, assumption.unit)
       );
+    }
+    if (scenario.claiming) {
+      const { claiming } = scenario;
+      add('scenario_calculation', 'social_security_at_claiming_age', `Social Security a year claimed at ${claiming.toAge}, by Social Security's claiming rules, in today's dollars`, claiming.amount, 'usd');
+      add('scenario_calculation', 'social_security_claiming_change', `Change in annual Social Security from claiming at ${claiming.toAge} instead of ${claiming.fromAge}`, Number(((claiming.amount / claiming.fromAmount - 1) * 100).toFixed(4)), 'percent');
     }
 
     const m = scenario.metrics;
@@ -1380,8 +1463,12 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
     ? ' Contributions are added once a year, and the Coast FIRE age is the first birthday by which savings could stop receiving new money and still reach the target.'
     : '';
   const comparison = execution.scenarios.length > 1
-    ? ` I compared ${execution.scenarios.map((scenario) => scenario.label.toLowerCase()).join(' with ')}.`
+    ? ` I compared ${execution.scenarios.map((scenario) => decapitalize(scenario.label)).join(' with ')}.`
     : '';
+  // Each benefit moved to another claiming age, once, with both amounts.
+  const claimingNotice = [...new Set(execution.scenarios.flatMap((scenario) =>
+    scenario.claiming ? [` ${describeClaimingAdjustment(scenario.claiming)}`] : []
+  ))].join('');
   const comparisonNotice = execution.comparisonUnavailableReason
     ? ` I could not run the comparison case: ${execution.comparisonUnavailableReason}`
     : '';
@@ -1413,7 +1500,7 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
     : ' It is a single straight line — the same return every year, with no taxes, fees or market swings.';
 
   return `Coast FIRE assumptions: ${rate(m.realReturnRate)} a year after inflation and a ${rate(m.withdrawalRate)} ` +
-    `withdrawal rate.${income}${comparison}${retirementAgeNotice}${spendingNotice}` +
+    `withdrawal rate.${income}${claimingNotice}${comparison}${retirementAgeNotice}${spendingNotice}` +
     `${savingsNotice}${ageNotice}${savedNotice}` +
     `${defaultsNotice}${contributionNotice}${comparisonNotice}${historyNotice}${straightLine} ` +
     'Change any of these and I will re-run it.';
@@ -1589,7 +1676,9 @@ export function coastFireSavableFigures(execution: CoastFireScenarioExecution): 
   if (primary.pensionInflation?.origin === 'user') {
     figures.push({ key: 'retirementIncomeInflation', value: primary.pensionInflation.value });
   }
-  return figures;
+  return withClaimedBenefit(figures, primary.claiming, primary.assumptions.some((assumption) =>
+    assumption.key === 'socialSecurityAmountAge' && assumption.origin === 'user'
+  ));
 }
 
 export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
@@ -1616,7 +1705,8 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'retirement_income_start_age', label: 'Pension start age', description: 'Age the pension begins.', valueType: 'age', minimum: 30, maximum: 95 },
     { id: 'retirement_income_inflation', label: 'Pension inflation treatment', description: 'A fixed dollar amount, or today\'s dollars rising with inflation.', valueType: 'enum', options: ['fixed', 'rises_with_inflation'] },
     { id: 'social_security_annual', label: 'Annual Social Security', description: 'In today\'s dollars; reduces what the portfolio must cover once it starts.', valueType: 'currency', minimum: 0, maximum: 250_000 },
-    { id: 'social_security_start_age', label: 'Social Security start age', description: 'Age the benefit begins.', valueType: 'age', minimum: 50, maximum: 80 },
+    { id: 'social_security_start_age', label: 'Social Security start age', description: 'Age the benefit begins; a benefit for another age is rescaled by Social Security\'s claiming rules.', valueType: 'age', minimum: 50, maximum: 80 },
+    { id: 'social_security_amount_age', label: 'Age the Social Security figure is for', description: 'The claiming age a stated benefit was quoted for, when it differs from the start age.', valueType: 'age', minimum: EARLIEST_CLAIMING_AGE, maximum: LATEST_CREDIT_AGE },
     { id: 'real_return_rate_percent', label: 'Growth after inflation', description: 'Percentage points; 5% is 5.', valueType: 'percentage', minimum: 0, maximum: 12 },
     { id: 'withdrawal_rate_percent', label: 'Withdrawal rate', description: 'Percentage points; 4% is 4.', valueType: 'percentage', minimum: 2, maximum: 8 },
     { id: 'annual_contribution', label: 'Annual contributions', description: 'What the user invests each year now; used to find when savings can coast.', valueType: 'currency', minimum: 0, maximum: 10_000_000 },
@@ -1646,7 +1736,7 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
   ],
   planner: {
     jsonSchema: COAST_FIRE_SCENARIO_PLAN_JSON_SCHEMA,
-    instructions: `When the user asks whether they have reached Coast FIRE, what their Coast FIRE number is, when they will reach Coast FIRE, or changes an input of a Coast FIRE answer earlier in this decision, set requested=true. Coast FIRE means having enough invested today that growth alone, with no further contributions, reaches the retirement target by the retirement age. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, currentSavings (invested retirement savings today), annualRetirementSpending (annual spending once retired, in today's dollars), annualRetirementIncome (a pension, annuity or other income in retirement that is not Social Security, per year), retirementIncomeStartAge (when that income starts), retirementIncomeInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), socialSecurityAnnual and socialSecurityStartAge (Social Security only), realReturnRatePercent (growth after inflation in percentage points: 5% is 5, never 0.05), withdrawalRatePercent (percentage points: 4% is 4), and annualContribution (what the user invests per year now; only used to find when they reach Coast FIRE). Until holdings are linked (or while none of the linked ones can be simulated), application code also runs the savings through market history on a preset mix: set allocation to conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets, and otherwise to unspecified with a null source. When the user gives a range for one value, put the low end in primary and only the high end in comparison. When the newest message changes an input of the earlier Coast FIRE case, put the earlier case in primary and only the changed values in comparison. Never estimate or supply typical values; application code applies disclosed defaults and asks for anything else missing, so request the calculation even when figures are missing. A Coast FIRE question does not by itself request any other calculator. The overrides object and every field and source are always present; use null for absent values. When there is no Coast FIRE question, set requested=false, allocation=unspecified, retirementIncomeInflation=unspecified, and null for every other value and every source in both variants.`,
+    instructions: `When the user asks whether they have reached Coast FIRE, what their Coast FIRE number is, when they will reach Coast FIRE, or changes an input of a Coast FIRE answer earlier in this decision, set requested=true. Coast FIRE means having enough invested today that growth alone, with no further contributions, reaches the retirement target by the retirement age. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, currentSavings (invested retirement savings today), annualRetirementSpending (annual spending once retired, in today's dollars), annualRetirementIncome (a pension, annuity or other income in retirement that is not Social Security, per year), retirementIncomeStartAge (when that income starts), retirementIncomeInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), socialSecurityAnnual and socialSecurityStartAge (Social Security only; socialSecurityStartAge is when the user claims it), socialSecurityAmountAge (only when the user says which claiming age their Social Security figure is for, such as a statement showing $2,500 a month at 67; otherwise null), realReturnRatePercent (growth after inflation in percentage points: 5% is 5, never 0.05), withdrawalRatePercent (percentage points: 4% is 4), and annualContribution (what the user invests per year now; only used to find when they reach Coast FIRE). Until holdings are linked (or while none of the linked ones can be simulated), application code also runs the savings through market history on a preset mix: set allocation to conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets, and otherwise to unspecified with a null source. When the user gives a range for one value, put the low end in primary and only the high end in comparison. When the newest message changes an input of the earlier Coast FIRE case, put the earlier case in primary and only the changed values in comparison; for claiming Social Security at another age, that is only socialSecurityStartAge, never a new amount, because application code applies Social Security's own claiming rules to the benefit. Never estimate or supply typical values; application code applies disclosed defaults and asks for anything else missing, so request the calculation even when figures are missing. A Coast FIRE question does not by itself request any other calculator. The overrides object and every field and source are always present; use null for absent values. When there is no Coast FIRE question, set requested=false, allocation=unspecified, retirementIncomeInflation=unspecified, and null for every other value and every source in both variants.`,
     parsePlan: parseCoastFireScenarioPlan,
   },
   execution: {

@@ -980,12 +980,14 @@ async function fetchOrCreateRetirementAnalysis(args: {
     stated: extracted && {
       socialSecurityAnnual: extracted.socialSecurityAnnual,
       socialSecurityStartAge: extracted.socialSecurityStartAge,
+      socialSecurityAmountAge: extracted.socialSecurityAmountAge,
       pensionAnnual: extracted.pensionAnnual,
       pensionStartAge: extracted.pensionStartAge,
       pensionInflation: extracted.pensionInflation,
     },
     statedFigures,
     retirementAge: retirementAge ?? currentAge,
+    currentAge,
   });
   incomeOrigins = income.origins;
   const storedIncome = Array.isArray(storedAnalysisInput.incomeStreams) ? storedAnalysisInput.incomeStreams : [];

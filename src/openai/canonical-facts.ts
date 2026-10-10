@@ -808,8 +808,11 @@ export function buildCanonicalFactPack(
     for (const stream of projectionIncome) {
       const pension = stream.label === PENSION_LABEL;
       const key = pension ? 'retirement_pension' : 'retirement_social_security';
+      const claiming = pension ? undefined : incomeOrigins?.socialSecurity?.claiming;
       const amountLabel = !pension
-        ? 'Social Security a year counted in the retirement projection, in today\'s dollars'
+        ? claiming
+          ? `Social Security a year counted in the retirement projection, claimed at ${claiming.toAge} by Social Security's claiming rules, in today's dollars`
+          : 'Social Security a year counted in the retirement projection, in today\'s dollars'
         : stream.inflationAdjusted
           ? 'Pension or other income a year counted in the retirement projection, in today\'s dollars, rising with inflation'
           : 'Pension or other income a year counted in the retirement projection, a fixed dollar amount that does not rise with inflation';
@@ -817,6 +820,15 @@ export function buildCanonicalFactPack(
         ? incomeOrigins?.pension?.startAge === 'default'
         : incomeOrigins?.socialSecurity?.startAge === 'default';
       addSnapshotFact(`${key}_annual`, amountLabel, stream.annualAmount, 'usd', `retirementAnalysis.inputs.incomeStreams.${key}.annualAmount`);
+      if (claiming) {
+        addSnapshotFact(
+          'retirement_social_security_as_given',
+          `Social Security a year as the user gave it, for claiming at ${claiming.fromAge}, in today's dollars`,
+          claiming.fromAmount,
+          'usd',
+          'retirementAnalysis.incomeOrigins.socialSecurity.claiming.fromAmount'
+        );
+      }
       addSnapshotFact(
         `${key}_start_age`,
         `${pension ? 'Pension' : 'Social Security'} start age in the retirement projection${startAssumed
