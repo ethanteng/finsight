@@ -57,11 +57,12 @@ const PLAN_FIELDS: Array<Field & { id: StatedFigureKey }> = [
     id: 'spendingCutPercent',
     label: 'How much of your spending could you cut in a bad market?',
     kind: 'percent',
+    integer: true,
     required: false,
     minimum: 0,
     maximum: 75,
     sentence: '{value}',
-    hint: 'Linc cuts spending by this much in any year your portfolio starts more than 20% below its value when you retired. Enter 0 if you could not cut.',
+    hint: 'Linc cuts spending by this much in any year your portfolio starts more than 20% below its inflation-adjusted value when withdrawals began. Enter 0 if you could not cut.',
   },
   {
     id: 'allocation',
@@ -157,7 +158,10 @@ function FieldInput({ field, text, onChange, note, error, needed, disabled }: Fi
   const noteId = `${inputId}-note`;
   const shownNote = error ?? note ?? field.hint;
   const money = field.kind === 'usd' || field.kind === 'usd_per_year';
-  const suffix = field.kind === 'usd_per_year' ? 'a year' : field.kind === 'usd' ? 'a month' : undefined;
+  const suffix = field.kind === 'usd_per_year' ? 'a year'
+    : field.kind === 'usd' ? 'a month'
+      : field.kind === 'percent' ? '%'
+        : undefined;
   return (
     <div className="min-w-0">
       <label htmlFor={inputId} className="flex items-center gap-2 text-sm font-semibold text-[#102319]">
@@ -183,7 +187,7 @@ function FieldInput({ field, text, onChange, note, error, needed, disabled }: Fi
           <input
             id={inputId}
             type="text"
-            inputMode={field.kind === 'age' ? 'numeric' : 'decimal'}
+            inputMode={field.kind === 'age' || field.integer ? 'numeric' : 'decimal'}
             autoComplete="off"
             value={text}
             onChange={(event) => onChange(event.target.value)}
