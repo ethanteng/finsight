@@ -258,6 +258,8 @@ describe('DELETE /api/transaction-categories/rules/:ruleId', () => {
     expect((await request(app).delete('/api/transaction-categories/rules/rule-1')).status).toBe(200);
     expect(prisma.transactionCategoryRule.deleteMany).toHaveBeenCalledWith({ where: { id: 'rule-1', userId: 'user-1' } });
     prisma.transactionCategoryRule.deleteMany.mockResolvedValue({ count: 0 });
-    expect((await request(app).delete('/api/transaction-categories/rules/someone-elses')).status).toBe(404);
+    const missing = await request(app).delete('/api/transaction-categories/rules/someone-elses');
+    expect(missing.status).toBe(404);
+    expect(missing.body.code).toBe('RULE_NOT_FOUND');
   });
 });

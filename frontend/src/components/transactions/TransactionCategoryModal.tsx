@@ -244,8 +244,10 @@ export default function TransactionCategoryModal({
         method: 'DELETE',
         headers: authHeaders(),
       });
-      // Already gone is what was asked for.
-      if (!response.ok && response.status !== 404) throw new Error('Failed to stop it');
+      // Already gone is what was asked for, but only the API saying so counts:
+      // a server without the route answers 404 too, with the rule still there.
+      const body = await response.json().catch(() => null);
+      if (!response.ok && !(response.status === 404 && body?.code === 'RULE_NOT_FOUND')) throw new Error('Failed to stop it');
       setRule(null);
     } catch {
       setRuleError('We couldn’t stop it. Please try again.');

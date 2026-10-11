@@ -287,7 +287,8 @@ router.delete('/rules/:ruleId', requireAuth, async (req: AuthenticatedRequest, r
       ? await getPrismaClient().transactionCategoryRule.deleteMany({ where: { id: ruleId, userId: req.user!.id } })
       : { count: 0 };
     if (deleted.count === 0) {
-      return res.status(404).json({ success: false, error: 'No such rule' });
+      // The code says the rule is gone, which a page can tell from a route that is missing.
+      return res.status(404).json({ success: false, error: 'No such rule', code: 'RULE_NOT_FOUND' });
     }
     res.json({ success: true });
   } catch (error) {

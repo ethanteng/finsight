@@ -460,6 +460,27 @@ describe('CashFlowPageClient', () => {
       expect(document.getElementById('usual-spending-category-3')).toBeNull();
     });
 
+    it('says what went wrong loading the rest, and sends a signed-out user to sign in', async () => {
+      let status = 404;
+      mockFetch(url => {
+        if (url.includes('/api/cash-flow?')) return { status: 200, body: report() };
+        if (url.includes('/api/cash-flow/transactions')) return { status, body: { error: 'Those transactions aren’t in your forecast anymore.' } };
+        return undefined;
+      });
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'Where your usual spending goes' });
+      const groceries = screen.getByRole('button', { name: /^Groceries/ });
+      fireEvent.click(groceries);
+      const details = document.getElementById(groceries.getAttribute('aria-controls')!)!;
+      fireEvent.click(within(details).getByRole('button', { name: 'Show all 14' }));
+      expect(await within(details).findByRole('alert')).toHaveTextContent('Those transactions aren’t in your forecast anymore.');
+
+      status = 401;
+      mockRouter.push.mockClear();
+      fireEvent.click(within(details).getByRole('button', { name: 'Show all 14' }));
+      await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith(expect.stringMatching(/^\/login/)));
+    });
+
     it('says why there is no breakdown when the Finances page sets spending', async () => {
       const fixture = report();
       mockFetch(url => (url.includes('/api/cash-flow?') ? {

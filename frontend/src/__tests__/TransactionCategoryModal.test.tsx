@@ -121,6 +121,27 @@ describe('TransactionCategoryModal', () => {
     expect(calls.find(call => call.init?.method === 'DELETE')!.url).toMatch(/\/api\/transaction-categories\/rules\/rule-1$/);
   });
 
+  it('keeps a rule it could not stop, unless the server says it is already gone', async () => {
+    const rule = { canApplyToMatching: true, rule: { id: 'rule-1', category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'] } };
+    let gone: unknown = {};
+    mockFetch(2, 'out', rule);
+    const fetchWithRule = global.fetch as jest.Mock;
+    global.fetch = jest.fn((input: RequestInfo | URL, init?: RequestInit) => (init?.method === 'DELETE'
+      ? Promise.resolve({ ok: false, status: 404, json: async () => gone })
+      : fetchWithRule(input, init))) as jest.Mock;
+    render(<TransactionCategoryModal transaction={venmo} onClose={jest.fn()} onSaved={jest.fn()} />);
+    await screen.findByText(/New transactions with Venmo get/);
+
+    // A server without the route says 404 too, and the rule is still there.
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('We couldn’t stop it.');
+    expect(screen.getByText(/New transactions with Venmo get/)).toBeInTheDocument();
+
+    gone = { success: false, error: 'No such rule', code: 'RULE_NOT_FOUND' };
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() => expect(screen.queryByText(/New transactions with Venmo get/)).not.toBeInTheDocument());
+  });
+
   it('shows a calendar date as that day, wherever the user is', async () => {
     // West of UTC, midnight UTC on Oct 1 is still Sep 30.
     const zone = process.env.TZ;

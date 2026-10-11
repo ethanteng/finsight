@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { MoreHorizontal } from 'lucide-react';
 import TransactionCategoryModal from '../transactions/TransactionCategoryModal';
 import type { CashFlowItemTransaction } from '../../types/cash-flow';
 import { sendCashFlowRequest } from '../../lib/cash-flow-api';
 import { formatCalendarDate, formatMoney } from '../../lib/cash-flow-format';
+import { loginUrlForCurrentPage } from '../../lib/post-login-redirect';
 
 /**
  * A transaction's category, which opens the category picker; the page reloads
@@ -139,6 +141,7 @@ export default function TransactionList({
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const router = useRouter();
 
   const loadEvery = useCallback(async () => {
     if (!transactionsRef) return;
@@ -146,8 +149,16 @@ export default function TransactionList({
     setError('');
     try {
       const response = await sendCashFlowRequest(apiUrl, `/api/cash-flow/transactions?ref=${encodeURIComponent(transactionsRef)}`, 'GET');
-      if (!response.ok) throw new Error('Failed to load transactions');
-      const data = await response.json();
+      // Signed out: back through sign-in to this page, as the page itself does.
+      if (response.status === 401) {
+        router.push(loginUrlForCurrentPage());
+        return;
+      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(typeof data.error === 'string' ? data.error : 'We couldn’t load them. Please try again.');
+        return;
+      }
       setEvery(Array.isArray(data.transactions) ? data.transactions : []);
       setExpanded(true);
     } catch {
@@ -155,7 +166,7 @@ export default function TransactionList({
     } finally {
       setLoading(false);
     }
-  }, [apiUrl, transactionsRef]);
+  }, [apiUrl, router, transactionsRef]);
 
   // A reloaded report may have changed the list: an open one is fetched again,
   // so a change made from it does not fold it away.
