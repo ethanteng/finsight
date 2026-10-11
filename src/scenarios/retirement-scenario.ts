@@ -455,7 +455,19 @@ function inputKey(input: RetirementAnalysisInput, policy: WithdrawalPolicy): str
     annualWithdrawalAmount: input.annualWithdrawalAmount,
     withdrawalStartAge: input.withdrawalStartAge,
     annualContributionAmount: input.annualContributionAmount ?? 0,
-    incomeStreams: input.incomeStreams ?? [],
+    // Term by term: a stored run's streams come back from a jsonb column in
+    // another key order than a variant's rebuilt ones.
+    incomeStreams: (input.incomeStreams ?? []).map((stream) => [
+      stream.label,
+      stream.annualAmount,
+      stream.startAge,
+      stream.endAge ?? null,
+      stream.inflationAdjusted !== false,
+    ]),
+    // A planning-age what-if can move only when the survivor years begin.
+    survivorSpending: input.survivorSpending
+      ? [input.survivorSpending.fromAge, input.survivorSpending.annualAmount]
+      : null,
     policy,
   });
 }

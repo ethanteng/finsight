@@ -17,11 +17,11 @@ import { describeClaimingAdjustmentBriefly } from '../services/social-security-c
 /** A partner a calculator planned for, with the joint timeline it ran on. */
 export type PlannedHousehold = ResolvedPartner & { timeline: HouseholdTimeline };
 
-/** Said when a partner's incomes are known but their age is not: in a list, and as a sentence. */
+/** Said when there is a partner to plan for but not their age: in a list, and as a sentence. */
 export const MISSING_PARTNER_AGE_CLAUSE =
-  'not your partner\'s incomes, since I need their age to time them (tell me how old they are and I will count them)';
+  'not your partner, since I need their age to plan for them (tell me how old they are and I will include them)';
 export const MISSING_PARTNER_AGE_SENTENCE =
-  'I did not count your partner\'s incomes, since I need their age to time them; tell me how old they are and I will count them.';
+  'I did not plan for your partner, since I need their age; tell me how old they are and I will include them.';
 
 function money(value: number): string {
   return `$${Math.round(value).toLocaleString('en-US')}`;

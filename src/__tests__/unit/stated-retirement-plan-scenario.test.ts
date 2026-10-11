@@ -756,7 +756,7 @@ describe('retirement plan from stated figures', () => {
 
     expect(runner.mock.calls[0][1]).toBeUndefined();
     expect(describeStatedRetirementPlanExecution(execution)).toContain(
-      'I did not count your partner\'s incomes, since I need their age to time them; tell me how old they are and I will count them.'
+      'I did not plan for your partner, since I need their age; tell me how old they are and I will include them.'
     );
   });
 
