@@ -13,7 +13,14 @@ import {
 import { calculateCoastFire } from '../../services/coast-fire';
 import { validateCanonicalFactPack } from '../../openai/canonical-facts';
 import { NOTHING_LINKED } from '../../openai/linked-data';
-import type { RetirementQuickPlanRequest, RetirementQuickPlanResult } from '../../services/retirement-quickplan';
+import {
+  quickPlanIncomeStreams,
+  type QuickPlanHousehold,
+  type RetirementQuickPlanRequest,
+  type RetirementQuickPlanResult,
+} from '../../services/retirement-quickplan';
+import { householdIncomeStreams, householdTimeline } from '../../services/household';
+import { buildSaveOffer } from '../../openai/save-offer';
 
 /** The historical engine's answer, shaped like the quick plan's, at a fixed survival rate. */
 function fakeRunner(survivalRate = 0.02) {
@@ -730,4 +737,109 @@ describe('Coast FIRE calculator', () => {
       expect(test.projectedPortfolioAtRetirement).toBeGreaterThan(0);
     }, 120_000);
   });
+
+  describe('with a partner', () => {
+    /** The fake engine, planning for a partner the way the quick plan does. */
+    function householdRunner() {
+      const base = fakeRunner();
+      return jest.fn(async (request: RetirementQuickPlanRequest, household?: QuickPlanHousehold) => {
+        const result = await base(request);
+        if (!household) return result;
+        const timeline = householdTimeline({ currentAge: request.currentAge, userPlanThroughAge: 95, partner: household.partner });
+        return {
+          ...result,
+          history: { ...result.history, horizonYears: timeline.horizonAge - request.currentAge },
+          household: {
+            timeline,
+            incomeStreams: householdIncomeStreams(quickPlanIncomeStreams(result.inputs), household.partner, timeline),
+          },
+        };
+      });
+    }
+
+    const PARTNER = { statedPartner: { age: 35, socialSecurityAnnual: 20_000, pensionAnnual: 12_000 } };
+
+    it('counts their incomes on the user\'s ages, through the younger one\'s planning age', async () => {
+      const runner = householdRunner();
+      const execution = await runCoastFireScenario(
+        PARTNER,
+        plan({ ...STATED, socialSecurityAnnual: 30_000 }),
+        runner as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+      const [scenario] = execution.scenarios;
+      const m = scenario.metrics;
+
+      expect(m.planThroughAge).toBe(98);
+      expect(m.incomes?.map(({ owner, kind, annualAmount, startAge, endAge, inflationAdjusted }) =>
+        ({ owner, kind, annualAmount, startAge, endAge, inflationAdjusted })
+      )).toEqual([
+        { owner: 'user', kind: 'social_security', annualAmount: 30_000, startAge: 67, endAge: undefined, inflationAdjusted: true },
+        // The smaller benefit stops when the first of them, the user, reaches 95.
+        { owner: 'partner', kind: 'social_security', annualAmount: 20_000, startAge: 70, endAge: 95, inflationAdjusted: true },
+        // A pension starts at the household's retirement: the partner's 52 is the user's 55.
+        { owner: 'partner', kind: 'pension', annualAmount: 12_000, startAge: 55, endAge: undefined, inflationAdjusted: false },
+      ]);
+      const partnerBenefit = m.incomes![1];
+      expect(partnerBenefit.levelAmount).toBeGreaterThan(0);
+      expect(partnerBenefit.levelAmount).toBeLessThan(20_000);
+
+      // The history runs the user's own incomes; the quick plan adds the partner's.
+      expect(runner.mock.calls[0][0]).toMatchObject({ socialSecurityAnnual: 30_000, pensionAnnual: 0 });
+      expect(runner.mock.calls[0][1]?.partner).toMatchObject({ age: 35, planThroughAge: 95 });
+      expect(scenario.historicalTest?.lifeExpectancy).toBe(98);
+
+      const disclosure = describeCoastFireScenarioExecution(execution)!;
+      expect(disclosure).toContain('Your Social Security of $30,000 a year in today\'s dollars starts at 67 (you did not say when it starts, so I used 67).');
+      expect(disclosure).toContain(
+        'Your partner\'s Social Security of $20,000 a year in today\'s dollars from their 67 (your 70), an age I assumed, ' +
+        'until the first of you reaches their planning age, when the survivor keeps the larger benefit. Since it stops then, ' +
+        `I counted it as $${Math.round(partnerBenefit.levelAmount).toLocaleString('en-US')} a year: its average worth through age 98.`
+      );
+      expect(disclosure).toContain('Your partner\'s pension of $12,000 a year from their 52 (your 55), a fixed amount');
+      expect(disclosure).toContain('Planning for you and your partner, 35 today; the plan runs until your partner reaches 95, an age I assumed, when you would be 98.');
+      expect(disclosure).toContain('then paying $80,000 a year, part of it from your Social Security from 67, your partner\'s Social Security from their 67 (your 70)');
+      expect(disclosure).toContain('through your age 98');
+
+      const facts = coastFireScenarioCanonicalFacts(execution);
+      const byEnding = (suffix: string) => facts.find((fact) => fact.id.endsWith(suffix));
+      expect(byEnding('_partner_social_security_counted_value')).toMatchObject({ value: Number(partnerBenefit.levelAmount.toFixed(2)) });
+      expect(byEnding('_partner_pension_counted_value')).toBeDefined();
+      expect(byEnding('_partner_age')).toMatchObject({ value: 35, unit: 'age' });
+      expect(byEnding('_plan_end_age')).toMatchObject({ value: 98, unit: 'age' });
+      expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+
+      const offer = buildSaveOffer('coast_fire', coastFireSavableFigures(execution), {});
+      expect(offer?.items.map((item) => item.key)).toEqual(expect.arrayContaining([
+        'partnerAge',
+        'partnerSocialSecurityAnnual',
+        'partnerRetirementIncome',
+      ]));
+    });
+
+    it('counts what one survivor spends as the level spending with the same value', async () => {
+      const single = await runCoastFireScenario(EMPTY_SNAPSHOT, plan(STATED)) as CompletedCoastFireScenarioExecution;
+      const couple = await runCoastFireScenario(
+        { statedPartner: { age: 35, survivorAnnualSpending: 50_000 } },
+        plan(STATED),
+        householdRunner() as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+      const m = couple.scenarios[0].metrics;
+
+      expect(m.spendingChange).toEqual({ fromAge: 95, annualAmount: 50_000 });
+      expect(m.levelSpending).toBeGreaterThan(50_000);
+      expect(m.levelSpending).toBeLessThan(80_000);
+      expect(m.retirementTarget).toBeLessThan(single.scenarios[0].metrics.retirementTarget);
+      expect(describeCoastFireScenarioExecution(couple)).toContain(
+        `I counted spending as $${Math.round(m.levelSpending!).toLocaleString('en-US')} a year: the level amount with the same ` +
+        'value over retirement as $80,000 a year until your 95 and $50,000 after.'
+      );
+    });
+
+    it('leaves a partner\'s incomes out until it knows their age', async () => {
+      const execution = await runCoastFireScenario({ statedPartner: { socialSecurityAnnual: 20_000 } }, plan(STATED));
+      expect((execution as CompletedCoastFireScenarioExecution).scenarios[0].metrics.planThroughAge).toBe(95);
+      expect(describeCoastFireScenarioExecution(execution)).toContain('I did not plan for your partner, since I need their age');
+    });
+  });
 });
+

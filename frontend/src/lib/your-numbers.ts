@@ -15,6 +15,14 @@ export const STATED_FIGURE_KEYS = [
   'socialSecurityStartAge',
   'planThroughAge',
   'allocation',
+  'partnerAge',
+  'partnerSocialSecurityAnnual',
+  'partnerSocialSecurityStartAge',
+  'partnerRetirementIncome',
+  'partnerRetirementIncomeStartAge',
+  'partnerRetirementIncomeInflation',
+  'partnerPlanThroughAge',
+  'survivorAnnualSpending',
 ] as const;
 
 export type StatedFigureKey = (typeof STATED_FIGURE_KEYS)[number];

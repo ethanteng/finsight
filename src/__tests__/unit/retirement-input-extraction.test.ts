@@ -4,7 +4,8 @@
  * bounds every context-planner proposal has to clear.
  */
 
-import { validateExtractedInputs } from '../../openai/retirement-input-extraction';
+import { statedPartnerOf, validateExtractedInputs } from '../../openai/retirement-input-extraction';
+import { retirementInputsForBaseline } from '../../openai/context-planner';
 
 describe('validateExtractedInputs', () => {
   const noSources = { currentAge: null, retirementAge: null, annualWithdrawalAmount: null, withdrawalStartAge: null, lifeExpectancy: null };
@@ -70,4 +71,34 @@ describe('validateExtractedInputs', () => {
       expect(result.sources).toEqual({});
     }
   });
+
+  it('keeps a partner\'s figures apart from the user\'s, and hands them to every calculator', () => {
+    const result = validateExtractedInputs({
+      ...noSources,
+      socialSecurityAnnual: 30_000,
+      partnerAge: 55,
+      partnerSocialSecurityAnnual: 20_000,
+      partnerSocialSecurityStartAge: 49,
+      partnerPensionInflation: 'rises_with_inflation',
+      survivorAnnualSpending: 500,
+      sources: { partnerAge: 'my wife is 55', partnerSocialSecurityAnnual: 'she gets $20k', partnerPensionInflation: 'her COLA' },
+    });
+
+    // A claiming age before 50 and survivor spending under $1,000 are not a plan.
+    expect(statedPartnerOf(result)).toEqual({
+      age: 55,
+      socialSecurityAnnual: 20_000,
+      pensionInflation: 'rises_with_inflation',
+    });
+    expect(result.sources).toMatchObject({ partnerAge: 'my wife is 55', partnerPensionInflation: 'her COLA' });
+    expect(statedPartnerOf(validateExtractedInputs(noSources))).toBeUndefined();
+
+    // A what-if on the user's plan never takes the partner out of the baseline.
+    const baseline = retirementInputsForBaseline(result, {
+      requested: true,
+      primary: { type: 'historical_cpi', overrides: { retirementAge: 62, sources: { retirementAge: 'retire at 62' } } },
+    } as any);
+    expect(statedPartnerOf(baseline)).toEqual(statedPartnerOf(result));
+  });
 });
+

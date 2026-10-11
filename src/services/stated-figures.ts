@@ -26,6 +26,14 @@ export const STATED_FIGURE_KEYS = [
   'socialSecurityStartAge',
   'planThroughAge',
   'allocation',
+  'partnerAge',
+  'partnerSocialSecurityAnnual',
+  'partnerSocialSecurityStartAge',
+  'partnerRetirementIncome',
+  'partnerRetirementIncomeStartAge',
+  'partnerRetirementIncomeInflation',
+  'partnerPlanThroughAge',
+  'survivorAnnualSpending',
 ] as const;
 
 export type StatedFigureKey = (typeof STATED_FIGURE_KEYS)[number];
@@ -87,6 +95,33 @@ export const STATED_FIGURE_DEFINITIONS: Record<StatedFigureKey, StatedFigureDefi
   socialSecurityStartAge: { label: 'Age Social Security starts', kind: 'age', minimum: 50, maximum: 80 },
   planThroughAge: { label: 'Plan through age', kind: 'age', minimum: 60, maximum: 110 },
   allocation: { label: 'Preset mix', kind: 'choice', options: ALLOCATION_PRESETS },
+  partnerAge: { label: 'Your partner\'s age', kind: 'age', minimum: 18, maximum: 90 },
+  partnerSocialSecurityAnnual: {
+    label: 'Your partner\'s Social Security a year, in today\'s dollars',
+    kind: 'usd_per_year',
+    minimum: 0,
+    maximum: 250_000,
+  },
+  partnerSocialSecurityStartAge: { label: 'Age your partner claims Social Security', kind: 'age', minimum: 50, maximum: 80 },
+  partnerRetirementIncome: {
+    label: 'Your partner\'s pension or other income a year',
+    kind: 'usd_per_year',
+    minimum: 0,
+    maximum: 10_000_000,
+  },
+  partnerRetirementIncomeStartAge: { label: 'Age your partner\'s pension starts', kind: 'age', minimum: 30, maximum: 95 },
+  partnerRetirementIncomeInflation: {
+    label: 'Whether your partner\'s pension rises with inflation',
+    kind: 'choice',
+    options: INCOME_INFLATION_OPTIONS,
+  },
+  partnerPlanThroughAge: { label: 'Plan through your partner\'s age', kind: 'age', minimum: 60, maximum: 110 },
+  survivorAnnualSpending: {
+    label: 'What one of you would spend a year alone, in today\'s dollars',
+    kind: 'usd_per_year',
+    minimum: 1_000,
+    maximum: 10_000_000,
+  },
 };
 
 function isKey(value: string): value is StatedFigureKey {

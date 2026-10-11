@@ -137,6 +137,34 @@ describe('Your numbers', () => {
     }));
   });
 
+  it('saves a partner\'s figures on their own, without touching the plan', async () => {
+    const saved = jest.fn();
+    serve({
+      'GET /api/stated-figures': {
+        figures: { retirementAge: { value: 62, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' } },
+        coverage: NOTHING_LINKED,
+      },
+      'GET /api/manual-accounts': { data: [] },
+      'GET /api/finances/overrides': { monthlyIncome: null, monthlyExpense: null },
+      'GET /profile': { memory: {} },
+      'PUT /api/stated-figures': (init: RequestInit) => {
+        saved(JSON.parse(String(init.body)));
+        return { figures: {} };
+      },
+    });
+    render(<YourNumbersPageClient />);
+
+    fireEvent.change(await screen.findByLabelText('Your partner\'s age'), { target: { value: '58' } });
+    fireEvent.change(screen.getByLabelText('Their Social Security a year'), { target: { value: '24,000' } });
+    fireEvent.change(screen.getByLabelText('What one of you would spend a year alone'), { target: { value: '60,000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save partner' }));
+
+    await waitFor(() => expect(saved).toHaveBeenCalledWith({
+      figures: { partnerAge: 58, partnerSocialSecurityAnnual: 24_000, survivorAnnualSpending: 60_000 },
+      source: 'page',
+    }));
+  });
+
   it('will not save a figure outside what Linc accepts', async () => {
     serve({
       'GET /api/stated-figures': { figures: {}, coverage: NOTHING_LINKED },

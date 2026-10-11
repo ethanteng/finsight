@@ -24,6 +24,13 @@ import {
   type RetirementIncomeStream,
 } from '../retirement-analytics';
 import type { Holding, Security } from './financial-data-service';
+import {
+  householdIncomeStreams,
+  householdTimeline,
+  survivorSpendingFor,
+  type HouseholdTimeline,
+  type PartnerPlan,
+} from './household';
 
 export const RETIREMENT_QUICKPLAN_VERSION = 1 as const;
 
@@ -276,7 +283,32 @@ export interface RetirementQuickPlanResult {
   assumptions: string[];
   /** What this particular run could not know, because the visitor connected nothing. */
   limitations: string[];
+  /**
+   * Present when the run planned for a partner as well: the joint timeline,
+   * every income it counted (the partner's on the user's ages, with the
+   * survivor rule's end ages), and the survivor's spending when stated.
+   */
+  household?: {
+    timeline: HouseholdTimeline;
+    incomeStreams: RetirementIncomeStream[];
+    survivorSpending?: { fromAge: number; annualAmount: number };
+  };
 }
+
+/**
+ * A partner to plan for as well, already resolved on their own ages
+ * (`services/household.ts`). Ask Linc's calculators pass one; the public
+ * calculator plans for one person and never does.
+ */
+export interface QuickPlanHousehold {
+  partner: PartnerPlan;
+}
+
+/** Runs a quick plan. Ask Linc's calculators take one so their tests can stand in for the engine. */
+export type QuickPlanRunner = (
+  request: RetirementQuickPlanRequest,
+  household?: QuickPlanHousehold
+) => Promise<RetirementQuickPlanResult>;
 
 export class QuickPlanValidationError extends Error {
   constructor(public readonly field: string, message: string) {
@@ -710,12 +742,28 @@ export function quickPlanIncomeStreams(inputs: RetirementQuickPlanResult['inputs
  * showing them side by side is the difference between a verdict and an answer.
  */
 async function computeRetirementQuickPlan(
-  resolved: NormalizedQuickPlan
+  resolved: NormalizedQuickPlan,
+  household?: QuickPlanHousehold
 ): Promise<RetirementQuickPlanResult> {
   const { inputs, assumed, mode, missing } = resolved;
   const startedAt = Date.now();
   const allocation = QUICKPLAN_ALLOCATIONS[inputs.allocation];
   const { holdings, securities } = buildSyntheticPortfolio(allocation, inputs.investableAssets);
+
+  // With a partner the plan runs until the later of the two reaches their
+  // planning age, on both incomes, and the survivor keeps the larger benefit.
+  // `lifeExpectancy` stays the user's own.
+  const timeline = household
+    ? householdTimeline({ currentAge: inputs.currentAge, userPlanThroughAge: inputs.lifeExpectancy, partner: household.partner })
+    : undefined;
+  const horizon = timeline?.horizonAge ?? inputs.lifeExpectancy;
+  const incomeStreams = household && timeline
+    ? householdIncomeStreams(quickPlanIncomeStreams(inputs), household.partner, timeline)
+    : quickPlanIncomeStreams(inputs);
+  // A survivor's spending is a share of a stated plan; a `rates` run has none.
+  const survivorSpending = household && timeline && mode === 'plan'
+    ? survivorSpendingFor(household.partner, timeline)
+    : undefined;
 
   const analyze = (retirementAge: number, annualSpending: number) =>
     analyzeRetirementPortfolio({
@@ -724,10 +772,17 @@ async function computeRetirementQuickPlan(
       currentAge: inputs.currentAge,
       retirementAge,
       withdrawalStartAge: retirementAge,
-      lifeExpectancy: inputs.lifeExpectancy,
+      lifeExpectancy: horizon,
       annualWithdrawalAmount: annualSpending,
       annualContributionAmount: inputs.annualContributions,
-      incomeStreams: quickPlanIncomeStreams(inputs),
+      incomeStreams,
+      // Spending less is spending less in both chapters.
+      ...(survivorSpending && {
+        survivorSpending: {
+          fromAge: survivorSpending.fromAge,
+          annualAmount: survivorSpending.annualAmount * (annualSpending / inputs.annualSpending),
+        },
+      }),
     });
 
   const primaryAnalysis = await analyze(inputs.retirementAge, inputs.annualSpending);
@@ -822,7 +877,7 @@ async function computeRetirementQuickPlan(
     firstMonth,
     lastMonth: primaryAnalysis.historicalData?.lastMonth ?? 'unknown',
     sequencesTested: primaryAnalysis.stressTest.totalSequences,
-    horizonYears: inputs.lifeExpectancy - inputs.currentAge,
+    horizonYears: horizon - inputs.currentAge,
     firstStartMonth: firstMonth,
     // Start windows advance one month at a time, so the last one is the first
     // plus one month for every sequence after it.
@@ -849,6 +904,9 @@ async function computeRetirementQuickPlan(
     sustainableSpendingRates,
     assumptions: primaryAnalysis.dataQuality.assumptions,
     limitations: buildLimitations(inputs, allocation, history),
+    ...(timeline && {
+      household: { timeline, incomeStreams, ...(survivorSpending && { survivorSpending }) },
+    }),
   };
 }
 
@@ -869,7 +927,8 @@ export function clearQuickPlanCache(): void {
 }
 
 export async function runRetirementQuickPlan(
-  request: RetirementQuickPlanRequest | unknown
+  request: RetirementQuickPlanRequest | unknown,
+  household?: QuickPlanHousehold
 ): Promise<RetirementQuickPlanResult> {
   const resolved = resolveQuickPlanRequest(request);
   const { inputs } = resolved;
@@ -892,12 +951,13 @@ export async function runRetirementQuickPlan(
     inputs.pensionInflationAdjusted,
     inputs.lifeExpectancy,
     inputs.allocation,
+    household ? household.partner : null,
   ]);
 
   const hit = planCache.get(key);
   if (hit) return { ...hit, cached: true };
 
-  const result = await computeRetirementQuickPlan(resolved);
+  const result = await computeRetirementQuickPlan(resolved, household);
   if (planCache.size >= MAX_CACHED_PLANS) {
     const oldest = planCache.keys().next();
     if (!oldest.done) planCache.delete(oldest.value);

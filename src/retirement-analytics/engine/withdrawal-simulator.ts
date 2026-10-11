@@ -41,6 +41,12 @@ export interface WithdrawalSimulationOptions {
    * not made.
    */
   incomeStreams?: SimulatedIncomeStream[];
+  /**
+   * Spending scaled by `factor` from `startMonth` on: what one survivor spends
+   * against what the couple did. It scales whatever the policy has made the
+   * withdrawal by then, so it composes with every policy.
+   */
+  spendingChange?: { startMonth: number; factor: number };
 }
 
 export interface SimulatedIncomeStream {
@@ -100,6 +106,12 @@ export function simulateWithdrawals(
   }
   const incomeStreams = options.incomeStreams ?? [];
   validateIncomeStreams(incomeStreams);
+  const spendingChange = options.spendingChange;
+  if (spendingChange && (!Number.isFinite(spendingChange.factor) || spendingChange.factor < 0 || !Number.isFinite(spendingChange.startMonth))) {
+    throw new Error('A spending change must be a finite, non-negative factor from a finite month');
+  }
+  const spendingFactorAt = (month: number) =>
+    spendingChange && month >= Math.round(spendingChange.startMonth) ? spendingChange.factor : 1;
   const scheduledIncome = incomeStreams
     .filter((stream) => stream.annualAmount > 0)
     .map((stream) => ({
@@ -194,7 +206,7 @@ export function simulateWithdrawals(
       }
     }
     const withdrawalThisMonth = withdrawing
-      ? Math.max(0, monthlyWithdrawal - incomeThisMonth)
+      ? Math.max(0, monthlyWithdrawal * spendingFactorAt(month) - incomeThisMonth)
       : 0;
     if (withdrawing && month < withdrawalDelayMonths + 12 && cumulativeInflation > 0) {
       realFirstYearPortfolioWithdrawal += withdrawalThisMonth / cumulativeInflation;
@@ -227,7 +239,7 @@ export function simulateWithdrawals(
           }
         }
         if (cumulativeInflation > 0) {
-          realFirstYearPortfolioWithdrawal += Math.max(0, monthlyWithdrawal - laterIncome) / cumulativeInflation;
+          realFirstYearPortfolioWithdrawal += Math.max(0, monthlyWithdrawal * spendingFactorAt(m) - laterIncome) / cumulativeInflation;
         }
       }
       return {

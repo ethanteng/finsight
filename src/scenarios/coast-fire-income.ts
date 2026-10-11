@@ -21,6 +21,12 @@
  *   value over the retirement it is paid in, under a disclosed inflation
  *   assumption. The market-history test beside the number uses each historical
  *   sequence's actual inflation instead.
+ *
+ * A couple adds two more, valued the same way (`services/household.ts`): an
+ * income that stops before the plan ends -- the smaller Social Security
+ * benefit at the first death, a pension with its holder -- is counted as the
+ * level amount with the same value as the years it is paid, and a survivor's
+ * lower spending as the level spending with the same value over retirement.
  */
 
 import {
@@ -35,11 +41,15 @@ export const DEFAULT_COAST_FIRE_INFLATION_PERCENT = 2.5;
 export type CoastFireIncomeKind = 'social_security' | 'pension';
 
 export interface CoastFireIncome {
+  /** Whose income it is; the user's when absent. Ages are always the user's. */
+  owner?: 'user' | 'partner';
   kind: CoastFireIncomeKind;
   /** A year: today's dollars when it rises with inflation, otherwise the fixed dollar amount it pays. */
   annualAmount: number;
   startAge: number;
   inflationAdjusted: boolean;
+  /** The first age it is no longer paid, when it stops before the plan ends. */
+  endAge?: number;
 }
 
 export interface CoastFireIncomeTerm extends CoastFireIncome {
@@ -64,6 +74,15 @@ export interface CoastFireIncomeResult extends CoastFireResult {
   planThroughAge: number;
   /** Present only when a fixed income was valued under it. */
   inflationPercent?: number;
+  /** What one survivor spends from an age on, when it was counted. */
+  spendingChange?: { fromAge: number; annualAmount: number };
+  /**
+   * With a spending change: the level spending, in today's dollars a year,
+   * with the same value over retirement as the couple's spending and then the
+   * survivor's. The target is built on it; `annualRetirementSpending` stays
+   * the couple's figure as given.
+   */
+  levelSpending?: number;
 }
 
 /**
@@ -75,7 +94,12 @@ export interface CoastFireIncomeResult extends CoastFireResult {
 export function calculateCoastFireWithIncome(
   inputs: Omit<CoastFireInputs, 'annualRetirementIncome'>,
   incomes: readonly CoastFireIncome[],
-  options: { planThroughAge: number; inflationPercent?: number }
+  options: {
+    planThroughAge: number;
+    inflationPercent?: number;
+    /** What one survivor spends from an age on, in today's dollars. */
+    spendingChange?: { fromAge: number; annualAmount: number };
+  }
 ): CoastFireIncomeResult {
   const retirementAge = inputs.retirementAge;
   const planThroughAge = Math.max(options.planThroughAge, retirementAge + 1);
@@ -87,18 +111,25 @@ export function calculateCoastFireWithIncome(
     .filter((income) => income.annualAmount > 0)
     .map((income) => {
       const firstAge = Math.max(income.startAge, retirementAge);
+      const lastAge = Math.min(income.endAge ?? planThroughAge, planThroughAge);
       let levelAmount = 0;
-      if (firstAge < planThroughAge) {
-        if (income.inflationAdjusted) {
+      if (firstAge < lastAge) {
+        if (income.inflationAdjusted && lastAge === planThroughAge) {
           levelAmount = income.annualAmount;
         } else {
-          // The fixed dollars, in today's dollars each year they are paid,
-          // valued at retirement; then the level amount with that same value.
+          // The dollars, in today's dollars each year they are paid, valued
+          // at retirement; then the level amount with that same value from
+          // its start to the end of the plan.
           let value = 0;
           let annuity = 0;
           for (let age = firstAge; age < planThroughAge; age++) {
             const weight = 1 / discount(age - retirementAge);
-            value += (income.annualAmount / (1 + inflation) ** (age - inputs.currentAge)) * weight;
+            if (age < lastAge) {
+              const real = income.inflationAdjusted
+                ? income.annualAmount
+                : income.annualAmount / (1 + inflation) ** (age - inputs.currentAge);
+              value += real * weight;
+            }
             annuity += weight;
           }
           levelAmount = annuity > 0 ? value / annuity : 0;
@@ -116,7 +147,22 @@ export function calculateCoastFireWithIncome(
     .filter((term) => term.startAge <= age)
     .reduce((sum, term) => sum + term.levelAmount, 0);
   const steadyIncome = terms.reduce((sum, term) => sum + term.levelAmount, 0);
-  const spending = inputs.annualRetirementSpending;
+
+  // A survivor's spending from an age on, as the level spending with the
+  // same value over retirement.
+  const change = options.spendingChange;
+  let levelSpending: number | undefined;
+  if (change && change.fromAge < planThroughAge) {
+    let value = 0;
+    let annuity = 0;
+    for (let age = retirementAge; age < planThroughAge; age++) {
+      const weight = 1 / discount(age - retirementAge);
+      value += (age >= change.fromAge ? change.annualAmount : inputs.annualRetirementSpending) * weight;
+      annuity += weight;
+    }
+    levelSpending = value / annuity;
+  }
+  const spending = levelSpending ?? inputs.annualRetirementSpending;
   const steadyNeed = Math.max(0, spending - steadyIncome);
 
   // Each year before the last income starts, what the portfolio pays beyond
@@ -132,7 +178,11 @@ export function calculateCoastFireWithIncome(
   }
 
   // The straight line on the steady state, validated the way the page's is.
-  const base = calculateCoastFire({ ...inputs, annualRetirementIncome: Math.min(steadyIncome, spending) });
+  const base = calculateCoastFire({
+    ...inputs,
+    annualRetirementSpending: spending,
+    annualRetirementIncome: Math.min(steadyIncome, spending),
+  });
   const retirementTarget = base.retirementTarget + bridgeReserve;
   const growthFactor = (1 + realReturn) ** base.yearsToRetirement;
   const coastFireNumber = retirementTarget / growthFactor;
@@ -140,6 +190,7 @@ export function calculateCoastFireWithIncome(
 
   return {
     ...base,
+    annualRetirementSpending: inputs.annualRetirementSpending,
     annualRetirementIncome: steadyIncome,
     portfolioSpendingNeed: steadyNeed,
     retirementTarget,
@@ -152,5 +203,6 @@ export function calculateCoastFireWithIncome(
     bridgeReserve,
     planThroughAge,
     ...(terms.some((term) => !term.inflationAdjusted) && { inflationPercent: inflation * 100 }),
+    ...(levelSpending !== undefined && change && { spendingChange: change, levelSpending }),
   };
 }

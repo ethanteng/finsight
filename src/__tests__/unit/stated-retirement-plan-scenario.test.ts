@@ -12,9 +12,13 @@ import {
 } from '../../scenarios/stated-retirement-plan-scenario';
 import {
   QuickPlanValidationError,
+  quickPlanIncomeStreams,
+  type QuickPlanHousehold,
   type RetirementQuickPlanRequest,
   type RetirementQuickPlanResult,
 } from '../../services/retirement-quickplan';
+import { householdIncomeStreams, householdTimeline, survivorSpendingFor } from '../../services/household';
+import { buildSaveOffer } from '../../openai/save-offer';
 import { validateCanonicalFactPack } from '../../openai/canonical-facts';
 import { NOTHING_LINKED } from '../../openai/linked-data';
 
@@ -83,6 +87,29 @@ const UNSUPPORTED_HOLDINGS = {
   investments: { holdings: [{ id: 'btc' }], securities: [] },
   retirementAnalysisNeedsInfo: { missingParams: [], detectedParams: {}, unavailableCode: 'no_supported_simulation' },
 } as any;
+
+/** The fake engine, planning for a partner the way the quick plan does. */
+function householdRunner(base = fakeRunner()) {
+  return jest.fn(async (request: RetirementQuickPlanRequest, household?: QuickPlanHousehold) => {
+    const result = await base(request);
+    if (!household) return result;
+    const timeline = householdTimeline({
+      currentAge: request.currentAge,
+      userPlanThroughAge: request.lifeExpectancy ?? 95,
+      partner: household.partner,
+    });
+    const survivorSpending = survivorSpendingFor(household.partner, timeline);
+    return {
+      ...result,
+      history: { ...result.history, horizonYears: timeline.horizonAge - request.currentAge },
+      household: {
+        timeline,
+        incomeStreams: householdIncomeStreams(quickPlanIncomeStreams(result.inputs), household.partner, timeline),
+        ...(survivorSpending && { survivorSpending }),
+      },
+    };
+  });
+}
 
 /** A quick-plan result shaped like the engine's, with a survival rate per retirement age. */
 function fakeRunner(survivalByAge: Record<number, number> = {}) {
@@ -639,4 +666,121 @@ describe('retirement plan from stated figures', () => {
     expect(scenario.outcome!.survivalRate).toBeLessThanOrEqual(1);
     expect(scenario.outcome!.projectedPortfolioAtRetirement).toBeGreaterThan(LEAD.investableAssets);
   }, 120_000);
+
+  it('plans for a partner too: their benefit, the joint horizon, and the survivor years', async () => {
+    const runner = householdRunner();
+    const snapshot = { ...NO_HOLDINGS, statedPartner: { age: 42, socialSecurityAnnual: 24_000 } };
+    const execution = await runStatedRetirementPlan(snapshot, plan(LEAD), runner as QuickPlanRunner) as CompletedStatedRetirementPlanExecution;
+
+    expect(runner.mock.calls[0][1]).toEqual({
+      partner: {
+        age: 42,
+        planThroughAge: 95,
+        socialSecurity: { annualAmount: 24_000, startAge: 67, quote: { amount: 24_000, age: 67 } },
+      },
+    });
+    const [scenario] = execution.scenarios;
+    expect(scenario.inputs.lifeExpectancy).toBe(95);
+    expect(scenario.history.horizonYears).toBe(53);
+    expect(scenario.household?.incomeStreams).toEqual([
+      // The larger benefit is the user's, so the survivor keeps it.
+      { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
+      { label: 'your partner\'s Social Security', annualAmount: 24_000, startAge: 70, inflationAdjusted: true, endAge: 95 },
+    ]);
+
+    const disclosure = describeStatedRetirementPlanExecution(execution)!;
+    expect(disclosure).toContain('Your Social Security of $30,000 a year starts at 67.');
+    expect(disclosure).toContain(
+      'The portfolio covers your Social Security\'s share for the 7 years before it starts at 67 and your ' +
+      'partner\'s Social Security\'s share for the 10 years before it starts at their 67 (your 70).'
+    );
+    expect(disclosure).toContain(
+      'Your partner\'s Social Security of $24,000 a year in today\'s dollars from their 67 (your 70), an age I assumed, ' +
+      'until the first of you reaches their planning age, when the survivor keeps the larger benefit.'
+    );
+    expect(disclosure).toContain(
+      'Planning for you and your partner, 42 today; the plan runs until your partner reaches 95, an age I assumed, when you would be 98.'
+    );
+    expect(disclosure).toContain(
+      'From when you reach 95, the survivor keeps the larger Social Security benefit, and spending stays $70,000 a year ' +
+      'unless you tell me what one of you would spend alone.'
+    );
+
+    const facts = statedRetirementPlanCanonicalFacts(execution);
+    const byEnding = (suffix: string) => facts.find((fact) => fact.id.endsWith(suffix));
+    expect(byEnding('_partner_social_security_annual')).toMatchObject({ value: 24_000, unit: 'usd' });
+    expect(byEnding('_partner_social_security_start_age_partner')).toMatchObject({ value: 67, unit: 'age' });
+    expect(byEnding('_partner_social_security_end_age')).toMatchObject({ value: 95, unit: 'age' });
+    expect(byEnding('_plan_end_age')).toMatchObject({ value: 98, unit: 'age' });
+    expect(byEnding('_first_death_age')).toMatchObject({ value: 95, unit: 'age' });
+    expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+
+    const offer = buildSaveOffer('stated_retirement_plan', statedRetirementPlanSavableFigures(execution), {});
+    expect(offer?.items.filter((item) => item.key.startsWith('partner'))).toEqual([
+      { key: 'partnerAge', label: 'Your partner\'s age', value: 42, display: '42' },
+      { key: 'partnerSocialSecurityAnnual', label: 'Your partner\'s Social Security', value: 24_000, display: '$24,000 a year' },
+    ]);
+  });
+
+  it('spends what the user said one survivor would, from the first death', async () => {
+    const runner = householdRunner();
+    const snapshot = {
+      ...NO_HOLDINGS,
+      statedPartner: { age: 42, survivorAnnualSpending: 50_000 },
+      statedFigures: { partnerPlanThroughAge: { value: 92, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' } },
+    };
+    const execution = await runStatedRetirementPlan(snapshot as any, plan(LEAD), runner as QuickPlanRunner) as CompletedStatedRetirementPlanExecution;
+
+    // The partner, three years younger, reaches their saved 92 at the user's 95: both together.
+    expect(execution.scenarios[0].household?.timeline.firstDeath).toEqual({ who: 'both', atUserAge: 95 });
+    expect(execution.scenarios[0].household?.survivorSpending).toBeUndefined();
+
+    const younger = await runStatedRetirementPlan(
+      { ...NO_HOLDINGS, statedPartner: { age: 40, survivorAnnualSpending: 50_000 } },
+      plan(LEAD),
+      householdRunner() as QuickPlanRunner
+    ) as CompletedStatedRetirementPlanExecution;
+    expect(younger.scenarios[0].household?.survivorSpending).toEqual({ fromAge: 95, annualAmount: 50_000 });
+    expect(describeStatedRetirementPlanExecution(younger)).toContain(
+      'From when you reach 95, spending becomes $50,000 a year, what you said one of you would spend alone.'
+    );
+  });
+
+  it('says what changes at the first death plainly when the partner has no income of their own', async () => {
+    const execution = await runStatedRetirementPlan(
+      { ...NO_HOLDINGS, statedPartner: { age: 42 } },
+      plan(LEAD),
+      householdRunner() as QuickPlanRunner
+    );
+    expect(describeStatedRetirementPlanExecution(execution)).toContain(
+      'From when you reach 95, spending stays $70,000 a year unless you tell me what one of you would spend alone.'
+    );
+  });
+
+  it('leaves a partner\'s incomes out until it knows their age, and says so', async () => {
+    const runner = householdRunner();
+    const execution = await runStatedRetirementPlan(
+      { ...NO_HOLDINGS, statedPartner: { socialSecurityAnnual: 24_000 } },
+      plan(LEAD),
+      runner as QuickPlanRunner
+    );
+
+    expect(runner.mock.calls[0][1]).toBeUndefined();
+    expect(describeStatedRetirementPlanExecution(execution)).toContain(
+      'I did not plan for your partner, since I need their age; tell me how old they are and I will include them.'
+    );
+  });
+
+  it('runs the real engine until the younger partner\'s planning age', async () => {
+    const execution = await runStatedRetirementPlan(
+      { ...NO_HOLDINGS, statedPartner: { age: 40, socialSecurityAnnual: 24_000 } },
+      plan(LEAD)
+    ) as CompletedStatedRetirementPlanExecution;
+
+    const [scenario] = execution.scenarios;
+    expect(scenario.history.horizonYears).toBe(55);
+    expect(scenario.household?.timeline.horizonAge).toBe(100);
+    expect(scenario.outcome!.sequencesTested).toBeGreaterThan(100);
+  }, 120_000);
 });
+

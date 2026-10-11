@@ -125,6 +125,13 @@ export interface RetirementAnalysisInput {
    * `firstYearPortfolioWithdrawal` is the net draw.
    */
   incomeStreams?: RetirementIncomeStream[];
+
+  /**
+   * What the household spends from an age on, in today's dollars, in place of
+   * `annualWithdrawalAmount`: what one partner spends after the other dies.
+   * Omitted means spending stays the same for the whole plan.
+   */
+  survivorSpending?: { fromAge: number; annualAmount: number };
   
   /**
    * Investment value deliberately left out of this projection because its

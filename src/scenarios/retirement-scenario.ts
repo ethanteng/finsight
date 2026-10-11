@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import type { FinancialContextSnapshot } from '../openai/types';
+import type { FinancialContextSnapshot, RetirementHousehold } from '../openai/types';
 import type { CanonicalFact, CanonicalFactUnit } from '../openai/canonical-facts';
 import {
   analyzeRetirementPortfolio,
@@ -18,6 +18,7 @@ import {
   EARLIEST_CLAIMING_AGE,
   type ClaimingAdjustment,
 } from '../services/social-security-claiming';
+import { householdTimeline, survivorSpendingFor, withSurvivorRule } from '../services/household';
 
 export const RETIREMENT_SCENARIO_VERSION = 2 as const;
 export const RETIREMENT_CALCULATOR_ID = 'retirement' as const;
@@ -350,7 +351,8 @@ const OVERRIDE_ASSUMPTIONS: Record<RetirementOverrideField, {
 function resolveVariant(
   baseInput: RetirementAnalysisInput,
   planned: PlannedRetirementVariant,
-  incomeOrigins?: RetirementIncomeOrigins
+  incomeOrigins?: RetirementIncomeOrigins,
+  household?: RetirementHousehold
 ): {
   input: RetirementAnalysisInput;
   policy: WithdrawalPolicy;
@@ -366,6 +368,10 @@ function resolveVariant(
   const overrides = planned.overrides;
   if (!overrides) return { input, policy: resolvedPolicy.policy, assumptions };
 
+  // With a partner the run's horizon is the household's, so a what-if on the
+  // planning age moves the user's own and the household's follows from it.
+  const partner = household && !('missingAge' in household) ? household : undefined;
+  let userPlanThroughAge = partner?.timeline.userPlanThroughAge;
   let claiming: ClaimingAdjustment | undefined;
   for (const field of RETIREMENT_OVERRIDE_FIELDS) {
     const value = overrides[field];
@@ -378,6 +384,8 @@ function resolveVariant(
       if ('unavailableReason' in claimed) return claimed;
       input.incomeStreams = claimed.streams;
       claiming = claimed.claiming;
+    } else if (field === 'lifeExpectancy' && partner) {
+      userPlanThroughAge = value;
     } else {
       input[field] = value;
     }
@@ -398,7 +406,26 @@ function resolveVariant(
   // what-if that retires at another age; everything else the user stated
   // about their income stays as it is.
   if (input.incomeStreams?.length && input.retirementAge !== baseInput.retirementAge) {
-    input.incomeStreams = incomeForRetirementAge(input.incomeStreams, incomeOrigins, input.retirementAge);
+    input.incomeStreams = incomeForRetirementAge(
+      input.incomeStreams,
+      incomeOrigins,
+      input.retirementAge,
+      partner?.origins.pensionStartAge === 'default'
+    );
+  }
+  if (partner && userPlanThroughAge !== undefined) {
+    // The household horizon can clear validation while the user's own planning
+    // age falls at or before withdrawals begin (younger partner). Reject that.
+    if (userPlanThroughAge <= input.withdrawalStartAge) {
+      return { unavailableReason: 'Life expectancy must be later than the withdrawal start age.' };
+    }
+    const timeline = householdTimeline({ currentAge: input.currentAge, userPlanThroughAge, partner: partner.plan });
+    input.lifeExpectancy = timeline.horizonAge;
+    // A benefit claimed at another age can change which of the two is smaller.
+    if (input.incomeStreams?.length) input.incomeStreams = withSurvivorRule(input.incomeStreams, timeline);
+    const survivorSpending = survivorSpendingFor(partner.plan, timeline);
+    if (survivorSpending) input.survivorSpending = survivorSpending;
+    else delete input.survivorSpending;
   }
 
   return { input, policy: resolvedPolicy.policy, assumptions, ...(claiming && { claiming }) };
@@ -428,7 +455,19 @@ function inputKey(input: RetirementAnalysisInput, policy: WithdrawalPolicy): str
     annualWithdrawalAmount: input.annualWithdrawalAmount,
     withdrawalStartAge: input.withdrawalStartAge,
     annualContributionAmount: input.annualContributionAmount ?? 0,
-    incomeStreams: input.incomeStreams ?? [],
+    // Term by term: a stored run's streams come back from a jsonb column in
+    // another key order than a variant's rebuilt ones.
+    incomeStreams: (input.incomeStreams ?? []).map((stream) => [
+      stream.label,
+      stream.annualAmount,
+      stream.startAge,
+      stream.endAge ?? null,
+      stream.inflationAdjusted !== false,
+    ]),
+    // A planning-age what-if can move only when the survivor years begin.
+    survivorSpending: input.survivorSpending
+      ? [input.survivorSpending.fromAge, input.survivorSpending.annualAmount]
+      : null,
     policy,
   });
 }
@@ -618,6 +657,7 @@ export async function runRetirementScenario(
     // changes only what the user asked to change.
     annualContributionAmount: stored.annualContributionAmount ?? 0,
     incomeStreams: stored.incomeStreams ?? [],
+    ...(stored.survivorSpending && { survivorSpending: stored.survivorSpending }),
     // Variants must exclude exactly what the baseline excluded, or a scenario
     // comparison would attribute a coverage difference to the change modeled.
     unmodeledInvestments: snapshot.investments?.unmodeledInvestments ?? null,
@@ -636,7 +676,7 @@ export async function runRetirementScenario(
 
   const unique = new Map<string, Exclude<ReturnType<typeof resolveVariant>, { unavailableReason: string }>>();
   for (const planned of plannedVariants.slice(0, 2)) {
-    const resolved = resolveVariant(baseInput, planned, baseline._incomeOrigins);
+    const resolved = resolveVariant(baseInput, planned, baseline._incomeOrigins, baseline._household);
     if ('unavailableReason' in resolved) return unavailable(startedAt, resolved.unavailableReason);
     const invalidReason = validateVariantInput(resolved.input);
     if (invalidReason) return unavailable(startedAt, invalidReason);

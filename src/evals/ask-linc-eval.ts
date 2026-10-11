@@ -4,6 +4,7 @@ import type { FinancialContextSnapshot } from '../openai/types';
 import { normalizeContextPacks, questionNeedsFromPacks } from '../openai/context-packs';
 import type { ContextPlan } from '../openai/context-planner';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
+import { householdTimeline } from '../services/household';
 
 export type AskLincEvalCategory =
   | 'numerical_accuracy'
@@ -328,6 +329,46 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
     },
   });
   const contributionFacts = contribution.showTheMathData!.evidenceManifest.facts;
+
+  // A couple: the partner's benefit on both ages, the plan run until the
+  // younger reaches their planning age, and the smaller benefit stopping at
+  // the first death -- disclosed, and citeable.
+  const partnerPlan = {
+    age: 42,
+    planThroughAge: 95,
+    socialSecurity: { annualAmount: 20_000, startAge: 67, quote: { amount: 20_000, age: 67 } },
+  };
+  const coupleSnapshot = retirementSnapshot();
+  coupleSnapshot.retirementAnalysis = {
+    ...coupleSnapshot.retirementAnalysis!,
+    _storedInputParams: {
+      ...coupleSnapshot.retirementAnalysis!._storedInputParams,
+      lifeExpectancy: 98,
+      incomeStreams: [
+        { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
+        { label: 'your partner\'s Social Security', annualAmount: 20_000, startAge: 70, inflationAdjusted: true, endAge: 95 },
+      ],
+    },
+    _incomeOrigins: { socialSecurity: { amount: 'stated', startAge: 'stated' } },
+    _household: {
+      plan: partnerPlan,
+      origins: { age: 'stated', socialSecurityAnnual: 'stated', socialSecurityStartAge: 'default', planThroughAge: 'default' },
+      timeline: householdTimeline({ currentAge: 45, userPlanThroughAge: 95, partner: partnerPlan }),
+    },
+  };
+  const couple = await runAskLincAnalysis({
+    question: 'Are we on track to retire, counting my wife\'s Social Security?',
+    enableValidation: false,
+    evaluation: {
+      snapshot: coupleSnapshot,
+      skipToneConfig: true,
+      model: () => jsonResponse(
+        'The projection counts your wife\'s $20,000 a year of Social Security from your 70 and runs until she reaches 95.',
+        { partner_social_security: { value: 20_000, unit: 'usd', provenance: 'retirement_partner_social_security_annual' } }
+      ),
+    },
+  });
+  const coupleFacts = couple.showTheMathData!.evidenceManifest.facts;
 
   // The first follow-up of someone the Coast FIRE calculator sent here: the
   // same question, asked again in Ask Linc, with nothing linked. This used to
@@ -654,6 +695,20 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
         contributionFacts.some(fact => fact.id === 'retirement_linked_withdrawals_total' && fact.value === 1_000) &&
         contribution.showTheMathData!.evidenceManifest.validation.deterministic.valid,
       detail: 'A contribution read from linked investment activity is disclosed with its months and method, and the answer can cite it and the totals behind it.',
+    },
+    {
+      id: 'partner-incomes-and-horizon-reach-the-projection',
+      category: 'retirement',
+      passed: couple.structuredResponse.summary.includes(
+        'your partner\'s Social Security of $20,000 a year in today\'s dollars from their 67 (your 70), an age I assumed, ' +
+        'until the first of you reaches their planning age, when the survivor keeps the larger benefit'
+      ) &&
+        couple.structuredResponse.summary.includes('the plan runs until your partner reaches 95, an age I assumed, when you would be 98') &&
+        keyNumberValue(couple, 'partner_social_security') === 20_000 &&
+        coupleFacts.some(fact => fact.id === 'retirement_plan_end_age' && fact.value === 98) &&
+        coupleFacts.some(fact => fact.id === 'retirement_partner_social_security_end_age' && fact.value === 95) &&
+        couple.showTheMathData!.evidenceManifest.validation.deterministic.valid,
+      detail: 'A partner\'s benefit is disclosed at both ages with the joint horizon and the survivor rule, and the answer can cite it.',
     },
     {
       id: 'calculator-follow-up-answers-without-linked-holdings',

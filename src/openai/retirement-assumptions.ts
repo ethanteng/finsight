@@ -13,8 +13,15 @@
  * sentence about what the projection used must not itself be generated.
  */
 
-import type { FinancialContextSnapshot } from './types';
-import { PENSION_LABEL, type RetirementIncomeOrigins } from './retirement-income';
+import type { FinancialContextSnapshot, RetirementHousehold } from './types';
+import type { RetirementIncomeOrigins } from './retirement-income';
+import { incomeOfStream } from '../services/household';
+import {
+  describeHouseholdTimeline,
+  describePartnerIncome,
+  incomeEndClause,
+  MISSING_PARTNER_AGE_CLAUSE,
+} from './household-evidence';
 import type { RetirementContributionOrigin } from './retirement-contributions';
 import { savedOn } from '../services/stated-figures';
 import { describeClaimingAdjustmentBriefly } from '../services/social-security-claiming';
@@ -98,7 +105,17 @@ export function describeRetirementAssumptions(
           : `${LABELS[field]} ${formatValue(field, value)}`
     );
   }
-  parts.push(...describeIncome(values.incomeStreams, analysis._incomeOrigins));
+  parts.push(...describeIncome(values.incomeStreams, analysis._incomeOrigins, analysis._household));
+  const countedIncomes = values.incomeStreams?.map((stream) => {
+    const { kind } = incomeOfStream(stream);
+    return { kind, ...(stream.endAge !== undefined && { endAge: stream.endAge }) };
+  });
+  parts.push(...describeHousehold(
+    analysis._household,
+    values.annualWithdrawalAmount,
+    analysis._storedInputParams?.survivorSpending,
+    countedIncomes
+  ));
   parts.push(...describeContribution(values, analysis._contributionOrigin));
   if (parts.length === 0) return null;
 
@@ -117,33 +134,59 @@ function money(value: number): string {
  */
 function describeIncome(
   streams: readonly RetirementIncomeStream[] | undefined,
-  origins: RetirementIncomeOrigins | undefined
+  origins: RetirementIncomeOrigins | undefined,
+  household: RetirementHousehold | undefined
 ): string[] {
   if (!origins) return [];
+  const partner = household && !('missingAge' in household) ? household : undefined;
+  const missingPartnerAge = household && 'missingAge' in household ? [MISSING_PARTNER_AGE_CLAUSE] : [];
   if (!streams || streams.length === 0) {
-    return ['no Social Security or pension, since I have none for you (tell me yours and I will count it)'];
+    return [
+      partner
+        ? 'no Social Security or pension for either of you, since I have none (tell me yours and I will count them)'
+        : 'no Social Security or pension, since I have none for you (tell me yours and I will count it)',
+      ...missingPartnerAge,
+    ];
   }
   const savedNote = origins.savedAt ? ` (from Your numbers, saved ${savedOn(origins.savedAt)})` : '';
-  return streams.map((stream) => {
-    if (stream.label !== PENSION_LABEL) {
+  const parts = streams.map((stream) => {
+    const { owner, kind } = incomeOfStream(stream);
+    if (owner === 'partner' && partner) return describePartnerIncome(stream, partner);
+    const until = incomeEndClause(stream, partner);
+    if (kind === 'social_security') {
       const assumedStart = origins.socialSecurity?.startAge === 'default' ? ', an age I assumed' : '';
       const saved = origins.socialSecurity?.amount === 'saved' ? savedNote : '';
       const claiming = origins.socialSecurity?.claiming;
       const claimed = claiming ? ` (${describeClaimingAdjustmentBriefly(claiming)})` : '';
-      return `Social Security ${money(stream.annualAmount)} a year in today's dollars from ${stream.startAge}${assumedStart}${claimed}${saved}`;
+      return `${partner ? 'your ' : ''}Social Security ${money(stream.annualAmount)} a year in today's dollars from ${stream.startAge}${assumedStart}${claimed}${until}${saved}`;
     }
     const pension = origins.pension;
     const terms = stream.inflationAdjusted
-      ? `a pension of ${money(stream.annualAmount)} a year in today's dollars from ${stream.startAge}, rising with inflation`
-      : `a pension of ${money(stream.annualAmount)} a year from ${stream.startAge}, a fixed amount that buys less each year prices rise`;
+      ? `${partner ? 'your' : 'a'} pension of ${money(stream.annualAmount)} a year in today's dollars from ${stream.startAge}, rising with inflation`
+      : `${partner ? 'your' : 'a'} pension of ${money(stream.annualAmount)} a year from ${stream.startAge}, a fixed amount that buys less each year prices rise`;
     const assumed = [
       pension?.startAge === 'default' ? 'that it starts when you retire' : null,
       pension?.inflation === 'default' ? 'that it does not rise with inflation' : null,
     ].filter((item): item is string => Boolean(item));
     const assumedNote = assumed.length > 0 ? ` (I assumed ${assumed.join(' and ')})` : '';
     const saved = pension?.amount === 'saved' ? savedNote : '';
-    return `${terms}${assumedNote}${saved}`;
+    return `${terms}${until}${assumedNote}${saved}`;
   });
+  return [...parts, ...missingPartnerAge];
+}
+
+/** The couple's timeline, when the projection planned for a partner. */
+function describeHousehold(
+  household: RetirementHousehold | undefined,
+  spending: number | undefined,
+  survivorSpending: { fromAge: number; annualAmount: number } | undefined,
+  incomeStreams: readonly { kind: 'social_security' | 'pension'; endAge?: number }[] | undefined
+): string[] {
+  if (!household || 'missingAge' in household) return [];
+  return describeHouseholdTimeline(household, {
+    ...(typeof spending === 'number' && { annual: spending }),
+    ...(survivorSpending && { survivor: survivorSpending }),
+  }, incomeStreams);
 }
 
 const MONTH_NAMES = [

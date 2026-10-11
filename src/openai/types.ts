@@ -9,6 +9,10 @@ import type { PersonalContextValues } from '../profile/personal-context';
 import type { StatedFigures } from '../services/stated-figures';
 import type { RetirementIncomeStream } from '../retirement-analytics/types';
 import type { LinkedContributions, RetirementContributionOrigin } from './retirement-contributions';
+import type { HouseholdTimeline, ResolvedPartner, StatedPartner } from '../services/household';
+
+/** The partner a retirement projection counted, or that it could not without their age. */
+export type RetirementHousehold = { missingAge: true } | (ResolvedPartner & { timeline: HouseholdTimeline });
 import type { RetirementIncomeOrigins } from './retirement-income';
 import type { CashFlowForecastContext } from './cash-flow-forecast-context';
 
@@ -241,6 +245,12 @@ export interface FinancialContextSnapshot {
    * Absent when nothing is saved.
    */
   statedFigures?: StatedFigures;
+  /**
+   * What the user said about a spouse or partner in this decision, from the
+   * planner's retirement inputs. Every retirement calculator resolves it the
+   * same way, with Your numbers behind it (`services/household.ts`).
+   */
+  statedPartner?: StatedPartner;
   homeValueSummary?: string;
   /** Structured RentCast value data used for fact provenance and uncertainty bounds. */
   homeValueData?: HomeData;
@@ -355,10 +365,18 @@ export interface FinancialContextSnapshot {
       annualWithdrawalAmount?: number;
       withdrawalStartAge?: number;
       lifeExpectancy?: number;
+      /**
+       * The user's own planning age when a partner extends `lifeExpectancy` to
+       * the household horizon. Absent on single-person runs and on analyses
+       * recorded before household planning.
+       */
+      userPlanThroughAge?: number;
       /** Social Security and a pension, each on its own schedule; absent before version 11. */
       incomeStreams?: RetirementIncomeStream[];
       /** A year until withdrawals begin, in today's dollars; absent on runs that counted none. */
       annualContributionAmount?: number;
+      /** What one survivor spends from the first death, when the user said. */
+      survivorSpending?: { fromAge: number; annualAmount: number };
     };
     _evidence?: {
       recordId: string;
@@ -376,6 +394,8 @@ export interface FinancialContextSnapshot {
     _incomeOrigins?: RetirementIncomeOrigins;
     /** Where the contribution came from. See `retirement-contributions.ts`. */
     _contributionOrigin?: RetirementContributionOrigin;
+    /** The partner the plan counts, and its timeline. See `services/household.ts`. */
+    _household?: RetirementHousehold;
     _inputSources?: {
       currentAge?: string;
       retirementAge?: string;

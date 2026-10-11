@@ -68,6 +68,34 @@ const PLAN_FIELDS: Array<Field & { id: StatedFigureKey }> = [
   },
 ];
 
+/**
+ * A spouse or partner, for plans that should run for two. Linc counts their
+ * incomes from their own ages, runs the plan until the later of your planning
+ * ages, and at the first death keeps the larger Social Security benefit for
+ * the survivor (see `src/services/household.ts`).
+ */
+const PARTNER_FIELDS: Array<Field & { id: StatedFigureKey }> = [
+  { id: 'partnerAge', label: 'Your partner\'s age', kind: 'age', required: false, minimum: 18, maximum: 90, sentence: '{value}', hint: 'Leave blank if you plan alone.' },
+  { id: 'partnerSocialSecurityAnnual', label: 'Their Social Security a year', kind: 'usd_per_year', required: false, minimum: 0, maximum: 250_000, sentence: '{value}' },
+  { id: 'partnerSocialSecurityStartAge', label: 'Their age when they claim it', kind: 'age', required: false, minimum: 50, maximum: 80, sentence: '{value}', hint: 'Linc assumes 67.' },
+  { id: 'partnerRetirementIncome', label: 'Their pension or other income a year', kind: 'usd_per_year', required: false, minimum: 0, maximum: 10_000_000, sentence: '{value}' },
+  { id: 'partnerRetirementIncomeStartAge', label: 'Their age when the pension starts', kind: 'age', required: false, minimum: 30, maximum: 95, sentence: '{value}', hint: 'Linc assumes it starts when you retire.' },
+  {
+    id: 'partnerRetirementIncomeInflation',
+    label: 'Does their pension rise with inflation?',
+    kind: 'choice',
+    required: false,
+    options: [
+      { value: 'fixed', label: 'No, it is a fixed amount' },
+      { value: 'rises_with_inflation', label: 'Yes, it has a cost-of-living adjustment' },
+    ],
+    sentence: '{value}',
+    hint: 'Linc assumes a fixed amount.',
+  },
+  { id: 'partnerPlanThroughAge', label: 'Plan through their age', kind: 'age', required: false, minimum: 60, maximum: 110, sentence: '{value}', hint: 'Linc assumes 95.' },
+  { id: 'survivorAnnualSpending', label: 'What one of you would spend a year alone', kind: 'usd_per_year', required: false, minimum: 1_000, maximum: 10_000_000, sentence: '{value}', hint: 'In today\'s dollars. Linc assumes the survivor spends what you spend together.' },
+];
+
 const AGE_FIELD: Field = { id: 'age', label: 'Your age', kind: 'age', required: false, minimum: 18, maximum: 110, sentence: '{value}' };
 const MONTHLY_FIELDS: Array<Field & { id: keyof Overrides }> = [
   { id: 'monthlyIncome', label: 'Take-home pay a month', kind: 'usd', required: false, minimum: 0, maximum: 10_000_000, sentence: '{value}' },
@@ -247,7 +275,7 @@ export default function YourNumbersPageClient() {
       const loadedFigures: StatedFigures = figuresData.figures ?? {};
       setFigures(loadedFigures);
       setCoverage(figuresData.coverage ?? null);
-      setPlanTexts(Object.fromEntries(PLAN_FIELDS.map((field) => [field.id, textFor(field, loadedFigures[field.id]?.value)])));
+      setPlanTexts(Object.fromEntries([...PLAN_FIELDS, ...PARTNER_FIELDS].map((field) => [field.id, textFor(field, loadedFigures[field.id]?.value)])));
 
       if (accountsResponse.ok) setManualAccounts((await accountsResponse.json()).data ?? []);
       if (overridesResponse.ok) {
@@ -377,8 +405,8 @@ export default function YourNumbersPageClient() {
     }
   };
 
-  const savePlan = async () => {
-    const { values, errors: problems } = readAll(PLAN_FIELDS, planTexts);
+  const saveFigures = async (fields: typeof PLAN_FIELDS, section: 'plan' | 'partner') => {
+    const { values, errors: problems } = readAll(fields, planTexts);
     setErrors((current) => ({ ...Object.fromEntries(Object.entries(current).filter(([key]) => !(key in values) && !(key in problems))), ...problems }));
     if (Object.keys(problems).length > 0) return;
     // Only what changed: an untouched figure keeps the date it was saved.
@@ -386,21 +414,23 @@ export default function YourNumbersPageClient() {
       (figures[key as StatedFigureKey]?.value ?? null) !== value
     ));
     if (Object.keys(changes).length === 0) {
-      setStatusFor('plan', 'Nothing has changed.');
+      setStatusFor(section, 'Nothing has changed.');
       return;
     }
-    setSaving('plan');
+    setSaving(section);
     try {
       const response = await sendSignedInRequest(API_URL, '/api/stated-figures', 'PUT', { figures: changes, source: 'page' });
-      if (!response.ok) throw new Error(await failureMessage(response, 'Your plan could not be saved.'));
+      if (!response.ok) throw new Error(await failureMessage(response, 'Your figures could not be saved.'));
       setFigures((await response.json()).figures ?? {});
-      setStatusFor('plan', 'Saved. Linc will plan with these from your next question.');
+      setStatusFor(section, 'Saved. Linc will plan with these from your next question.');
     } catch (failure) {
-      setStatusFor('plan', failure instanceof Error ? failure.message : 'Your plan could not be saved.');
+      setStatusFor(section, failure instanceof Error ? failure.message : 'Your figures could not be saved.');
     } finally {
       setSaving(null);
     }
   };
+  const savePlan = () => saveFigures(PLAN_FIELDS, 'plan');
+  const savePartner = () => saveFigures(PARTNER_FIELDS, 'partner');
 
   const handleLogout = () => {
     try { localStorage.removeItem('auth_token'); } catch { /* nothing to clear */ }
@@ -509,6 +539,27 @@ export default function YourNumbersPageClient() {
                 })}
               </div>
               <SaveRow saving={saving === 'plan'} status={status.plan ?? null} onSave={() => void savePlan()} label="Save plan" />
+            </Section>
+
+            <Section title="Your partner" description="If you plan as a couple, Linc counts their incomes from their own ages and runs the plan until the later of your planning ages. When the first of you reaches theirs, the survivor keeps the larger Social Security benefit.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                {PARTNER_FIELDS.map((field) => {
+                  const saved = figures[field.id];
+                  return (
+                    <FieldInput
+                      key={field.id}
+                      field={field}
+                      text={planTexts[field.id] ?? ''}
+                      onChange={(text) => setPlanTexts((current) => ({ ...current, [field.id]: text }))}
+                      note={saved ? savedNote(saved.savedAt, saved.source) : undefined}
+                      error={errors[field.id]}
+                      needed={false}
+                      disabled={saving === 'partner'}
+                    />
+                  );
+                })}
+              </div>
+              <SaveRow saving={saving === 'partner'} status={status.partner ?? null} onSave={() => void savePartner()} label="Save partner" />
             </Section>
 
             <Link href="/app" className="inline-flex items-center gap-2 text-sm font-semibold text-[#102319] hover:underline">
