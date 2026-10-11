@@ -272,6 +272,8 @@ export interface FinancialContextSnapshot {
     spendingFlexibility?: SpendingFlexibilityOutcome;
     /** The same plan with the comparison cut, when the user has not said how much they could cut. */
     spendingFlexibilityComparison?: SpendingFlexibilityOutcome;
+    /** The fund fees taken out of the simulated returns; absent on analyses before version 13. */
+    feesDeducted?: { annualRate: number; coverage: number };
     summary: {
       characteristics: {
         growthPotential: 'high' | 'moderate' | 'low';

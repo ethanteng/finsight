@@ -142,6 +142,8 @@ export function describeRetirementAssumptions(
     countedIncomes
   ));
   parts.push(...describeContribution(values, analysis._contributionOrigin));
+  const fees = describeFees(analysis.feesDeducted);
+  if (fees) parts.push(fees);
   const spendingCut = describeSpendingCut(analysis._spendingFlexibility);
   if (spendingCut) parts.push(spendingCut);
   if (parts.length === 0) return null;
@@ -161,6 +163,24 @@ export function describeRetirementAssumptions(
 
 function money(value: number): string {
   return `$${Math.round(value).toLocaleString('en-US')}`;
+}
+
+/**
+ * The fund fees the projection took out of its returns, with how much of the
+ * portfolio they were known for. Analyses before fees were deducted say
+ * nothing either way.
+ */
+function describeFees(fees: { annualRate: number; coverage: number } | undefined): string | null {
+  if (!fees) return null;
+  const covered = Math.round(fees.coverage * 100);
+  if (!(fees.annualRate > 0)) {
+    return covered > 0
+      ? `no fund fees taken out of returns, since none of the funds with a known fee (${covered}% of your holdings) charges one`
+      : 'no fund fees taken out of returns, since none of your holdings has a known expense ratio';
+  }
+  const rest = covered >= 100 ? '' : `; the other ${100 - covered}% is counted as costing nothing`;
+  return `fund fees of ${(fees.annualRate * 100).toFixed(2)}% a year taken out of returns, from the expense ratios ` +
+    `of ${covered}% of your holdings${rest}`;
 }
 
 /**

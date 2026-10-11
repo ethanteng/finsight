@@ -38,5 +38,8 @@
  * 12: spending can be cut in a bad market, and the analysis reports what the
  *    user's cut did, or a comparison cut run beside a plan whose user has not
  *    said how much they could cut. A v11 analysis carries neither.
+ * 13: fund fees -- the holdings' known expense ratios -- are taken out of
+ *    every month's return, in the plan and the sustainable-spending range. A
+ *    v12 analysis earned the index returns gross of every fee.
  */
-export const RETIREMENT_ANALYSIS_VERSION = 12 as const;
+export const RETIREMENT_ANALYSIS_VERSION = 13 as const;

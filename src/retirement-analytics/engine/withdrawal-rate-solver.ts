@@ -60,7 +60,9 @@ export function evaluateSurvival(
   portfolioMapping: PortfolioMapping,
   portfolioValueAtWithdrawalStart: number,
   cache?: Map<number, number>,
-  withdrawalPolicy: WithdrawalPolicy = DEFAULT_WITHDRAWAL_POLICY
+  withdrawalPolicy: WithdrawalPolicy = DEFAULT_WITHDRAWAL_POLICY,
+  /** The holdings' fund fees, taken out of returns as in the plan's own simulation. */
+  annualFeeRate = 0
 ): number {
   const key = cacheKey(rate);
   const cached = cache?.get(key);
@@ -81,7 +83,7 @@ export function evaluateSurvival(
       portfolioValueAtWithdrawalStart,
       sequence,
       annualWithdrawal,
-      { withdrawalPolicy }
+      { withdrawalPolicy, ...(annualFeeRate > 0 && { annualFeeRate }) }
     );
     if (outcome.withdrawalSustainability) {
       survivors++;
@@ -102,7 +104,9 @@ export function findWithdrawalForSurvival(
   portfolioMapping: PortfolioMapping,
   portfolioValueAtWithdrawalStart: number,
   cache: Map<number, number>,
-  withdrawalPolicy: WithdrawalPolicy = DEFAULT_WITHDRAWAL_POLICY
+  withdrawalPolicy: WithdrawalPolicy = DEFAULT_WITHDRAWAL_POLICY,
+  /** The holdings' fund fees, taken out of returns as in the plan's own simulation. */
+  annualFeeRate = 0
 ): number {
   // Pre-check for unreachable targets
   const minSurvival = evaluateSurvival(
@@ -111,7 +115,8 @@ export function findWithdrawalForSurvival(
     portfolioMapping,
     portfolioValueAtWithdrawalStart,
     cache,
-    withdrawalPolicy
+    withdrawalPolicy,
+    annualFeeRate
   );
   const maxSurvival = evaluateSurvival(
     MIN_WITHDRAWAL,
@@ -119,7 +124,8 @@ export function findWithdrawalForSurvival(
     portfolioMapping,
     portfolioValueAtWithdrawalStart,
     cache,
-    withdrawalPolicy
+    withdrawalPolicy,
+    annualFeeRate
   );
 
   if (targetSurvival > maxSurvival) return MIN_WITHDRAWAL;
@@ -136,7 +142,8 @@ export function findWithdrawalForSurvival(
       portfolioMapping,
       portfolioValueAtWithdrawalStart,
       cache,
-      withdrawalPolicy
+      withdrawalPolicy,
+      annualFeeRate
     );
 
     if (survivalFraction >= targetSurvival) {
@@ -160,7 +167,9 @@ export function computeHistoricalWithdrawalRates(
   sequences: HistoricalSequence[],
   portfolioMapping: PortfolioMapping,
   normalizedPortfolioValueAtWithdrawalStart: number,
-  withdrawalPolicy: WithdrawalPolicy = DEFAULT_WITHDRAWAL_POLICY
+  withdrawalPolicy: WithdrawalPolicy = DEFAULT_WITHDRAWAL_POLICY,
+  /** The holdings' fund fees, taken out of returns as in the plan's own simulation. */
+  annualFeeRate = 0
 ): WithdrawalDistribution {
   if (sequences.length === 0) {
     return {
@@ -181,7 +190,8 @@ export function computeHistoricalWithdrawalRates(
     portfolioMapping,
     normalizedPortfolioValueAtWithdrawalStart,
     cache,
-    withdrawalPolicy
+    withdrawalPolicy,
+    annualFeeRate
   );
 
   // Solve p25 and p75
@@ -191,7 +201,8 @@ export function computeHistoricalWithdrawalRates(
     portfolioMapping,
     normalizedPortfolioValueAtWithdrawalStart,
     cache,
-    withdrawalPolicy
+    withdrawalPolicy,
+    annualFeeRate
   );
   const p75 = findWithdrawalForSurvival(
     TARGET_SURVIVAL.p75,
@@ -199,7 +210,8 @@ export function computeHistoricalWithdrawalRates(
     portfolioMapping,
     normalizedPortfolioValueAtWithdrawalStart,
     cache,
-    withdrawalPolicy
+    withdrawalPolicy,
+    annualFeeRate
   );
 
   // Solve p10 and p90
@@ -209,7 +221,8 @@ export function computeHistoricalWithdrawalRates(
     portfolioMapping,
     normalizedPortfolioValueAtWithdrawalStart,
     cache,
-    withdrawalPolicy
+    withdrawalPolicy,
+    annualFeeRate
   );
   const p90 = findWithdrawalForSurvival(
     TARGET_SURVIVAL.p90,
@@ -217,7 +230,8 @@ export function computeHistoricalWithdrawalRates(
     portfolioMapping,
     normalizedPortfolioValueAtWithdrawalStart,
     cache,
-    withdrawalPolicy
+    withdrawalPolicy,
+    annualFeeRate
   );
 
   // Enforce monotonicity: p10 ≤ p25 ≤ p50 ≤ p75 ≤ p90

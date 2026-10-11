@@ -656,6 +656,12 @@ export interface RetirementAnalysisOutput {
   spendingFlexibility?: SpendingFlexibilityOutcome;
   /** The same plan with the comparison cut, when one was requested. */
   spendingFlexibilityComparison?: SpendingFlexibilityOutcome;
+  /**
+   * The fund fees taken out of the simulated returns: the annual rate, and the
+   * share of the portfolio whose fee was known. Absent on analyses computed
+   * before fees were deducted (version 12 and earlier).
+   */
+  feesDeducted?: { annualRate: number; coverage: number };
   summary: {
     characteristics: PortfolioCharacteristics;
     tradeoffs: PortfolioTradeoffs;

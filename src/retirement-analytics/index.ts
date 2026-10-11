@@ -166,6 +166,19 @@ export async function analyzeRetirementPortfolio(
     asOfDate,
   );
   const assumptions = populateAssumptions(portfolioMapping, input.holdings, input.securities);
+  // What the funds cost to own, taken out of every month's return. Only fees
+  // the data names are known; the rest of the portfolio is counted as free,
+  // and the assumption says how much that is.
+  const annualFeeRate = Number.isFinite(portfolioMetrics.expenseRatioWeighted) && portfolioMetrics.expenseRatioWeighted > 0
+    ? Math.min(portfolioMetrics.expenseRatioWeighted, 0.05)
+    : 0;
+  assumptions.push(
+    annualFeeRate > 0
+      ? `Fund fees of ${(annualFeeRate * 100).toFixed(2)}% a year are taken out of returns, from the expense ratios of ` +
+        `holdings making up ${Math.round(portfolioMetrics.expenseRatioCoverage * 100)}% of the portfolio; the rest is counted as costing nothing`
+      : `No fund fees are taken out of returns: none of the holdings has a known expense ratio above zero ` +
+        `(${Math.round(portfolioMetrics.expenseRatioCoverage * 100)}% of the portfolio has a known fee)`
+  );
   const withdrawalPolicy = input.withdrawalPolicy ?? { type: 'historical_cpi' as const };
   const annualContributionAmount = input.annualContributionAmount ?? 0;
   if (!Number.isFinite(annualContributionAmount) || annualContributionAmount < 0) {
@@ -306,7 +319,8 @@ export async function analyzeRetirementPortfolio(
     withdrawalSequences,
     portfolioMapping,
     modeledValue,
-    withdrawalPolicy
+    withdrawalPolicy,
+    annualFeeRate
   );
 
   // Phase 4: Simulate withdrawals for user scenario
@@ -321,6 +335,7 @@ export async function analyzeRetirementPortfolio(
         withdrawalPolicy,
         annualContributionAmount,
         incomeStreams,
+        ...(annualFeeRate > 0 && { annualFeeRate }),
         ...(spendingChange && { spendingChange }),
         ...(flexibility && { spendingFlexibility: flexibility }),
       }
@@ -428,6 +443,7 @@ export async function analyzeRetirementPortfolio(
   // serializes exactly as it did before.
   return {
     ...analysis,
+    feesDeducted: { annualRate: annualFeeRate, coverage: portfolioMetrics.expenseRatioCoverage },
     ...(treasuryEvidenceDegraded && { evidenceDegraded: true }),
     ...(spendingFlexibility && { spendingFlexibility: summarizeSpendingCuts(outcomes, spendingFlexibility) }),
     ...(flexibilityComparison && comparisonOutcomes && {

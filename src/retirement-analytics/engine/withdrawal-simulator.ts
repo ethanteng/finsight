@@ -58,6 +58,12 @@ export interface WithdrawalSimulationOptions {
    * spends.
    */
   spendingFlexibility?: SpendingFlexibility;
+  /**
+   * What the holdings cost to own a year, as a share of their value: the
+   * funds' expense ratios. Taken out of every month's return, a twelfth of the
+   * annual drag compounded, before contributions and withdrawals.
+   */
+  annualFeeRate?: number;
 }
 
 export interface SimulatedIncomeStream {
@@ -127,6 +133,12 @@ export function simulateWithdrawals(
   if (flexibility && (!Number.isFinite(flexibility.cutShare) || flexibility.cutShare < 0 || flexibility.cutShare >= 1)) {
     throw new Error('A spending cut must be a share of spending from 0 up to, but not including, 100%');
   }
+  const annualFeeRate = options.annualFeeRate ?? 0;
+  if (!Number.isFinite(annualFeeRate) || annualFeeRate < 0 || annualFeeRate >= 1) {
+    throw new Error('A fee must be a share of the portfolio a year, from 0 up to, but not including, 100%');
+  }
+  // Monthly, so a year of it is exactly the annual rate.
+  const monthlyFeeFactor = Math.pow(1 - annualFeeRate, 1 / 12);
   let cuttingThisYear = false;
   let monthsSpendingCut = 0;
   const scheduledIncome = incomeStreams
@@ -173,11 +185,11 @@ export function simulateWithdrawals(
     const tipsRet = sequence.assetBasketReturns.tips[month] ?? 0;
     const cashRet = sequence.assetBasketReturns.cash[month] ?? 0;
 
-    usEquity *= 1 + usRet;
-    intlEquity *= 1 + intlRet;
-    bonds *= 1 + bondRet;
-    tips *= 1 + tipsRet;
-    cash *= 1 + cashRet;
+    usEquity *= (1 + usRet) * monthlyFeeFactor;
+    intlEquity *= (1 + intlRet) * monthlyFeeFactor;
+    bonds *= (1 + bondRet) * monthlyFeeFactor;
+    tips *= (1 + tipsRet) * monthlyFeeFactor;
+    cash *= (1 + cashRet) * monthlyFeeFactor;
 
     let portfolioValue = usEquity + intlEquity + bonds + tips + cash;
 
