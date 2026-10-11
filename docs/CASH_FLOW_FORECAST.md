@@ -36,7 +36,7 @@ A forecast has three disclosed parts:
      - So dates that keep to a two-week step, each within two days of it, are biweekly however they fall in the month.
    - Annual charges are not recognised, because a year of history shows them once. They fall into typical spending as a daily rate, unless the user says how often the payee comes (below).
 2. **Typical**: everything else, as a daily rate over at most the last 90 days.
-   - A payee the user spread (`spread_payee`) is the exception: each of its amounts that no stream projects counts over the months the user chose (three times a year, twice, once, or every other year), for as long as it is that recent, and is never a one-off. A $1,200 yearly premium paid in June adds $100 a month until next June, though the basis stopped seeing it in September.
+   - A payee the user spread (`spread_payee`) is the exception: each of its amounts that no stream projects counts over the months the user chose (six times a year, four, three, twice, once, or every other year), for as long as it is that recent, and is never a one-off. A $1,200 yearly premium paid in June adds $100 a month until next June, though the basis stopped seeing it in September.
    - A category the user left out (`exclude_category`) feeds no typical rate. A regular bill in it is still projected, since leaving a category out is a choice about everything else.
    - A one-off is a large amount that is not how the user deals with that payee. It is left out of the rate and listed, because a past windfall or big purchase is not assumed to repeat.
      - The test: taken together with the payee's amounts within ten days of it, the amount is large for the user and at least twice everything else from that payee in the window.
@@ -104,7 +104,7 @@ The page lays out what the forecast is built from in two columns, "Counted in th
 | `continue_stream` | A regular item that has stopped | Projected on its cadence as if it had not |
 | `exclude_transfer` | A recurring transfer in or out | Left out of what the cash position learns about transfers |
 | `exclude_category` | A category behind a typical rate | Its transactions feed no typical rate; a regular bill in it is still projected |
-| `spread_payee` | A payee behind a typical rate, or a one-off's payee | Each of its amounts outside a stream counts spread over `spreadMonths` (4, 6, 12 or 24) from its date, never as a one-off. Choosing another number of months changes the saved choice |
+| `spread_payee` | A payee behind a typical rate, or a one-off's payee | Each of its amounts outside a stream counts spread over `spreadMonths` (2, 3, 4, 6, 12 or 24) from its date, never as a one-off. Choosing another number of months changes the saved choice |
 
 Changes affect only the forecast. Past months stay as they happened, because those transactions did happen. Something that is not really income or spending, such as a transfer to the user's own account, is a category change instead: it corrects the history and every other part of Ask Linc. Every transaction the page lists opens the category picker from its category, the same one Accounts & context uses, and the page reloads once a category is saved. Applying it to the payee's other transactions also saves it for the payee's new ones (see "Category rules" below).
 

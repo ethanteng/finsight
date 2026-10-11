@@ -61,7 +61,11 @@ describe('validateForecastAdjustmentInput', () => {
     expect(validateForecastAdjustmentInput({ kind: 'spread_payee', flow: 'spending', key: 'state farm', spreadMonths: 12 }))
       .toEqual({ ok: true, value: { kind: 'spread_payee', flow: 'spending', key: 'state farm', spreadMonths: 12 } });
     expect(validateForecastAdjustmentInput({ kind: 'spread_payee', flow: 'spending', key: 'state farm' }).ok).toBe(false);
+    expect(validateForecastAdjustmentInput({ kind: 'spread_payee', flow: 'spending', key: 'water', spreadMonths: 2 }))
+      .toEqual({ ok: true, value: { kind: 'spread_payee', flow: 'spending', key: 'water', spreadMonths: 2 } });
+    expect(validateForecastAdjustmentInput({ kind: 'spread_payee', flow: 'spending', key: 'irs', spreadMonths: 3 }).ok).toBe(true);
     expect(validateForecastAdjustmentInput({ kind: 'spread_payee', flow: 'spending', key: 'state farm', spreadMonths: 5 }).ok).toBe(false);
+    expect(validateForecastAdjustmentInput({ kind: 'spread_payee', flow: 'spending', key: 'state farm', spreadMonths: 1 }).ok).toBe(false);
     expect(validateForecastAdjustmentInput({ kind: 'spread_payee', flow: 'spending', key: 'state farm', spreadMonths: '12' }).ok).toBe(false);
     expect(validateForecastAdjustmentInput({ kind: 'exclude_category', flow: 'spending', key: 'groceries' }))
       .toEqual({ ok: true, value: { kind: 'exclude_category', flow: 'spending', key: 'groceries', spreadMonths: null } });
@@ -337,6 +341,28 @@ describe('spreading a payee over months of its own', () => {
     // Twice a year, the June premium is still recent enough, and counts double.
     expect(model([spread('state farm', 6)], { transactions }).typical.dailySpending - base.typical.dailySpending)
       .toBeCloseTo(1200 / (365 / 2), 6);
+  });
+
+  it('counts a bill every two months once, where the 90-day basis catches two of them', () => {
+    const water = ['2026-07-20', '2026-09-20'].map(date =>
+      tx('checking', date, 'expense', 465, 'EAST BAY MUD', { merchant_name: 'East Bay Municipal Utility' }));
+    const base = model([], { transactions: [...history, ...water] });
+    const without = model();
+    // The basis holds both, as if $930 came every 90 days.
+    expect(base.typical.dailySpending - without.typical.dailySpending).toBeCloseTo(930 / 90, 6);
+    // Spread over two months, July's is past its months and September's counts once.
+    const spreadWater = model([spread('east bay municipal utility', 2)], { transactions: [...history, ...water] });
+    expect(spreadWater.typical.dailySpending - without.typical.dailySpending).toBeCloseTo(465 / (365 / 6), 6);
+  });
+
+  it('counts a large amount every three months in the rate, where the basis would leave it out', () => {
+    // A quarterly estimated tax payment: one in the basis, large enough to be a one-off.
+    const estimate = tx('checking', '2026-09-15', 'expense', 6000, 'IRS USATAXPYMT', { merchant_name: 'IRS' });
+    const base = model([], { transactions: [...history, estimate] });
+    expect(base.oneOffs.some(entry => entry.counterpartyKey === 'irs')).toBe(true);
+    const quarterly = model([spread('irs', 3)], { transactions: [...history, estimate] });
+    expect(quarterly.oneOffs.some(entry => entry.counterpartyKey === 'irs')).toBe(false);
+    expect(quarterly.typical.dailySpending - base.typical.dailySpending).toBeCloseTo(6000 / (365 / 4), 6);
   });
 
   it('never leaves a spread payee’s amount out as a one-off', () => {
