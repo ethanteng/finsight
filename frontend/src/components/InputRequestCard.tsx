@@ -38,12 +38,15 @@ export default function InputRequestCard({ request, disabled = false, onSubmit }
 
   // requireWhen fields stay visible: a retirement age that becomes needed once
   // the typed age crosses 65 must not sit behind "More assumptions".
-  const shown = request.fields.filter(
+  const leading = request.fields.filter(
     (field) => field.required || field.value !== undefined || field.requireWhen
   );
-  const more = request.fields.filter(
-    (field) => !field.required && field.value === undefined && !field.requireWhen
-  );
+  // A form of assumptions alone (taxes and coverage after a run that stood
+  // without them) has nothing to lead with, so its fields are the form.
+  const shown = leading.length > 0 ? leading : request.fields;
+  const more = leading.length > 0
+    ? request.fields.filter((field) => !field.required && field.value === undefined && !field.requireWhen)
+    : [];
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();

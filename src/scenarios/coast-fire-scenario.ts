@@ -114,6 +114,21 @@ import {
   describeSpendingFlexibilityResults,
   spendingFlexibilityFactRows,
 } from '../openai/spending-flexibility-evidence';
+import {
+  describeFirstYearCosts,
+  describeHealthcare,
+  describeTaxAndHealthcareAsks,
+  describeTaxes,
+  savableTaxAndHealthcareFigures,
+  snapshotTaxAndHealthcare,
+  taxAndHealthcareEngineInputs,
+  taxAndHealthcareFactRows,
+  taxAndHealthcareInputRequest,
+  type FirstYearCosts,
+  type TaxAndHealthcare,
+} from '../openai/tax-healthcare-evidence';
+import type { RetirementTaxResolution } from '../services/retirement-taxes';
+import { hasPreMedicareYears, type HealthcareResolution } from '../services/retirement-healthcare';
 
 export const COAST_FIRE_CALCULATOR_ID = 'coast_fire' as const;
 /**
@@ -307,6 +322,11 @@ export interface CoastFireHistoricalTest {
     outcome?: SpendingFlexibilityOutcome;
     comparison?: SpendingFlexibilityOutcome;
   };
+  /**
+   * The income tax and health premiums the test counted, and what they cost
+   * in the first year of withdrawals. The straight line counts neither.
+   */
+  taxesAndHealthcare?: TaxAndHealthcare & { firstYearCosts?: FirstYearCosts };
 }
 
 /** Whether the pension rises with prices, and whether the user said so. */
@@ -642,6 +662,8 @@ interface ResolvedCoastFireVariant {
   partnerClaimingUnavailable?: string;
   /** How much the user could cut in a bad market, for the market-history test only. */
   spendingFlexibility?: SpendingFlexibilityResolution;
+  /** Income tax and health premiums, for the market-history test only. */
+  taxesAndHealthcare: { taxes: RetirementTaxResolution; healthcare: HealthcareResolution };
 }
 
 /** Whether the pension rises with prices: the user's words, then Your numbers, then fixed. */
@@ -943,6 +965,17 @@ function resolveVariant(
     statedFigures: snapshot.statedFigures,
     annualSpending: annualRetirementSpending,
   });
+  // The test also counts income tax and health premiums; the straight line
+  // counts neither, and says so.
+  const taxesAndHealthcare = snapshotTaxAndHealthcare(snapshot, {
+    total: currentSavings,
+    partner: resolvedPartner ?? null,
+    preMedicareYears: hasPreMedicareYears({
+      currentAge: currentAge!,
+      withdrawalStartAge: retirementAge!,
+      ...(resolvedPartner && { partnerAge: resolvedPartner.plan.age }),
+    }),
+  });
 
   return {
     inputs: {
@@ -969,6 +1002,7 @@ function resolveVariant(
     ...(survivorSpending && { survivorSpending }),
     ...(spendingFlexibility && { spendingFlexibility }),
     ...(partnerClaimingUnavailable && { partnerClaimingUnavailable }),
+    taxesAndHealthcare,
   };
 }
 
@@ -1117,6 +1151,7 @@ function historicalTestKey(variant: ResolvedCoastFireVariant): string {
     currentAge, retirementAge, currentSavings, annualRetirementSpending, variant.incomes, variant.allocation.id,
     variant.household?.plan ?? null, variant.planThroughAge,
     variant.spendingFlexibility?.kind === 'cut' ? variant.spendingFlexibility.cutShare : null,
+    taxAndHealthcareEngineInputs(variant.taxesAndHealthcare),
   ]);
 }
 
@@ -1152,6 +1187,7 @@ async function presetHistoricalTest(
   const flexibility = {
     ...(spendingFlexibility && { spendingFlexibility }),
     ...(withComparison && spendingFlexibilityComparison && { spendingFlexibilityComparison }),
+    ...taxAndHealthcareEngineInputs(variant.taxesAndHealthcare),
   };
 
   try {
@@ -1199,6 +1235,10 @@ async function presetHistoricalTest(
       firstStartMonth: run.history.firstStartMonth,
       lastStartMonth: run.history.lastStartMonth,
       horizonYears: run.history.horizonYears,
+      taxesAndHealthcare: {
+        ...variant.taxesAndHealthcare,
+        ...(run.firstYearCosts && { firstYearCosts: run.firstYearCosts }),
+      },
       // A comparison the test did not run has nothing to report.
       ...(resolution && (resolution.kind !== 'comparison' || flexibility.spendingFlexibilityComparison) && {
         spendingFlexibility: {
@@ -1638,6 +1678,19 @@ export function coastFireScenarioCanonicalFacts(execution: CoastFireScenarioExec
           );
         }
       }
+      // How the test taxed the savings and what coverage cost.
+      const costs = test.taxesAndHealthcare;
+      if (costs) {
+        for (const row of taxAndHealthcareFactRows(costs, costs.firstYearCosts)) {
+          add(
+            row.result ? 'scenario_calculation' : 'scenario_input',
+            `history_${row.suffix}`,
+            `${mix}: ${decapitalize(row.label)}`,
+            row.value,
+            row.unit
+          );
+        }
+      }
     }
   }
   return facts;
@@ -1896,7 +1949,18 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
     : '';
 
   const tested = execution.scenarios.filter((scenario) => scenario.historicalTest);
-  const historyNotice = tested.map(describeHistoricalTest).join('');
+  // Taxes and premiums are the same in every case's test, so they are said
+  // once, with what they cost the main case in its first year and what the
+  // tests had to assume.
+  const costs = tested[0]?.historicalTest?.taxesAndHealthcare;
+  const costClauses = costs
+    ? [describeTaxes(costs.taxes), describeHealthcare(costs.healthcare)].filter(Boolean).join('; ')
+    : '';
+  const taxNotice = costs && costClauses
+    ? ` ${tested.length > 1 ? 'Each test counts' : 'The test counts'} ${costClauses}.` +
+      `${describeFirstYearCosts(costs.firstYearCosts, costs)}${describeTaxAndHealthcareAsks(costs)}`
+    : '';
+  const historyNotice = tested.map(describeHistoricalTest).join('') + taxNotice;
   const savedMix = primary.historicalTest?.allocation;
   const savedNotice = describeSavedFigures([
     ...primary.assumptions.flatMap((assumption) => {
@@ -1921,8 +1985,12 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
   const fullSpending = tested.some((scenario) => scenario.historicalTest?.spendingFlexibility?.resolution.kind === 'cut')
     ? ', and full spending every year'
     : '';
+  const testCountsTaxes = tested.some((scenario) => scenario.historicalTest?.taxesAndHealthcare);
   const straightLine = tested.length > 0
-    ? ` The Coast FIRE number itself is a single straight line — the same return every year${fullSpending}. Neither part models taxes or fees.`
+    ? ` The Coast FIRE number itself is a single straight line — the same return every year${fullSpending}` +
+      (testCountsTaxes
+        ? ', with no taxes, fees or health premiums. The market-history test counts taxes and premiums but not fund fees.'
+        : '. Neither part models taxes or fees.')
     : ' It is a single straight line — the same return every year, with no taxes, fees or market swings.';
 
   return `Coast FIRE assumptions: ${rate(m.realReturnRate)} a year after inflation and a ${rate(m.withdrawalRate)} ` +
@@ -2072,13 +2140,15 @@ const COAST_FIRE_INPUT_REQUEST: InputRequestSpec = {
 export function coastFireInputRequest(execution: CoastFireScenarioExecution): InputRequest | null {
   // A number worked out without the partner asks for their age alone; one
   // that could not count spousal or survivor benefits asks whether they are married.
+  // Then a test that assumed something about taxes or coverage asks for it.
   if (execution.status === 'completed') {
     const primary = execution.scenarios[0];
+    const costs = primary?.historicalTest?.taxesAndHealthcare;
     return householdInputRequest(
       primary?.missingPartnerAge ? { missingAge: true } : primary?.household,
       COAST_FIRE_CALCULATOR_ID,
       COAST_FIRE_INPUT_REQUEST.question
-    );
+    ) ?? (costs ? taxAndHealthcareInputRequest(costs, COAST_FIRE_CALCULATOR_ID, COAST_FIRE_INPUT_REQUEST.question) : null);
   }
   if (!execution.missingFields?.length) return null;
   // Without an age there is no telling whether the conventional retirement
@@ -2148,6 +2218,7 @@ export function coastFireSavableFigures(execution: CoastFireScenarioExecution): 
       assumption.key === 'socialSecurityAmountAge' && assumption.origin === 'user'
     )),
     ...(primary.household ? partnerSavableFigures(primary.household) : []),
+    ...savableTaxAndHealthcareFigures(primary.historicalTest?.taxesAndHealthcare),
   ];
 }
 

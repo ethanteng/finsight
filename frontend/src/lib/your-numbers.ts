@@ -25,6 +25,12 @@ export const STATED_FIGURE_KEYS = [
   'survivorAnnualSpending',
   'partnerMarried',
   'spendingCutPercent',
+  'rothSavingsPercent',
+  'taxableSavingsPercent',
+  'stateIncomeTaxPercent',
+  'preMedicareCoverage',
+  'preMedicareAnnualPremium',
+  'healthcareInSpending',
 ] as const;
 
 export type StatedFigureKey = (typeof STATED_FIGURE_KEYS)[number];

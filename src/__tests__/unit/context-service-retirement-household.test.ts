@@ -227,6 +227,43 @@ describe('a partner in the holdings-based projection', () => {
     expect(fact('retirement_survivor_spending')).toMatchObject({ value: 60_000 });
   });
 
+  it('taxes the couple jointly on their accounts\' own types, with premiums, and reruns when coverage changes', async () => {
+    const extra = {
+      investments: {
+        ...snapshot().investments,
+        accountTaxMix: { taxable: 100_000, pretax: 350_000, roth: 50_000, unknown: 0, taxableBasis: 40_000, taxableWithoutBasis: 0 },
+      },
+      userProfileValues: { stateOrProvince: 'Texas' },
+    };
+    const { completed, input } = await run(PLAN, extra);
+
+    expect(input.taxes).toEqual({
+      accounts: { taxable: 0.2, pretax: 0.7, roth: 0.1 },
+      taxableBasisShare: 0.4,
+      filing: 'joint',
+      stateRate: 0,
+    });
+    // The partner is 60 when the user retires at 65.
+    expect(input.healthcare).toEqual({ coverage: 'marketplace' });
+    expect(input.people).toEqual({ userPlanThroughAge: 95, partner: { age: 55, planEndsAtUserAge: 100 } });
+    expect(completed.retirementAnalysis!._storedInputParams).toMatchObject({ taxes: input.taxes, healthcare: input.healthcare });
+
+    const disclosure = describeRetirementAssumptions(completed)!;
+    expect(disclosure).toContain('2026 federal income tax on each year\'s withdrawals and income, filing jointly');
+    expect(disclosure).toContain('savings 70% pre-tax, 20% taxable, 10% Roth by your linked accounts\' types; no state income tax, since Texas has none');
+    expect(disclosure).toContain('To make the tax and health figures yours, tell me what health coverage you will have before Medicare');
+
+    // The same plan with coverage now stated is a different run.
+    const created = (prisma.retirementAnalysis.create.mock.calls[0] as any[])[0].data;
+    prisma.retirementAnalysis.findFirst.mockResolvedValue({ ...created, id: 'ra-1', computedAt: new Date('2026-10-10T00:00:00.000Z') });
+    analyze.mockClear();
+    await run(PLAN, extra);
+    expect(analyze).not.toHaveBeenCalled();
+    await run({ ...PLAN, preMedicareCoverage: 'employer_retiree', preMedicareAnnualPremium: 4_800 }, extra);
+    expect(analyze).toHaveBeenCalledTimes(1);
+    expect(engineInputs[engineInputs.length - 1].healthcare).toEqual({ coverage: 'employer_retiree', annualPremium: 4_800 });
+  });
+
   it('reuses the run on the next question rather than growing the horizon', async () => {
     await run();
     const created = (prisma.retirementAnalysis.create.mock.calls[0] as any[])[0].data;
@@ -258,7 +295,8 @@ describe('a partner in the holdings-based projection', () => {
       question: 'Am I on track for retirement?',
       fields: [{ id: 'partnerAge', required: true, sentence: 'My partner is {value} years old.' }],
     });
-    expect(retirementHouseholdRequest((await run()).completed)).toBeNull();
+    // Once the age is known, only the taxes and coverage the run assumed are asked about.
+    expect(retirementHouseholdRequest((await run()).completed)?.title).toBe('Make the tax and health figures yours');
   });
 
   it('counts no spousal or survivor benefit while the marriage is unknown, and asks', async () => {
@@ -286,7 +324,7 @@ describe('a partner in the holdings-based projection', () => {
       { label: 'your partner\'s survivor benefit on your record', annualAmount: 10_000, startAge: 95, inflationAdjusted: true }
     );
     expect(describeRetirementAssumptions(completed)).toContain('planning for you and your partner (married, as you told me before), 55 today');
-    expect(retirementHouseholdRequest(completed)).toBeNull();
+    expect(retirementHouseholdRequest(completed)?.title).toBe('Make the tax and health figures yours');
   });
 
   it('runs the partner saved in Your numbers, and says when it was saved', async () => {

@@ -668,6 +668,64 @@ describe('retirement plan from stated figures', () => {
     expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
   });
 
+  describe('taxes and health premiums', () => {
+    /** The fake engine, reporting first-year costs whenever it is handed taxes. */
+    function costedRunner(base = fakeRunner()) {
+      return jest.fn(async (request: RetirementQuickPlanRequest, _household?: QuickPlanHousehold, options?: QuickPlanFlexibility) => ({
+        ...await base(request),
+        ...(options?.taxes && {
+          firstYearCosts: { federalTax: 6_120, stateTax: 2_480, healthcarePremiums: 9_400, premiumTaxCredit: 0 },
+        }),
+      }));
+    }
+
+    it('counts tax on how the user said their savings are held, their state\'s rate and their coverage, and offers to keep them', async () => {
+      const runner = costedRunner();
+      const execution = await runStatedRetirementPlan(
+        {
+          ...NO_HOLDINGS,
+          statedAccountSplit: { pretaxPercent: 60, rothPercent: 20, taxablePercent: 20 },
+          statedStateTaxPercent: 5,
+          statedHealthcare: { coverage: 'cobra', inSpending: false },
+        },
+        plan(LEAD, { retirementAge: 62 }),
+        runner as QuickPlanRunner
+      ) as CompletedStatedRetirementPlanExecution;
+
+      expect(runner.mock.calls[0][2]).toMatchObject({
+        taxes: { accounts: { pretax: 0.6, roth: 0.2, taxable: 0.2 }, filing: 'single', stateRate: 0.05, taxableBasisShare: 0 },
+        healthcare: { coverage: 'cobra' },
+      });
+      const disclosure = describeStatedRetirementPlanExecution(execution)!;
+      expect(disclosure).toContain('It counts 2026 federal income tax on each year\'s withdrawals and income, filing single');
+      expect(disclosure).toContain('savings 60% pre-tax, 20% taxable, 20% Roth as you described');
+      expect(disclosure).toContain('state income tax at 5%, as you said');
+      expect(disclosure).toContain('before 65, COBRA at the average employer premium for 18 months');
+      expect(disclosure).toContain(
+        'In the first year of withdrawals, at the median of the historical sequences, the plan pays $6,120 of federal ' +
+        'income tax, $2,480 of state income tax and $9,400 of health premiums'
+      );
+      expect(disclosure).toContain('Fund fees are not modeled.');
+      expect(disclosure).not.toContain('To make the tax and health figures yours');
+      expect(statedRetirementPlanInputRequest(execution)).toBeNull();
+
+      const facts = statedRetirementPlanCanonicalFacts(execution);
+      const byEnding = (suffix: string) => facts.find((fact) => fact.id.endsWith(suffix));
+      expect(byEnding('_tax_first_year_federal')).toMatchObject({ value: 6_120, provenance: { kind: 'scenario_calculation' } });
+      expect(byEnding('_tax_state_rate')).toMatchObject({ value: 5, provenance: { kind: 'scenario_input' } });
+      expect(byEnding('_first_year_portfolio_withdrawal')?.label).toContain('tax and premiums included');
+      expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+
+      expect(statedRetirementPlanSavableFigures(execution)).toEqual(expect.arrayContaining([
+        { key: 'rothSavingsPercent', value: 20 },
+        { key: 'taxableSavingsPercent', value: 20 },
+        { key: 'stateIncomeTaxPercent', value: 5 },
+        { key: 'preMedicareCoverage', value: 'cobra' },
+        { key: 'healthcareInSpending', value: 'not_included' },
+      ]));
+    });
+  });
+
   describe('spending flexibility', () => {
     /** The fake engine, reporting what any cut it is handed did. */
     function flexibleRunner(base = fakeRunner()) {
@@ -693,12 +751,17 @@ describe('retirement plan from stated figures', () => {
       });
     }
 
+    /** What a run was asked to cut, without the taxes and premiums every run now carries. */
+    function cutsOf(options: QuickPlanFlexibility | undefined) {
+      return Object.fromEntries(Object.entries(options ?? {}).filter(([key]) => key !== 'taxes' && key !== 'healthcare'));
+    }
+
     it('keeps fixed spending when nobody has said, and reports what a 20% cut would change', async () => {
       const runner = flexibleRunner();
       const execution = await runStatedRetirementPlan(NO_HOLDINGS, plan(LEAD, { retirementAge: 62 }), runner as QuickPlanRunner) as CompletedStatedRetirementPlanExecution;
       // The comparison runs beside the main case only.
-      expect(runner.mock.calls[0][2]).toEqual({ spendingFlexibilityComparison: { cutShare: 0.2 } });
-      expect(runner.mock.calls[1][2]).toEqual({});
+      expect(cutsOf(runner.mock.calls[0][2])).toEqual({ spendingFlexibilityComparison: { cutShare: 0.2 } });
+      expect(cutsOf(runner.mock.calls[1][2])).toEqual({});
 
       const disclosure = describeStatedRetirementPlanExecution(execution)!;
       expect(disclosure).toContain(
@@ -724,8 +787,8 @@ describe('retirement plan from stated figures', () => {
         plan(LEAD, { retirementAge: 62 }),
         runner as QuickPlanRunner
       ) as CompletedStatedRetirementPlanExecution;
-      expect(runner.mock.calls[0][2]).toEqual({ spendingFlexibility: { cutShare: 0.2 } });
-      expect(runner.mock.calls[1][2]).toEqual({ spendingFlexibility: { cutShare: 0.2 } });
+      expect(cutsOf(runner.mock.calls[0][2])).toEqual({ spendingFlexibility: { cutShare: 0.2 } });
+      expect(cutsOf(runner.mock.calls[1][2])).toEqual({ spendingFlexibility: { cutShare: 0.2 } });
 
       const disclosure = describeStatedRetirementPlanExecution(execution)!;
       expect(disclosure).toContain(
@@ -758,7 +821,7 @@ describe('retirement plan from stated figures', () => {
       const { annualSpending, ...withoutSpending } = LEAD;
       expect(annualSpending).toBeGreaterThan(0);
       await runStatedRetirementPlan(NO_HOLDINGS, plan(withoutSpending), runner as QuickPlanRunner);
-      expect(runner.mock.calls[0][2]).toEqual({});
+      expect(cutsOf(runner.mock.calls[0][2])).toEqual({});
     });
 
     it('runs the real engine with a cut: a cut never lasts in fewer histories than fixed spending', async () => {
@@ -851,7 +914,8 @@ describe('retirement plan from stated figures', () => {
       { key: 'partnerSocialSecurityAnnual', label: 'Your partner\'s Social Security', value: 24_000, display: '$24,000 a year' },
       { key: 'partnerMarried', label: 'Married', value: 'married', display: 'Yes' },
     ]);
-    expect(statedRetirementPlanInputRequest(execution)).toBeNull();
+    // Nothing to ask about the couple; only the taxes and coverage the run assumed.
+    expect(statedRetirementPlanInputRequest(execution)?.title).toBe('Make the tax and health figures yours');
   });
 
   it('compares the partner claiming at another age, moving their benefit by the same rules', async () => {
@@ -1047,7 +1111,7 @@ describe('retirement plan from stated figures', () => {
     });
     expect(statedRetirementPlanInputRequest(
       await runStatedRetirementPlan(NO_HOLDINGS, plan(LEAD), householdRunner() as QuickPlanRunner)
-    )).toBeNull();
+    )?.title).toBe('Make the tax and health figures yours');
   });
 
   it('adds the partner\'s age to the form that asks for the user\'s own figures', async () => {
@@ -1062,7 +1126,16 @@ describe('retirement plan from stated figures', () => {
       'Reply with those and I will run it. Tell me your partner\'s age too and I will include them.'
     );
     const request = statedRetirementPlanInputRequest(execution)!;
-    expect(request.fields).toHaveLength(13);
+    // The plan's twelve fields, the partner's age, and the taxes and coverage
+    // the run would otherwise assume, each optional.
+    expect(request.fields).toHaveLength(18);
+    expect(request.fields.slice(-5).map((field) => [field.id, field.required])).toEqual([
+      ['rothSavingsPercent', false],
+      ['taxableSavingsPercent', false],
+      ['stateIncomeTaxPercent', false],
+      ['preMedicareCoverage', false],
+      ['healthcareInSpending', false],
+    ]);
     expect(request.fields.find((field) => field.id === 'partnerAge')).toEqual({
       id: 'partnerAge',
       label: 'Your partner\'s age',

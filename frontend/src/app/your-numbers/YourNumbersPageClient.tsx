@@ -119,6 +119,46 @@ const PARTNER_FIELDS: Array<Field & { id: StatedFigureKey }> = [
   { id: 'survivorAnnualSpending', label: 'What one of you would spend a year alone', kind: 'usd_per_year', required: false, minimum: 1_000, maximum: 10_000_000, sentence: '{value}', hint: 'In today\'s dollars. Linc assumes the survivor spends what you spend together.' },
 ];
 
+/**
+ * How the savings are taxed and what health coverage costs: Linc counts
+ * income tax on every year's withdrawals and health premiums from the first
+ * withdrawal (see `src/services/retirement-taxes.ts` and
+ * `src/services/retirement-healthcare.ts`). Linked accounts say how they are
+ * taxed on their own; these cover what they do not.
+ */
+const COST_FIELDS: Array<Field & { id: StatedFigureKey }> = [
+  { id: 'rothSavingsPercent', label: 'Share of your savings in Roth accounts', kind: 'percent', integer: true, required: false, minimum: 0, maximum: 100, sentence: '{value}', hint: 'Roth IRA, Roth 401(k). Linc counts savings it cannot place as pre-tax.' },
+  { id: 'taxableSavingsPercent', label: 'Share in taxable brokerage accounts', kind: 'percent', integer: true, required: false, minimum: 0, maximum: 100, sentence: '{value}', hint: 'The rest is pre-tax: a traditional 401(k) or IRA.' },
+  { id: 'stateIncomeTaxPercent', label: 'Your state income tax rate on retirement income', kind: 'percent', required: false, minimum: 0, maximum: 15, sentence: '{value}', hint: 'Linc counts none in a state without income tax, and none until you set one elsewhere.' },
+  {
+    id: 'preMedicareCoverage',
+    label: 'Health coverage between retiring and Medicare',
+    kind: 'choice',
+    required: false,
+    options: [
+      { value: 'marketplace', label: 'A marketplace (ACA) plan' },
+      { value: 'cobra', label: 'COBRA, then a marketplace plan' },
+      { value: 'employer_retiree', label: 'Retiree coverage from an employer' },
+      { value: 'spouse_plan', label: 'A spouse\'s employer plan' },
+    ],
+    sentence: '{value}',
+    hint: 'Linc assumes a marketplace plan, less the premium tax credit your income earns.',
+  },
+  { id: 'preMedicareAnnualPremium', label: 'What that coverage costs a year per person', kind: 'usd_per_year', required: false, minimum: 0, maximum: 100_000, sentence: '{value}', hint: 'Leave blank and Linc prices the coverage you chose.' },
+  {
+    id: 'healthcareInSpending',
+    label: 'Does your retirement spending already include health premiums?',
+    kind: 'choice',
+    required: false,
+    options: [
+      { value: 'not_included', label: 'No, add premiums on top' },
+      { value: 'included', label: 'Yes, it already includes them' },
+    ],
+    sentence: '{value}',
+    hint: 'Linc adds them on top until you say.',
+  },
+];
+
 const AGE_FIELD: Field = { id: 'age', label: 'Your age', kind: 'age', required: false, minimum: 18, maximum: 110, sentence: '{value}' };
 const MONTHLY_FIELDS: Array<Field & { id: keyof Overrides }> = [
   { id: 'monthlyIncome', label: 'Take-home pay a month', kind: 'usd', required: false, minimum: 0, maximum: 10_000_000, sentence: '{value}' },
@@ -301,7 +341,7 @@ export default function YourNumbersPageClient() {
       const loadedFigures: StatedFigures = figuresData.figures ?? {};
       setFigures(loadedFigures);
       setCoverage(figuresData.coverage ?? null);
-      setPlanTexts(Object.fromEntries([...PLAN_FIELDS, ...PARTNER_FIELDS].map((field) => [field.id, textFor(field, loadedFigures[field.id]?.value)])));
+      setPlanTexts(Object.fromEntries([...PLAN_FIELDS, ...PARTNER_FIELDS, ...COST_FIELDS].map((field) => [field.id, textFor(field, loadedFigures[field.id]?.value)])));
 
       if (accountsResponse.ok) setManualAccounts((await accountsResponse.json()).data ?? []);
       if (overridesResponse.ok) {
@@ -431,7 +471,7 @@ export default function YourNumbersPageClient() {
     }
   };
 
-  const saveFigures = async (fields: typeof PLAN_FIELDS, section: 'plan' | 'partner') => {
+  const saveFigures = async (fields: typeof PLAN_FIELDS, section: 'plan' | 'partner' | 'costs') => {
     const { values, errors: problems } = readAll(fields, planTexts);
     setErrors((current) => ({ ...Object.fromEntries(Object.entries(current).filter(([key]) => !(key in values) && !(key in problems))), ...problems }));
     if (Object.keys(problems).length > 0) return;
@@ -457,6 +497,7 @@ export default function YourNumbersPageClient() {
   };
   const savePlan = () => saveFigures(PLAN_FIELDS, 'plan');
   const savePartner = () => saveFigures(PARTNER_FIELDS, 'partner');
+  const saveCosts = () => saveFigures(COST_FIELDS, 'costs');
 
   const handleLogout = () => {
     try { localStorage.removeItem('auth_token'); } catch { /* nothing to clear */ }
@@ -586,6 +627,27 @@ export default function YourNumbersPageClient() {
                 })}
               </div>
               <SaveRow saving={saving === 'partner'} status={status.partner ?? null} onSave={() => void savePartner()} label="Save partner" />
+            </Section>
+
+            <Section title="Taxes and health coverage" description="Linc counts income tax on every year of withdrawals and health premiums from the day you retire. Your linked accounts already say how they are taxed; these fill in what they do not.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                {COST_FIELDS.map((field) => {
+                  const saved = figures[field.id];
+                  return (
+                    <FieldInput
+                      key={field.id}
+                      field={field}
+                      text={planTexts[field.id] ?? ''}
+                      onChange={(text) => setPlanTexts((current) => ({ ...current, [field.id]: text }))}
+                      note={saved ? savedNote(saved.savedAt, saved.source) : undefined}
+                      error={errors[field.id]}
+                      needed={false}
+                      disabled={saving === 'costs'}
+                    />
+                  );
+                })}
+              </div>
+              <SaveRow saving={saving === 'costs'} status={status.costs ?? null} onSave={() => void saveCosts()} label="Save taxes and coverage" />
             </Section>
 
             <Link href="/app" className="inline-flex items-center gap-2 text-sm font-semibold text-[#102319] hover:underline">

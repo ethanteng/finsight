@@ -25,7 +25,22 @@ import {
 import { generateDisclaimers, calculateConfidenceCeiling } from '../retirement-analytics/interpretation/uncertainty-quantifier';
 import type { DataQualityReport } from '../retirement-analytics/types';
 import { RETIREMENT_ANALYSIS_VERSION } from '../retirement-analytics/version';
-import { statedPartnerOf, statedSpendingCutOf, type ExtractedRetirementInputs } from './retirement-input-extraction';
+import {
+  statedAccountSplitOf,
+  statedHealthcareOf,
+  statedPartnerOf,
+  statedSpendingCutOf,
+  type ExtractedRetirementInputs,
+} from './retirement-input-extraction';
+import {
+  linkedAccountTaxMix,
+  resolveRetirementTaxes,
+  sameTaxAndPremiumInputs,
+  type AccountTaxMix,
+  type RetirementTaxResolution,
+  type TaxAndPremiumInputs,
+} from '../services/retirement-taxes';
+import { hasPreMedicareYears, resolveHealthcare, type HealthcareResolution } from '../services/retirement-healthcare';
 import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-types';
 import { compactSearchQueryEvidence } from '../data/search-types';
 import type { SearchContext } from '../data/orchestrator';
@@ -275,6 +290,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
                   incompleteAccountIds: accountsWithErrors(snapshot.quality, accountIds),
                 }
               ),
+              // How each holding's account is taxed, from the account's own type.
+              accountTaxMix: linkedAccountTaxMix(holdings, linkedAccounts),
             };
           })()),
         };
@@ -626,6 +643,11 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     // once from the planner rather than by each calculator's own fields.
     ...(statedPartnerOf(plannedRetirementInputs) && { statedPartner: statedPartnerOf(plannedRetirementInputs) }),
     ...(statedSpendingCutOf(plannedRetirementInputs) && { statedSpendingCut: statedSpendingCutOf(plannedRetirementInputs) }),
+    ...(statedAccountSplitOf(plannedRetirementInputs) && { statedAccountSplit: statedAccountSplitOf(plannedRetirementInputs) }),
+    ...(plannedRetirementInputs?.stateIncomeTaxPercent !== undefined && {
+      statedStateTaxPercent: plannedRetirementInputs.stateIncomeTaxPercent,
+    }),
+    ...(statedHealthcareOf(plannedRetirementInputs) && { statedHealthcare: statedHealthcareOf(plannedRetirementInputs) }),
     homeValueSummary,
     homeValueData,
     financialSummary: financialSummary || undefined,
@@ -724,6 +746,9 @@ export async function completeRetirementAnalysis(
       securities,
       unmodeledInvestments: snapshot.investments?.unmodeledInvestments,
       linkedContributions: snapshot.investments?.linkedContributions ?? null,
+      accountTaxMix: snapshot.investments?.accountTaxMix ?? null,
+      stateOrProvince: snapshot.userProfileValues?.stateOrProvince,
+      country: snapshot.userProfileValues?.country,
       // The registry is dated, so take the full UTC date from the snapshot.
       // This prevents look-ahead and keeps replays deterministic.
       asOfDate: snapshotDate(snapshot),
@@ -783,6 +808,11 @@ async function fetchOrCreateRetirementAnalysis(args: {
   statedFigures?: StatedFigures;
   /** What the linked accounts holding these holdings receive in a typical month. */
   linkedContributions?: LinkedContributions | null;
+  /** The holdings by how their accounts are taxed. */
+  accountTaxMix?: AccountTaxMix | null;
+  /** Where Linc remembers the user lives, for state income tax. */
+  stateOrProvince?: string;
+  country?: string;
 }): Promise<RetirementAnalysisResolution> {
   const {
     userId,
@@ -799,6 +829,9 @@ async function fetchOrCreateRetirementAnalysis(args: {
     currentAnnualSpending,
     statedFigures,
     linkedContributions: linkedContributionFigure = null,
+    accountTaxMix = null,
+    stateOrProvince,
+    country,
   } = args;
 
   // Parse retirement parameters from the question and the turns that set it up.
@@ -925,6 +958,8 @@ async function fetchOrCreateRetirementAnalysis(args: {
   let household: RetirementHousehold | undefined = undefined;
   let planThroughAgeOrigin: { origin: 'saved'; savedAt: string } | undefined = undefined;
   let spendingFlexibility: SpendingFlexibilityResolution | undefined = undefined;
+  let retirementTaxes: RetirementTaxResolution | undefined = undefined;
+  let retirementHealthcare: HealthcareResolution | undefined = undefined;
   const withSources = (analysis: RetirementAnalysis): RetirementAnalysisResolution => {
     const covered = withCoverage(analysis);
     const assumed = Object.keys(assumedInputs).length > 0 ? { _assumedInputs: assumedInputs } : {};
@@ -938,6 +973,8 @@ async function fetchOrCreateRetirementAnalysis(args: {
         ...(household && { _household: household }),
         ...(planThroughAgeOrigin && { _planThroughAgeOrigin: planThroughAgeOrigin }),
         ...(spendingFlexibility && { _spendingFlexibility: spendingFlexibility }),
+        ...(retirementTaxes && { _taxes: retirementTaxes }),
+        ...(retirementHealthcare && { _healthcare: retirementHealthcare }),
       },
     };
   };
@@ -1129,6 +1166,36 @@ async function fetchOrCreateRetirementAnalysis(args: {
     (storedFlexibility?.cutShare ?? null) === (flexibilityInput.spendingFlexibility?.cutShare ?? null) &&
     (storedComparison?.cutShare ?? null) === (flexibilityInput.spendingFlexibilityComparison?.cutShare ?? null);
 
+  // Income tax on every year's draws and income: the holdings by their
+  // accounts' own types, how the household files, and the state's rate when
+  // it is known. Health premiums from the first withdrawal on, unless the
+  // user's spending already pays for them.
+  retirementTaxes = resolveRetirementTaxes({
+    linked: accountTaxMix,
+    stated: statedAccountSplitOf(extracted),
+    statedStatePercent: extracted?.stateIncomeTaxPercent,
+    statedFigures,
+    partner: partner ?? null,
+    stateOrProvince,
+    country,
+  });
+  retirementHealthcare = resolveHealthcare({
+    stated: statedHealthcareOf(extracted),
+    statedFigures,
+    preMedicareYears: hasPreMedicareYears({ currentAge, withdrawalStartAge, partnerAge: partner?.plan.age }),
+  });
+  const taxAndPremiumInputs: TaxAndPremiumInputs = {
+    taxes: retirementTaxes.taxes,
+    ...(retirementHealthcare.kind === 'counted' && { healthcare: retirementHealthcare.healthcare }),
+    ...(partner && timeline && {
+      people: {
+        userPlanThroughAge: lifeExpectancy,
+        partner: { age: partner.plan.age, planEndsAtUserAge: timeline.partnerPlanThroughAge },
+      },
+    }),
+  };
+  const sameTaxes = sameTaxAndPremiumInputs(storedAnalysisInput, taxAndPremiumInputs);
+
   // Resolve once so cache matching and the stored input use the same evidence
   // boundary as the engine. A full date prevents a January snapshot from
   // selecting an allocation that was not published until June.
@@ -1159,6 +1226,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       sameIncome &&
       sameSurvivorSpending &&
       sameFlexibility &&
+      sameTaxes &&
       (storedInput.annualContributionAmount ?? 0) === contribution.annualAmount &&
       sameAssumptions(storedAssumptions, persistableAssumptions(assumed)) &&
       storedAnalysisInput.analysisVersion === RETIREMENT_ANALYSIS_VERSION &&
@@ -1255,6 +1323,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       incomeStreams: projectionIncome,
       ...(survivorSpending && { survivorSpending }),
       ...flexibilityInput,
+      ...taxAndPremiumInputs,
       annualContributionAmount: contribution.annualAmount,
       // Which of these were assumed, so a later run never reads them back as
       // the user's plan. A figure from an earlier conversation is theirs and
@@ -1299,6 +1368,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         annualContributionAmount: analysisInput.annualContributionAmount,
         ...(survivorSpending && { survivorSpending }),
         ...(flexibilityInput.spendingFlexibility && { spendingFlexibility: flexibilityInput.spendingFlexibility }),
+        ...taxAndPremiumInputs,
       };
       // No `_evidence`: that cites a stored record, and this one is not stored.
       return withSources(degradedResult);
@@ -1346,6 +1416,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       annualContributionAmount: analysisInput.annualContributionAmount,
       ...(survivorSpending && { survivorSpending }),
       ...(flexibilityInput.spendingFlexibility && { spendingFlexibility: flexibilityInput.spendingFlexibility }),
+      ...taxAndPremiumInputs,
     };
     resultWithInputs._evidence = {
       recordId: createdAnalysis.id,

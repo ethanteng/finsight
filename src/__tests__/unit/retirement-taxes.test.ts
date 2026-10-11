@@ -12,6 +12,8 @@ import {
   premiumTaxCredit,
 } from '../../retirement-analytics/engine/healthcare';
 import { planYearCash } from '../../retirement-analytics/engine/retirement-cash-plan';
+import { simulateWithdrawals, type SimulatedTaxes } from '../../retirement-analytics/engine/withdrawal-simulator';
+import type { PortfolioMapping } from '../../retirement-analytics/types';
 
 describe('a year of income tax in retirement', () => {
   it('taxes ordinary income on the 2026 brackets after the standard deduction', () => {
@@ -147,8 +149,6 @@ describe('a year of a retired household\'s cash', () => {
 });
 
 describe('the simulation with taxes and premiums', () => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { simulateWithdrawals } = require('../../retirement-analytics/engine/withdrawal-simulator');
   const mapping = {
     usEquityWeight: 1, internationalEquityWeight: 0, nominalBondsWeight: 0, tipsWeight: 0, cashWeight: 0,
     totalValue: 1, usEquityValue: 1, internationalEquityValue: 0, nominalBondsValue: 0, tipsValue: 0,
@@ -157,7 +157,7 @@ describe('the simulation with taxes and premiums', () => {
     mappingConfidence: 'high', unmappedHoldings: [], unrecognizedHoldings: [], equityGeographyUnresolvedHoldings: [],
     targetDateUnregisteredHoldings: [], unsupportedHoldings: [], partiallyMappedHoldings: [], mappingMethod: 'direct',
     targetDateFunds: [],
-  };
+  } as unknown as PortfolioMapping;
   const flat = (months: number) => {
     const zeroes = Array.from({ length: months }, () => 0);
     return {
@@ -166,7 +166,7 @@ describe('the simulation with taxes and premiums', () => {
       inflationRates: [...zeroes],
     };
   };
-  const taxes = (accounts: { taxable: number; pretax: number; roth: number }, extra: Record<string, unknown> = {}) => ({
+  const taxes = (accounts: SimulatedTaxes['accounts'], extra: Partial<SimulatedTaxes> = {}): SimulatedTaxes => ({
     accounts, taxableBasisShare: 0, filing: 'single', stateRate: 0, requiredDistributionAge: 75, ...extra,
   });
 
@@ -182,7 +182,7 @@ describe('the simulation with taxes and premiums', () => {
       taxes: taxes({ taxable: 0, pretax: 1, roth: 0 }), people: [{ age: 60 }],
     });
     const yearly = 37_820 / 0.88;
-    expect(pretax.firstYearCosts.federalTax).toBeCloseTo(yearly - 40_000, 1);
+    expect(pretax.firstYearCosts!.federalTax).toBeCloseTo(yearly - 40_000, 1);
     expect(pretax.finalValue).toBeCloseTo(1_000_000 - 2 * yearly, 0);
     expect(pretax.realFirstYearPortfolioWithdrawal).toBeCloseTo(yearly, 0);
   });
@@ -194,7 +194,7 @@ describe('the simulation with taxes and premiums', () => {
     });
     const required = 1_000_000 / 24.6;
     const tax = 1_240 + 0.12 * (required - 16_100 - 2_050 - 12_400);
-    expect(outcome.firstYearCosts.federalTax).toBeCloseTo(tax, 0);
+    expect(outcome.firstYearCosts!.federalTax).toBeCloseTo(tax, 0);
     // The portfolio loses only the spending and the tax: the rest moves to the taxable account.
     expect(outcome.finalValue).toBeCloseTo(1_000_000 - 10_000 - tax, 0);
   });
@@ -209,31 +209,31 @@ describe('the simulation with taxes and premiums', () => {
   });
 
   it('adds marketplace premiums before 65, credited by income, and Medicare from 65', () => {
-    const marketplace = { coverage: 'marketplace', startMonth: 0 };
+    const marketplace = { coverage: 'marketplace' as const, startMonth: 0 };
     const roth = simulateWithdrawals(mapping, 1_000_000, flat(12), 40_000, {
       taxes: taxes({ taxable: 0, pretax: 0, roth: 1 }), healthcare: marketplace, people: [{ age: 60 }],
     });
     // No income at all: the credit covers all but nothing of the benchmark.
-    expect(roth.firstYearCosts.premiumTaxCredit).toBeCloseTo(marketplaceBenchmarkPremium(60), 4);
-    expect(roth.firstYearCosts.healthcarePremiums).toBeCloseTo(0, 4);
+    expect(roth.firstYearCosts!.premiumTaxCredit).toBeCloseTo(marketplaceBenchmarkPremium(60), 4);
+    expect(roth.firstYearCosts!.healthcarePremiums).toBeCloseTo(0, 4);
 
     const pretax = simulateWithdrawals(mapping, 1_000_000, flat(12), 70_000, {
       taxes: taxes({ taxable: 0, pretax: 1, roth: 0 }), healthcare: marketplace, people: [{ age: 60 }],
     });
-    expect(pretax.firstYearCosts.premiumTaxCredit).toBe(0);
-    expect(pretax.firstYearCosts.healthcarePremiums).toBeCloseTo(marketplaceBenchmarkPremium(60), 4);
+    expect(pretax.firstYearCosts!.premiumTaxCredit).toBe(0);
+    expect(pretax.firstYearCosts!.healthcarePremiums).toBeCloseTo(marketplaceBenchmarkPremium(60), 4);
 
     const medicare = simulateWithdrawals(mapping, 1_000_000, flat(12), 40_000, {
       taxes: taxes({ taxable: 0, pretax: 0, roth: 1 }), healthcare: marketplace, people: [{ age: 66 }],
     });
-    expect(medicare.firstYearCosts.healthcarePremiums).toBeCloseTo(MEDICARE_ANNUAL_PREMIUM, 4);
+    expect(medicare.firstYearCosts!.healthcarePremiums).toBeCloseTo(MEDICARE_ANNUAL_PREMIUM, 4);
     expect(medicare.finalValue).toBeCloseTo(1_000_000 - 40_000 - MEDICARE_ANNUAL_PREMIUM, 2);
   });
 
   it('runs COBRA for 18 months, then the marketplace', () => {
     const cobra = simulateWithdrawals(mapping, 1_000_000, flat(36), 40_000, {
-      taxes: taxes({ taxable: 0, pretax: 0, roth: 1 }), healthcare: { coverage: 'cobra', startMonth: 0 }, people: [{ age: 60 }],
+      taxes: taxes({ taxable: 0, pretax: 0, roth: 1 }), healthcare: { coverage: 'cobra' as const, startMonth: 0 }, people: [{ age: 60 }],
     });
-    expect(cobra.firstYearCosts.healthcarePremiums).toBeCloseTo(9_325 * 1.02, 2);
+    expect(cobra.firstYearCosts!.healthcarePremiums).toBeCloseTo(9_325 * 1.02, 2);
   });
 });

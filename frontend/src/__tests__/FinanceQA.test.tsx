@@ -170,6 +170,35 @@ describe('FinanceQA decision workspace', () => {
     });
   });
 
+  it('opens a form of assumptions alone rather than folding all of it away', () => {
+    render(<FinanceQA selectedPrompt={{
+      id: 'conversation-taxes',
+      question: 'Can I retire on this plan?',
+      answer: 'Your plan lasts in 88% of historical sequences.',
+      threadId: 'thread-taxes',
+      structuredResponse: {
+        summary: 'Your plan lasts in 88% of historical sequences.',
+        input_request: {
+          calculatorId: 'stated_retirement_plan',
+          title: 'Make the tax and health figures yours',
+          question: 'Can I retire on this plan?',
+          submitLabel: 'Update my plan',
+          fields: [
+            { id: 'stateIncomeTaxPercent', label: 'Your state income tax rate on retirement income', kind: 'percent' as const, required: false, minimum: 0, maximum: 15, defaultNote: 'If left blank, I count no state income tax', sentence: 'My state income tax rate on retirement income is {value}.' },
+            { id: 'preMedicareCoverage', label: 'Health coverage before Medicare', kind: 'choice' as const, required: false, options: [{ value: 'marketplace', label: 'a marketplace (ACA) plan' }, { value: 'cobra', label: 'COBRA from my last employer, then a marketplace plan' }], defaultNote: 'If left blank, I assume a marketplace plan', sentence: 'Before Medicare, my health coverage will be {value}.' },
+          ],
+        },
+      },
+      timestamp: Date.now(),
+    }} />);
+
+    expect(screen.getByRole('heading', { name: 'Make the tax and health figures yours' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Your state income tax rate on retirement income')).toBeVisible();
+    expect(screen.getByLabelText('Health coverage before Medicare')).toBeVisible();
+    expect(screen.queryByText('More assumptions (optional)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Needed')).not.toBeInTheDocument();
+  });
+
   it('signs a saved answer as Linc, with when it was written', () => {
     // An answer is only as current as the balances it read, so the byline says
     // how old it is rather than calling every answer "current".

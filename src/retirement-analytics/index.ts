@@ -282,6 +282,12 @@ export async function analyzeRetirementPortfolio(
       'before 65, then Medicare Part B and Part D base premiums'
     );
   }
+  if (simulatedTaxes || simulatedHealthcare) {
+    // The solver's rates come from withdrawals alone, so they stay before tax
+    // and premiums; solving them after both would plan every year of every
+    // candidate rate.
+    assumptions.push('Historical sustainable withdrawal rates are before income tax and health premiums');
+  }
   const { yearsToWithdrawalStart, withdrawalYears, totalAnalysisYears, withdrawalDelayMonths } = timeline;
   if (yearsToWithdrawalStart > 0) {
     assumptions.push(

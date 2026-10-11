@@ -36,6 +36,12 @@ export const STATED_FIGURE_KEYS = [
   'survivorAnnualSpending',
   'partnerMarried',
   'spendingCutPercent',
+  'rothSavingsPercent',
+  'taxableSavingsPercent',
+  'stateIncomeTaxPercent',
+  'preMedicareCoverage',
+  'preMedicareAnnualPremium',
+  'healthcareInSpending',
 ] as const;
 
 export type StatedFigureKey = (typeof STATED_FIGURE_KEYS)[number];
@@ -60,6 +66,10 @@ export const ALLOCATION_PRESETS = ['conservative', 'balanced', 'growth'] as cons
 export const INCOME_INFLATION_OPTIONS = ['fixed', 'rises_with_inflation'] as const;
 /** Whether the user and their partner are married: spousal and survivor benefits depend on it. */
 export const MARRIAGE_OPTIONS = ['married', 'not_married'] as const;
+/** Health coverage before Medicare; see `services/retirement-healthcare.ts`. */
+export const PRE_MEDICARE_COVERAGE_CHOICES = ['marketplace', 'cobra', 'employer_retiree', 'spouse_plan'] as const;
+/** Whether the retirement spending figure already pays for health premiums. */
+export const HEALTHCARE_IN_SPENDING_CHOICES = ['included', 'not_included'] as const;
 export type IncomeInflation = (typeof INCOME_INFLATION_OPTIONS)[number];
 
 export interface StatedFigureDefinition {
@@ -69,6 +79,8 @@ export interface StatedFigureDefinition {
   minimum?: number;
   maximum?: number;
   options?: readonly string[];
+  /** Ages and percents are whole numbers unless this is false. */
+  integer?: false;
 }
 
 /**
@@ -139,6 +151,43 @@ export const STATED_FIGURE_DEFINITIONS: Record<StatedFigureKey, StatedFigureDefi
     minimum: 0,
     maximum: 75,
   },
+  // How the savings are held, for taxes; pre-tax is whatever these leave.
+  rothSavingsPercent: {
+    label: 'Share of your savings in Roth accounts, in percent',
+    kind: 'percent',
+    minimum: 0,
+    maximum: 100,
+  },
+  taxableSavingsPercent: {
+    label: 'Share of your savings in taxable brokerage accounts, in percent',
+    kind: 'percent',
+    minimum: 0,
+    maximum: 100,
+  },
+  // State rates run to a fraction of a point; 0 is a statement.
+  stateIncomeTaxPercent: {
+    label: 'State income tax rate on your retirement income, in percent',
+    kind: 'percent',
+    minimum: 0,
+    maximum: 15,
+    integer: false,
+  },
+  preMedicareCoverage: {
+    label: 'Health coverage before Medicare',
+    kind: 'choice',
+    options: PRE_MEDICARE_COVERAGE_CHOICES,
+  },
+  preMedicareAnnualPremium: {
+    label: 'What that coverage costs a year per person before Medicare, in today\'s dollars',
+    kind: 'usd_per_year',
+    minimum: 0,
+    maximum: 100_000,
+  },
+  healthcareInSpending: {
+    label: 'Whether your retirement spending already includes health premiums',
+    kind: 'choice',
+    options: HEALTHCARE_IN_SPENDING_CHOICES,
+  },
 };
 
 function isKey(value: string): value is StatedFigureKey {
@@ -152,7 +201,9 @@ export function acceptedFigureValue(key: StatedFigureKey, value: unknown): numbe
     return typeof value === 'string' && definition.options?.includes(value) ? value : undefined;
   }
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-  if ((definition.kind === 'age' || definition.kind === 'percent') && !Number.isInteger(value)) return undefined;
+  if ((definition.kind === 'age' || definition.kind === 'percent') && definition.integer !== false && !Number.isInteger(value)) {
+    return undefined;
+  }
   if (definition.minimum !== undefined && value < definition.minimum) return undefined;
   if (definition.maximum !== undefined && value > definition.maximum) return undefined;
   return value;
@@ -189,7 +240,7 @@ function rangeText(key: StatedFigureKey): string {
   if (kind === 'choice') return `one of ${options?.join(', ')}`;
   const show = (value: number) =>
     kind === 'usd_per_year' ? `$${value.toLocaleString('en-US')}` : kind === 'percent' ? `${value}%` : String(value);
-  const whole = kind === 'age' || kind === 'percent' ? 'a whole number ' : '';
+  const whole = (kind === 'age' || kind === 'percent') && STATED_FIGURE_DEFINITIONS[key].integer !== false ? 'a whole number ' : '';
   return `${whole}from ${show(minimum ?? 0)} to ${show(maximum ?? 0)}`;
 }
 

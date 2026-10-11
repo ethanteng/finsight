@@ -64,6 +64,12 @@ const LABELS: Record<SaveOfferKey, string> = {
   survivorAnnualSpending: 'What one of you would spend alone',
   partnerMarried: 'Married',
   spendingCutPercent: 'You could cut spending in a bad market by',
+  rothSavingsPercent: 'Savings in Roth accounts',
+  taxableSavingsPercent: 'Savings in taxable accounts',
+  stateIncomeTaxPercent: 'State income tax on retirement income',
+  preMedicareCoverage: 'Health coverage before Medicare',
+  preMedicareAnnualPremium: 'Its premium per person before Medicare',
+  healthcareInSpending: 'Spending in retirement includes health premiums',
   investedBalance: 'Invested today',
 };
 
@@ -75,6 +81,12 @@ const CHOICE_LABELS: Record<string, string> = {
   rises_with_inflation: 'Yes',
   married: 'Yes',
   not_married: 'No',
+  marketplace: 'A marketplace (ACA) plan',
+  cobra: 'COBRA, then a marketplace plan',
+  employer_retiree: 'Retiree coverage from an employer',
+  spouse_plan: 'A spouse\'s employer plan',
+  included: 'Yes',
+  not_included: 'No, add them',
 };
 
 const AGE_KEYS: ReadonlySet<SaveOfferKey> = new Set([
@@ -93,7 +105,9 @@ function display(key: SaveOfferKey, value: number | string): string {
   const dollars = `$${Math.round(value).toLocaleString('en-US')}`;
   if (key === 'investedBalance') return dollars;
   if (AGE_KEYS.has(key)) return String(value);
-  if (key === 'spendingCutPercent') return `${value}%`;
+  if (key === 'spendingCutPercent' || key === 'rothSavingsPercent' || key === 'taxableSavingsPercent' || key === 'stateIncomeTaxPercent') {
+    return `${value}%`;
+  }
   return `${dollars} a year`;
 }
 

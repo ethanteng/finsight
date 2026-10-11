@@ -253,8 +253,22 @@ describe('Coast FIRE calculator', () => {
     });
   });
 
-  it('has no form for a run that completed', async () => {
-    expect(coastFireInputRequest(await runCoastFireScenario(EMPTY_SNAPSHOT, plan(STATED)))).toBeNull();
+  it('has no form for a run that completed with its taxes and coverage known', async () => {
+    const known = {
+      statedAccountSplit: { pretaxPercent: 100 },
+      userProfileValues: { stateOrProvince: 'TX' },
+      statedHealthcare: { inSpending: true },
+    } as any;
+    expect(coastFireInputRequest(await runCoastFireScenario(known, plan(STATED)))).toBeNull();
+  });
+
+  it('asks only about the taxes and coverage a completed test assumed, every field optional', async () => {
+    const request = coastFireInputRequest(await runCoastFireScenario(EMPTY_SNAPSHOT, plan(STATED)))!;
+    expect(request.title).toBe('Make the tax and health figures yours');
+    expect(request.fields.map((field) => field.id)).toEqual([
+      'rothSavingsPercent', 'taxableSavingsPercent', 'stateIncomeTaxPercent', 'preMedicareCoverage', 'healthcareInSpending',
+    ]);
+    expect(request.fields.every((field) => !field.required && field.defaultNote)).toBe(true);
   });
 
   it('fills age and savings from what Linc already holds, and says so', async () => {
@@ -852,6 +866,12 @@ describe('Coast FIRE calculator', () => {
       }));
     }
 
+    /** What a run was asked to cut, without the taxes and premiums every run now carries. */
+    function flexibilityOf(options: QuickPlanFlexibility | undefined) {
+      const rest = Object.fromEntries(Object.entries(options ?? {}).filter(([key]) => key !== 'taxes' && key !== 'healthcare'));
+      return Object.keys(rest).length > 0 ? rest : undefined;
+    }
+
     it('runs a 20% cut beside fixed spending when nobody has said, for the main case only', async () => {
       const runner = flexibleRunner();
       const execution = await runCoastFireScenario(
@@ -860,10 +880,12 @@ describe('Coast FIRE calculator', () => {
         runner as QuickPlanRunner
       ) as CompletedCoastFireScenarioExecution;
 
-      expect(runner.mock.calls.map((call) => call[2])).toEqual([
+      expect(runner.mock.calls.map((call) => flexibilityOf(call[2]))).toEqual([
         { spendingFlexibilityComparison: { cutShare: 0.2 } },
         undefined,
       ]);
+      // Every test counts taxes and premiums, the same in each case.
+      expect(runner.mock.calls.map((call) => call[2]?.taxes?.filing)).toEqual(['single', 'single']);
       expect(execution.scenarios[0].historicalTest?.spendingFlexibility).toMatchObject({
         resolution: { kind: 'comparison', cutShare: 0.2, annualCut: 16_000 },
         comparison: { survivalRate: 0.93 },
@@ -898,7 +920,7 @@ describe('Coast FIRE calculator', () => {
         runner as QuickPlanRunner
       ) as CompletedCoastFireScenarioExecution;
 
-      expect(runner.mock.calls.map((call) => call[2])).toEqual([
+      expect(runner.mock.calls.map((call) => flexibilityOf(call[2]))).toEqual([
         { spendingFlexibility: { cutShare: 0.25 } },
         { spendingFlexibility: { cutShare: 0.25 } },
       ]);
@@ -911,7 +933,13 @@ describe('Coast FIRE calculator', () => {
       expect(disclosure).toContain(
         'With your 25% cut, spending was cut in 40% of the 517 historical sequences, for a median of 9 years and at most 24 years.'
       );
-      expect(disclosure).toContain('The Coast FIRE number itself is a single straight line — the same return every year, and full spending every year.');
+      expect(disclosure).toContain(
+        'The Coast FIRE number itself is a single straight line — the same return every year, and full spending every year, ' +
+        'with no taxes, fees or health premiums. The market-history test counts taxes and premiums but not fund fees.'
+      );
+      // Said once for both cases' tests, not once per case.
+      expect(disclosure.match(/federal income tax on each year/g)).toHaveLength(1);
+      expect(disclosure).toContain('Each test counts 2026 federal income tax');
       expect(disclosure).not.toContain('If you cut spending 20%');
       // The straight line is the same with or without a cut.
       expect(execution.scenarios[0].metrics.coastFireNumber)
@@ -959,7 +987,7 @@ describe('Coast FIRE calculator', () => {
         runner as QuickPlanRunner
       ) as CompletedCoastFireScenarioExecution;
 
-      expect(runner.mock.calls[0][2]).toBeUndefined();
+      expect(flexibilityOf(runner.mock.calls[0][2])).toBeUndefined();
       const disclosure = describeCoastFireScenarioExecution(execution)!;
       expect(disclosure).toContain('It plans on no spending cuts in a bad market, since you said you could not cut.');
       expect(disclosure).not.toContain('If you cut spending');
@@ -974,7 +1002,7 @@ describe('Coast FIRE calculator', () => {
         runner as QuickPlanRunner
       ) as CompletedCoastFireScenarioExecution;
 
-      expect(runner.mock.calls[0][2]).toEqual({ spendingFlexibilityComparison: { cutShare: 0.2 } });
+      expect(flexibilityOf(runner.mock.calls[0][2])).toEqual({ spendingFlexibilityComparison: { cutShare: 0.2 } });
       const disclosure = describeCoastFireScenarioExecution(execution)!;
       expect(disclosure).toContain(
         'I did not use the spending cut you described: it comes to more than 75% of the plan\'s spending, which I took as a misreading.'
@@ -1092,7 +1120,8 @@ describe('Coast FIRE calculator', () => {
         'partnerRetirementIncome',
         'partnerMarried',
       ]));
-      expect(coastFireInputRequest(execution)).toBeNull();
+      // Nothing to ask about the couple; only the taxes and coverage the test assumed.
+      expect(coastFireInputRequest(execution)?.title).toBe('Make the tax and health figures yours');
     });
 
     it('compares the partner claiming at another age, moving their benefit by the same rules', async () => {

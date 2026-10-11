@@ -134,8 +134,12 @@ function inferSnapTradeAccountType(account: any): { type: string; subtype: strin
   const rawType = String(account.raw_type || '').trim().toLowerCase();
   const descriptor = `${rawType} ${String(account.name || '').toLowerCase()}`;
   if (descriptor.includes('mortgage')) return { type: 'loan', subtype: 'mortgage' };
-  if (descriptor.includes('401k') || descriptor.includes('401(k)')) return { type: 'investment', subtype: '401k' };
-  if (descriptor.includes('ira') || descriptor.includes('roth')) return { type: 'investment', subtype: 'ira' };
+  const is401k = descriptor.includes('401k') || descriptor.includes('401(k)');
+  // A Roth is tax-free on the way out and a traditional account is not, so
+  // the two must not share a subtype: retirement projections tax them apart.
+  if (descriptor.includes('roth')) return { type: 'investment', subtype: is401k ? 'roth 401k' : 'roth' };
+  if (is401k) return { type: 'investment', subtype: '401k' };
+  if (descriptor.includes('ira')) return { type: 'investment', subtype: 'ira' };
   if (descriptor.includes('hsa')) return { type: 'investment', subtype: 'hsa' };
   if (descriptor.includes('529')) return { type: 'investment', subtype: '529' };
   return { type: 'investment', subtype: rawType || 'brokerage' };
