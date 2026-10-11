@@ -761,6 +761,21 @@ describe('Coast FIRE calculator', () => {
     expect(coastFireSavableFigures(execution)).toContainEqual({ key: 'planThroughAge', value: 92 });
   });
 
+  it('labels a comparison against the disclosed default horizon, not zero', async () => {
+    const execution = await runCoastFireScenario(
+      EMPTY_SNAPSHOT,
+      plan(STATED, { lifeExpectancy: 100 })
+    ) as CompletedCoastFireScenarioExecution;
+
+    expect(execution.scenarios.map((scenario) => scenario.label)).toEqual([
+      'Planning through 95',
+      'Planning through 100',
+    ]);
+    expect(execution.scenarios[0].assumptions).toContainEqual(expect.objectContaining({
+      key: 'lifeExpectancy', value: 95, origin: 'default',
+    }));
+  });
+
   it('reports a planning age the retirement would already run past instead of moving it', async () => {
     const execution = await runCoastFireScenario(EMPTY_SNAPSHOT, plan({ ...STATED, lifeExpectancy: 60, retirementAge: 62 }));
     expect(execution).toMatchObject({ status: 'unavailable', reason: 'The age to plan through must be after the retirement age.' });

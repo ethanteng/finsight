@@ -804,15 +804,23 @@ function resolveVariant(
   // The age to plan through, which the incomes are valued over and the
   // market-history test runs to: what the user said, then the one saved in
   // Your numbers when retirement does not already run past it, then the
-  // convention, which is not listed as an assumption. With a partner, until
-  // the later of the two planning ages, with their incomes beside the user's
-  // and the survivor rule applied to both.
+  // convention. Always recorded as an assumption (including the default) so a
+  // comparison that only moves the horizon cannot label the baseline as
+  // "Planning through 0". With a partner, until the later of the two planning
+  // ages, with their incomes beside the user's and the survivor rule applied
+  // to both.
   const savedHorizon = saved('planThroughAge');
-  const namedPlanThroughAge = take(
+  const userPlanThroughAge = take(
     'lifeExpectancy',
-    savedHorizon && savedHorizon.value > retirementAge! ? savedHorizon : undefined
-  );
-  const userPlanThroughAge = namedPlanThroughAge ?? Math.max(DEFAULT_LIFE_EXPECTANCY, retirementAge! + 1);
+    savedHorizon && savedHorizon.value > retirementAge!
+      ? savedHorizon
+      : { value: Math.max(DEFAULT_LIFE_EXPECTANCY, retirementAge! + 1), origin: 'default' }
+  )!;
+  // Stated or saved only: the convention must not change variant ids or force
+  // an explicit horizon onto the market-history request.
+  const namedPlanThroughAge = assumptions.find((assumption) =>
+    assumption.key === 'lifeExpectancy' && assumption.origin !== 'default'
+  )?.value;
   const partner = resolvePartner({
     stated: snapshot.statedPartner,
     statedFigures: snapshot.statedFigures,
