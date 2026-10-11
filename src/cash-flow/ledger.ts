@@ -172,12 +172,25 @@ function withLegacyKey(transaction: any): { legacyCounterpartyKey?: string } {
   return legacy ? { legacyCounterpartyKey: legacy } : {};
 }
 
-/** The transaction's category values, as the category picker reads them: blanks dropped. */
-function categoryFields(transaction: any): { categoryCodes: string[]; userCategory?: boolean } {
-  const raw = transaction?.category;
+/** Drop blanks and the sentinel `0` the way the category picker does. */
+function categoryCodeValues(raw: unknown): string[] {
   const values: unknown[] = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
+  return values.filter((value): value is string => typeof value === 'string' && value.trim() !== '' && value !== '0');
+}
+
+/**
+ * The transaction's category values, as the category picker reads them. Prefer the
+ * array when present; otherwise the same PFC sources `detailedCategory` / labels use,
+ * so a row that only carries `personal_finance_category` still opens with a selection.
+ */
+function categoryFields(transaction: any): { categoryCodes: string[]; userCategory?: boolean } {
+  const fromArray = categoryCodeValues(transaction?.category);
+  const pfc = transaction?.personal_finance_category || transaction?.enriched_data?.personal_finance_category;
+  const fromPfc = fromArray.length === 0 && pfc
+    ? categoryCodeValues([pfc.primary, pfc.detailed])
+    : [];
   return {
-    categoryCodes: values.filter((value): value is string => typeof value === 'string' && value.trim() !== '' && value !== '0'),
+    categoryCodes: fromArray.length > 0 ? fromArray : fromPfc,
     ...(transaction?.category_source === 'user' && { userCategory: true }),
   };
 }

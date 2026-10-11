@@ -240,7 +240,8 @@ describe('the transactions behind each item', () => {
       label: 'Safeway',
       amount: 61.5,
       category: 'Groceries',
-      categoryCodes: [],
+      // PFC-only rows still hand the picker the codes the label came from.
+      categoryCodes: ['FOOD_AND_DRINK', 'FOOD_AND_DRINK_GROCERIES'],
       userCategory: false,
       payeeKey: 'safeway',
       countedBy: null,
