@@ -45,7 +45,8 @@ describe('SnapTrade provider retrieval', () => {
       id: 'account-1',
       balance: 12500,
       type: 'investment',
-      subtype: 'ira',
+      // A Roth is its own subtype: retirement projections tax it apart from a traditional IRA.
+      subtype: 'roth',
       lastSuccessfulHoldingsSync: '2026-08-17T20:00:00Z',
       lastSuccessfulTransactionsSync: '2026-08-17',
       connectionDisabled: true,
