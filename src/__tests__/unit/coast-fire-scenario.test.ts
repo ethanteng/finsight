@@ -838,7 +838,7 @@ describe('Coast FIRE calculator', () => {
     it('leaves a partner\'s incomes out until it knows their age', async () => {
       const execution = await runCoastFireScenario({ statedPartner: { socialSecurityAnnual: 20_000 } }, plan(STATED));
       expect((execution as CompletedCoastFireScenarioExecution).scenarios[0].metrics.planThroughAge).toBe(95);
-      expect(describeCoastFireScenarioExecution(execution)).toContain('I did not count your partner\'s incomes, since I need their age');
+      expect(describeCoastFireScenarioExecution(execution)).toContain('I did not plan for your partner, since I need their age');
     });
   });
 });

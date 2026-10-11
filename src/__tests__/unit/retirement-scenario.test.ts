@@ -201,6 +201,40 @@ describe('retirement scenario runner', () => {
       ]);
     });
 
+    it('runs a planning-age what-if that only moves when the survivor years begin', async () => {
+      // A younger partner with no incomes: living to 98 leaves the horizon at
+      // the partner's 100 and moves only the survivor's spending.
+      const data = snapshot();
+      const plan = { age: 45, planThroughAge: 95, survivorAnnualSpending: 30_000 };
+      const timeline = householdTimeline({ currentAge: 50, userPlanThroughAge: 95, partner: plan });
+      Object.assign(data.retirementAnalysis._storedInputParams, {
+        lifeExpectancy: 100,
+        incomeStreams: [],
+        survivorSpending: { fromAge: 95, annualAmount: 30_000 },
+      });
+      data.retirementAnalysis._household = {
+        plan,
+        origins: { age: 'stated', planThroughAge: 'default', survivorAnnualSpending: 'stated' },
+        timeline,
+      };
+      const analyzer = jest.fn(async () => analysis(0.85));
+      const execution = await runRetirementScenario(data, {
+        requested: true,
+        primary: {
+          type: 'historical_cpi',
+          overrides: { lifeExpectancy: 98, sources: { lifeExpectancy: 'if I live to 98' } },
+        },
+      }, analyzer);
+
+      expect(analyzer).toHaveBeenCalledTimes(1);
+      expect((analyzer.mock.calls[0] as any[])[0]).toMatchObject({
+        lifeExpectancy: 100,
+        survivorSpending: { fromAge: 98, annualAmount: 30_000 },
+      });
+      if (execution.status !== 'completed') throw new Error('not completed');
+      expect(execution.scenarios.map((scenario) => scenario.reusedBaseline)).toEqual([false, true]);
+    });
+
     it('moves the user\'s own planning age, and the household\'s horizon with it', async () => {
       const analyzer = jest.fn(async () => analysis(0.85));
       await runRetirementScenario(coupleSnapshot(), {

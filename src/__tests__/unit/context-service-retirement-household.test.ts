@@ -230,7 +230,7 @@ describe('a partner in the holdings-based projection', () => {
       { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
     ]);
     expect(describeRetirementAssumptions(completed)).toContain(
-      'not your partner\'s incomes, since I need their age to time them (tell me how old they are and I will count them)'
+      'not your partner, since I need their age to plan for them (tell me how old they are and I will include them)'
     );
   });
 

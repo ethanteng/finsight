@@ -23,6 +23,13 @@ describe('a partner in the plan', () => {
     expect(resolvePartner({ retirementAge: 65, currentAge: 60 })).toBeNull();
     expect(resolvePartner({ stated: { socialSecurityAnnual: 24_000 }, retirementAge: 65, currentAge: 60 }))
       .toEqual({ missingAge: true });
+    // Anything that changes the plan once the age is known asks for it too.
+    expect(resolvePartner({ stated: { survivorAnnualSpending: 50_000 }, retirementAge: 65, currentAge: 60 }))
+      .toEqual({ missingAge: true });
+    expect(resolvePartner({ statedFigures: { partnerPlanThroughAge: saved(92) }, retirementAge: 65, currentAge: 60 }))
+      .toEqual({ missingAge: true });
+    // A claiming age with no benefit behind it does not.
+    expect(resolvePartner({ stated: { socialSecurityStartAge: 70 }, retirementAge: 65, currentAge: 60 })).toBeNull();
   });
 
   it('takes what the user said, then Your numbers, then named defaults', () => {

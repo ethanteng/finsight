@@ -96,9 +96,9 @@ export interface ResolvedPartner {
  * The partner's figures: what the user said in this decision, then Your
  * numbers, then named defaults -- and only for an income the partner has.
  *
- * Null when there is no partner to plan for. When incomes are known but the
- * partner's age is not, `missingAge` says so: their incomes cannot be timed,
- * and an age is not something to assume.
+ * Null when there is no partner to plan for. When something that would change
+ * the plan is known but the partner's age is not, `missingAge` says so: none
+ * of it can be timed, and an age is not something to assume.
  */
 export function resolvePartner(args: {
   stated?: StatedPartner;
@@ -135,8 +135,15 @@ export function resolvePartner(args: {
   const socialSecurityAmount = take<number>('socialSecurityAnnual', savedNum('partnerSocialSecurityAnnual'));
   const pensionAmount = take<number>('pensionAnnual', savedNum('partnerRetirementIncome'));
   const age = take<number>('age', savedNum('partnerAge'));
-  const hasIncome = (socialSecurityAmount ?? 0) > 0 || (pensionAmount ?? 0) > 0;
-  if (age === undefined) return hasIncome ? { missingAge: true } : null;
+  if (age === undefined) {
+    // Anything that changes the plan once the age is known says there is a
+    // partner to plan for; a start age or inflation term with no income
+    // behind it does not.
+    const planned = (socialSecurityAmount ?? 0) > 0 || (pensionAmount ?? 0) > 0 ||
+      stated.planThroughAge !== undefined || savedNum('partnerPlanThroughAge') !== undefined ||
+      stated.survivorAnnualSpending !== undefined || savedNum('survivorAnnualSpending') !== undefined;
+    return planned ? { missingAge: true } : null;
+  }
 
   const ageGap = args.currentAge - age;
   const withDefault = <T extends number | string>(
