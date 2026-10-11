@@ -174,6 +174,11 @@ describe('a partner in the holdings-based projection', () => {
     expect(stored).toMatchObject({ lifeExpectancy: 100, userPlanThroughAge: 95, survivorSpending: { fromAge: 95, annualAmount: 60_000 } });
 
     const analysis = completed.retirementAnalysis!;
+    expect(analysis._storedInputParams).toMatchObject({
+      lifeExpectancy: 100,
+      userPlanThroughAge: 95,
+      survivorSpending: { fromAge: 95, annualAmount: 60_000 },
+    });
     expect(analysis._household).toMatchObject({
       plan: { age: 55, planThroughAge: 95 },
       timeline: { ageGap: 5, horizonAge: 100, firstDeath: { who: 'user', atUserAge: 95 } },

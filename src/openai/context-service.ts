@@ -1041,9 +1041,9 @@ async function fetchOrCreateRetirementAnalysis(args: {
   incomeOrigins = income.origins;
 
   // A partner: their incomes on the user's ages, the plan run until the
-  // younger of them reaches their planning age, and the survivor keeping the
-  // larger Social Security benefit. Without their age their incomes cannot
-  // be timed, and the answer asks for it.
+  // later of their planning ages, and the survivor keeping the larger Social
+  // Security benefit. Without their age their incomes cannot be timed, and
+  // the answer asks for it.
   const resolvedPartner = resolvePartner({
     stated: statedPartnerOf(extracted),
     statedFigures,
@@ -1240,6 +1240,9 @@ async function fetchOrCreateRetirementAnalysis(args: {
         annualWithdrawalAmount: analysisInput.annualWithdrawalAmount,
         withdrawalStartAge: analysisInput.withdrawalStartAge,
         lifeExpectancy: analysisInput.lifeExpectancy,
+        // Beside the household horizon, so same-turn what-ifs and disclosure
+        // see the user's own age the way a later DB read does.
+        ...(timeline && { userPlanThroughAge: lifeExpectancy }),
         incomeStreams: analysisInput.incomeStreams,
         annualContributionAmount: analysisInput.annualContributionAmount,
         ...(survivorSpending && { survivorSpending }),
@@ -1283,6 +1286,9 @@ async function fetchOrCreateRetirementAnalysis(args: {
       annualWithdrawalAmount: analysisInput.annualWithdrawalAmount,
       withdrawalStartAge: analysisInput.withdrawalStartAge,
       lifeExpectancy: analysisInput.lifeExpectancy,
+      // Beside the household horizon, so same-turn what-ifs and disclosure
+      // see the user's own age the way a later DB read does.
+      ...(timeline && { userPlanThroughAge: lifeExpectancy }),
       incomeStreams: analysisInput.incomeStreams,
       annualContributionAmount: analysisInput.annualContributionAmount,
       ...(survivorSpending && { survivorSpending }),

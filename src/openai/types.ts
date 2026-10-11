@@ -365,6 +365,12 @@ export interface FinancialContextSnapshot {
       annualWithdrawalAmount?: number;
       withdrawalStartAge?: number;
       lifeExpectancy?: number;
+      /**
+       * The user's own planning age when a partner extends `lifeExpectancy` to
+       * the household horizon. Absent on single-person runs and on analyses
+       * recorded before household planning.
+       */
+      userPlanThroughAge?: number;
       /** Social Security and a pension, each on its own schedule; absent before version 11. */
       incomeStreams?: RetirementIncomeStream[];
       /** A year until withdrawals begin, in today's dollars; absent on runs that counted none. */
