@@ -21,7 +21,9 @@ import {
   describePartnerIncome,
   incomeEndClause,
   MISSING_PARTNER_AGE_CLAUSE,
+  partnerAgeInputRequest,
 } from './household-evidence';
+import type { InputRequest } from './input-request';
 import type { RetirementContributionOrigin } from './retirement-contributions';
 import { savedOn } from '../services/stated-figures';
 import { describeClaimingAdjustmentBriefly } from '../services/social-security-claiming';
@@ -77,6 +79,20 @@ function formatQuote(quote: string): string | null {
 }
 
 /**
+ * The form for a projection that ran without a partner whose age nobody gave:
+ * their age alone, the same form the stated plan and Coast FIRE carry. The
+ * assumptions sentence asks in words too.
+ */
+export function retirementPartnerAgeRequest(
+  snapshot: Pick<FinancialContextSnapshot, 'retirementAnalysis'>
+): InputRequest | null {
+  const household = snapshot.retirementAnalysis?._household;
+  return household && 'missingAge' in household
+    ? partnerAgeInputRequest(RETIREMENT_CALCULATOR_ID, 'Am I on track for retirement?')
+    : null;
+}
+
+/**
  * @returns one sentence naming the inputs the projection used and, where the
  *   words are known, the phrase each came from — or null when no projection ran
  */
@@ -104,6 +120,14 @@ export function describeRetirementAssumptions(
           ? `${LABELS[field]} ${formatValue(field, value)}, from “${quote}”`
           : `${LABELS[field]} ${formatValue(field, value)}`
     );
+  }
+  // The planning age is only named when it came from Your numbers, with the
+  // date, like every other saved figure an answer plans with.
+  const planThrough = analysis._planThroughAgeOrigin;
+  const ownPlanThroughAge = values.userPlanThroughAge ?? values.lifeExpectancy;
+  if (planThrough && typeof ownPlanThroughAge === 'number') {
+    const partner = analysis._household && !('missingAge' in analysis._household);
+    parts.push(`${partner ? 'you plan' : 'planning'} through age ${ownPlanThroughAge} (from Your numbers, saved ${savedOn(planThrough.savedAt)})`);
   }
   parts.push(...describeIncome(values.incomeStreams, analysis._incomeOrigins, analysis._household));
   const countedIncomes = values.incomeStreams?.map((stream) => {

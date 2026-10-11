@@ -370,6 +370,28 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
   });
   const coupleFacts = couple.showTheMathData!.evidenceManifest.facts;
 
+  // A partner mentioned without an age: the projection still answers for the
+  // user, and the answer carries a form for the partner's age alone.
+  const partnerWithoutAgeSnapshot = retirementSnapshot();
+  partnerWithoutAgeSnapshot.retirementAnalysis = {
+    ...partnerWithoutAgeSnapshot.retirementAnalysis!,
+    _storedInputParams: {
+      ...partnerWithoutAgeSnapshot.retirementAnalysis!._storedInputParams,
+      incomeStreams: [{ label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true }],
+    },
+    _incomeOrigins: { socialSecurity: { amount: 'stated', startAge: 'stated' } },
+    _household: { missingAge: true },
+  };
+  const partnerWithoutAge = await runAskLincAnalysis({
+    question: 'Are we on track to retire, counting my wife\'s pension?',
+    enableValidation: false,
+    evaluation: {
+      snapshot: partnerWithoutAgeSnapshot,
+      skipToneConfig: true,
+      model: () => jsonResponse('The projection runs on your own plan until I know your wife\'s age.', {}),
+    },
+  });
+
   // The first follow-up of someone the Coast FIRE calculator sent here: the
   // same question, asked again in Ask Linc, with nothing linked. This used to
   // end on "link an investment account" and told them the calculator's own
@@ -709,6 +731,18 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
         coupleFacts.some(fact => fact.id === 'retirement_partner_social_security_end_age' && fact.value === 95) &&
         couple.showTheMathData!.evidenceManifest.validation.deterministic.valid,
       detail: 'A partner\'s benefit is disclosed at both ages with the joint horizon and the survivor rule, and the answer can cite it.',
+    },
+    {
+      id: 'partner-age-form-under-a-holdings-answer',
+      category: 'retirement',
+      passed: partnerWithoutAge.structuredResponse.summary.includes(
+        'not your partner, since I need their age to plan for them (tell me how old they are and I will include them)'
+      ) &&
+        partnerWithoutAge.structuredResponse.input_request?.calculatorId === 'retirement' &&
+        partnerWithoutAge.structuredResponse.input_request.fields.length === 1 &&
+        partnerWithoutAge.structuredResponse.input_request.fields[0].id === 'partnerAge' &&
+        partnerWithoutAge.structuredResponse.input_request.fields[0].sentence === 'My partner is {value} years old.',
+      detail: 'A partner without an age leaves the answer standing and adds a form for their age alone.',
     },
     {
       id: 'calculator-follow-up-answers-without-linked-holdings',

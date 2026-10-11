@@ -20,6 +20,7 @@ import {
 import { householdIncomeStreams, householdTimeline, survivorSpendingFor } from '../../services/household';
 import { buildSaveOffer } from '../../openai/save-offer';
 import { validateCanonicalFactPack } from '../../openai/canonical-facts';
+import { parseInputRequest } from '../../openai/input-request';
 import { NOTHING_LINKED } from '../../openai/linked-data';
 
 const NUMERIC = [
@@ -769,6 +770,52 @@ describe('retirement plan from stated figures', () => {
     expect(describeStatedRetirementPlanExecution(execution)).toContain(
       'I did not plan for your partner, since I need their age; tell me how old they are and I will include them.'
     );
+    // The plan ran; the form asks for the age alone.
+    expect(statedRetirementPlanInputRequest(execution)).toEqual({
+      calculatorId: 'stated_retirement_plan',
+      title: 'Include your partner',
+      question: 'Can I retire on this plan?',
+      submitLabel: 'Include my partner',
+      fields: [{
+        id: 'partnerAge',
+        label: 'Your partner\'s age',
+        kind: 'age',
+        required: true,
+        minimum: 18,
+        maximum: 90,
+        sentence: 'My partner is {value} years old.',
+      }],
+    });
+    expect(statedRetirementPlanInputRequest(
+      await runStatedRetirementPlan(NO_HOLDINGS, plan(LEAD), householdRunner() as QuickPlanRunner)
+    )).toBeNull();
+  });
+
+  it('adds the partner\'s age to the form that asks for the user\'s own figures', async () => {
+    const execution = await runStatedRetirementPlan(
+      { ...NO_HOLDINGS, statedPartner: { survivorAnnualSpending: 50_000 } },
+      plan({ retirementAge: 60 }),
+      householdRunner() as QuickPlanRunner
+    );
+
+    expect(execution).toMatchObject({ status: 'unavailable', partnerAgeMissing: true });
+    expect(describeStatedRetirementPlanExecution(execution)).toContain(
+      'Reply with those and I will run it. Tell me your partner\'s age too and I will include them.'
+    );
+    const request = statedRetirementPlanInputRequest(execution)!;
+    expect(request.fields).toHaveLength(13);
+    expect(request.fields.find((field) => field.id === 'partnerAge')).toEqual({
+      id: 'partnerAge',
+      label: 'Your partner\'s age',
+      kind: 'age',
+      required: false,
+      minimum: 18,
+      maximum: 90,
+      defaultNote: 'If left blank, I plan without your partner',
+      sentence: 'My partner is {value} years old.',
+    });
+    // A stored answer reads the whole form back.
+    expect(parseInputRequest(JSON.parse(JSON.stringify(request)))).toEqual(request);
   });
 
   it('runs the real engine until the younger partner\'s planning age', async () => {

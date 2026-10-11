@@ -79,6 +79,7 @@ import {
 import {
   applySurvivorRule,
   householdTimeline,
+  partnerAgeMissing,
   partnerIncomes,
   partnerSavableFigures,
   resolvePartner,
@@ -93,6 +94,8 @@ import {
   describePartnerIncome,
   MISSING_PARTNER_AGE_SENTENCE,
   partnerAgeAt,
+  partnerAgeInputRequest,
+  withPartnerAgeField,
   type PlannedHousehold,
 } from '../openai/household-evidence';
 
@@ -302,6 +305,8 @@ export interface CoastFireScenarioResult {
   household?: PlannedHousehold;
   /** Set when a partner's incomes are known but not their age, so they were left out. */
   missingPartnerAge?: true;
+  /** The user's own planning age, when it came from Your numbers. */
+  savedPlanThroughAge?: { value: number; savedAt: string };
 }
 
 export type { QuickPlanRunner };
@@ -334,6 +339,8 @@ export interface UnavailableCoastFireScenarioExecution {
   missingFields?: CoastFireOverrideField[];
   /** What was already known when they were found missing, so the form can show it. */
   knownInputs?: KnownInput[];
+  /** A partner to plan for whose age is not known either, so the form asks for it too. */
+  partnerAgeMissing?: true;
 }
 
 export type CoastFireScenarioExecution =
@@ -566,6 +573,8 @@ interface ResolvedCoastFireVariant {
   missingPartnerAge?: true;
   /** The age the incomes are valued through: the household's horizon with a partner. */
   planThroughAge: number;
+  /** The user's own planning age, when it came from Your numbers. */
+  savedPlanThroughAge?: { value: number; savedAt: string };
   /** What one survivor spends from the first death, when the user said. */
   survivorSpending?: { fromAge: number; annualAmount: number };
 }
@@ -777,9 +786,15 @@ function resolveVariant(
     });
   }
   // The market-history test's own horizon, which the incomes are valued
-  // through; with a partner, until the later of the two planning ages, with
-  // their incomes beside the user's and the survivor rule applied to both.
-  const userPlanThroughAge = Math.max(DEFAULT_LIFE_EXPECTANCY, retirementAge! + 1);
+  // through: the planning age saved in Your numbers when retirement does not
+  // already run past it, otherwise the convention. With a partner, until the
+  // later of the two planning ages, with their incomes beside the user's and
+  // the survivor rule applied to both.
+  const savedHorizon = saved('planThroughAge');
+  const savedPlanThroughAge = savedHorizon && savedHorizon.value > retirementAge!
+    ? { value: savedHorizon.value, savedAt: savedHorizon.savedAt }
+    : undefined;
+  const userPlanThroughAge = savedPlanThroughAge?.value ?? Math.max(DEFAULT_LIFE_EXPECTANCY, retirementAge! + 1);
   const partner = resolvePartner({
     stated: snapshot.statedPartner,
     statedFigures: snapshot.statedFigures,
@@ -823,6 +838,7 @@ function resolveVariant(
     ...(household && { household }),
     ...(partner && 'missingAge' in partner && { missingPartnerAge: true as const }),
     planThroughAge: household?.timeline.horizonAge ?? userPlanThroughAge,
+    ...(savedPlanThroughAge && { savedPlanThroughAge }),
     ...(survivorSpending && { survivorSpending }),
   };
 }
@@ -945,7 +961,8 @@ function variantKey(variant: ResolvedCoastFireVariant): string {
     incomes: variant.incomes,
     annualContribution: variant.annualContribution,
     allocation: variant.allocation.id,
-    // Only with a partner, so a single person's case keeps its id.
+    // Only when saved or with a partner, so any other case keeps its id.
+    ...(variant.savedPlanThroughAge && { savedPlanThroughAge: variant.savedPlanThroughAge.value }),
     ...(variant.household && {
       partner: variant.household.plan,
       planThroughAge: variant.planThroughAge,
@@ -962,7 +979,7 @@ function historicalTestKey(variant: ResolvedCoastFireVariant): string {
   const { currentAge, retirementAge, currentSavings, annualRetirementSpending } = variant.inputs;
   return JSON.stringify([
     currentAge, retirementAge, currentSavings, annualRetirementSpending, variant.incomes, variant.allocation.id,
-    variant.household?.plan ?? null,
+    variant.household?.plan ?? null, variant.planThroughAge,
   ]);
 }
 
@@ -1007,6 +1024,8 @@ async function presetHistoricalTest(
       pensionStartAge: pension?.startAge ?? inputs.retirementAge,
       pensionInflationAdjusted: pension?.inflationAdjusted ?? false,
       allocation: variant.allocation.id,
+      // The planning age the straight line valued incomes through.
+      ...(variant.savedPlanThroughAge && { lifeExpectancy: variant.savedPlanThroughAge.value }),
     }, variant.household && { partner: variant.household.plan });
     const evaluated = run.primary;
     if (!evaluated) return undefined;
@@ -1048,7 +1067,7 @@ function scenarioId(variant: ResolvedCoastFireVariant): string {
 function unavailable(
   startedAt: number,
   reason: string,
-  missing?: { prompts: string[]; fields: CoastFireOverrideField[]; known: KnownInput[] }
+  missing?: { prompts: string[]; fields: CoastFireOverrideField[]; known: KnownInput[]; partnerAgeMissing?: boolean }
 ): UnavailableCoastFireScenarioExecution {
   return {
     version: COAST_FIRE_SCENARIO_VERSION,
@@ -1061,6 +1080,7 @@ function unavailable(
       missingInputs: missing.prompts,
       missingFields: missing.fields,
       ...(missing.known.length > 0 && { knownInputs: missing.known }),
+      ...(missing.partnerAgeMissing && { partnerAgeMissing: true as const }),
     }),
   };
 }
@@ -1105,7 +1125,12 @@ export async function runCoastFireScenario(
       return unavailable(
         startedAt,
         `Missing ${joinList(variant.missing)}.`,
-        { prompts: variant.missing, fields: variant.missingFields, known: variant.known }
+        {
+          prompts: variant.missing,
+          fields: variant.missingFields,
+          known: variant.known,
+          partnerAgeMissing: partnerAgeMissing(snapshot.statedPartner, snapshot.statedFigures),
+        }
       );
     }
     if (index === 0) primaryQuoteAge = variant.socialSecurityQuote?.age;
@@ -1153,6 +1178,7 @@ export async function runCoastFireScenario(
       ...(variant.claiming && { claiming: variant.claiming }),
       ...(variant.household && { household: variant.household }),
       ...(variant.missingPartnerAge && { missingPartnerAge: true as const }),
+      ...(variant.savedPlanThroughAge && { savedPlanThroughAge: variant.savedPlanThroughAge }),
     });
   }
 
@@ -1578,8 +1604,9 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
   if (execution.status === 'unavailable') {
     if (execution.missingInputs?.length) {
       const items = execution.missingInputs;
+      const partner = execution.partnerAgeMissing ? ' Tell me your partner\'s age too and I will include them.' : '';
       return `To work out your Coast FIRE number I need ${joinList(items)}. ` +
-        `Reply with ${items.length === 1 ? 'that' : 'those'} and I will run it — no linked accounts needed.`;
+        `Reply with ${items.length === 1 ? 'that' : 'those'} and I will run it — no linked accounts needed.${partner}`;
     }
     return `I could not run the Coast FIRE calculation: ${execution.reason}`;
   }
@@ -1643,6 +1670,9 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
         : undefined;
       return phrase ? [{ phrase, savedAt: assumption.savedAt! }] : [];
     }),
+    ...(primary.savedPlanThroughAge
+      ? [{ phrase: `planning through age ${primary.savedPlanThroughAge.value}`, savedAt: primary.savedPlanThroughAge.savedAt }]
+      : []),
     ...(savedMix?.origin === 'saved' && savedMix.savedAt
       ? [{ phrase: `the ${savedMix.label} preset`, savedAt: savedMix.savedAt }]
       : []),
@@ -1781,7 +1811,13 @@ const COAST_FIRE_INPUT_REQUEST: InputRequestSpec = {
 
 /** The form for a Coast FIRE run waiting on figures, or null for one that ran or failed otherwise. */
 export function coastFireInputRequest(execution: CoastFireScenarioExecution): InputRequest | null {
-  if (execution.status !== 'unavailable' || !execution.missingFields?.length) return null;
+  // A number worked out without the partner asks for their age alone.
+  if (execution.status === 'completed') {
+    return execution.scenarios[0]?.missingPartnerAge
+      ? partnerAgeInputRequest(COAST_FIRE_CALCULATOR_ID, COAST_FIRE_INPUT_REQUEST.question)
+      : null;
+  }
+  if (!execution.missingFields?.length) return null;
   // Without an age there is no telling whether the conventional retirement
   // age is still ahead, so both were asked for. Given an age under it, a blank
   // retirement age is the default, so the form does not insist on one — until
@@ -1791,7 +1827,11 @@ export function coastFireInputRequest(execution: CoastFireScenarioExecution): In
   const missing = ageMissing
     ? execution.missingFields.filter((field) => field !== 'retirementAge')
     : execution.missingFields;
-  const request = buildInputRequest(COAST_FIRE_INPUT_REQUEST, missing, execution.knownInputs);
+  const request = buildInputRequest(
+    execution.partnerAgeMissing ? withPartnerAgeField(COAST_FIRE_INPUT_REQUEST) : COAST_FIRE_INPUT_REQUEST,
+    missing,
+    execution.knownInputs
+  );
   if (!request || !ageMissing) return request;
   return {
     ...request,

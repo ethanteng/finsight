@@ -396,6 +396,8 @@ export interface FinancialContextSnapshot {
     _contributionOrigin?: RetirementContributionOrigin;
     /** The partner the plan counts, and its timeline. See `services/household.ts`. */
     _household?: RetirementHousehold;
+    /** Set when the user's own planning age came from Your numbers. */
+    _planThroughAgeOrigin?: { origin: 'saved'; savedAt: string };
     _inputSources?: {
       currentAge?: string;
       retirementAge?: string;

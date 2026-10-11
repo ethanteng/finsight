@@ -63,7 +63,13 @@ import {
   withClaimedBenefit,
   type ClaimingAdjustment,
 } from '../services/social-security-claiming';
-import { householdTimeline, incomeOfStream, partnerSavableFigures, resolvePartner } from '../services/household';
+import {
+  householdTimeline,
+  incomeOfStream,
+  partnerAgeMissing,
+  partnerSavableFigures,
+  resolvePartner,
+} from '../services/household';
 import {
   describeHouseholdTimeline,
   describePartnerIncome,
@@ -71,6 +77,8 @@ import {
   householdTimelineFactRows,
   MISSING_PARTNER_AGE_SENTENCE,
   partnerAgeAt,
+  partnerAgeInputRequest,
+  withPartnerAgeField,
   type PlannedHousehold,
 } from '../openai/household-evidence';
 import type { RetirementIncomeStream } from '../retirement-analytics/types';
@@ -275,6 +283,8 @@ export interface UnavailableStatedRetirementPlanExecution {
   missingFields?: StatedRetirementPlanField[];
   /** What was already known when they were found missing, so the form can show it. */
   knownInputs?: KnownInput[];
+  /** A partner to plan for whose age is not known either, so the form asks for it too. */
+  partnerAgeMissing?: true;
   standInFor?: PresetStandInReason;
 }
 
@@ -864,7 +874,7 @@ function scenarioId(variant: ResolvedVariant): string {
 function unavailable(
   startedAt: number,
   reason: string,
-  missing?: { prompts: string[]; fields: StatedRetirementPlanField[]; known: KnownInput[] },
+  missing?: { prompts: string[]; fields: StatedRetirementPlanField[]; known: KnownInput[]; partnerAgeMissing?: boolean },
   standInFor?: PresetStandInReason
 ): UnavailableStatedRetirementPlanExecution {
   return {
@@ -878,6 +888,7 @@ function unavailable(
       missingInputs: missing.prompts,
       missingFields: missing.fields,
       ...(missing.known.length > 0 && { knownInputs: missing.known }),
+      ...(missing.partnerAgeMissing && { partnerAgeMissing: true as const }),
     }),
     ...(standInFor && { standInFor }),
   };
@@ -996,7 +1007,12 @@ export async function runStatedRetirementPlan(
       return unavailable(
         startedAt,
         `Missing ${joinList(variant.missing)}.`,
-        { prompts: variant.missing, fields: variant.missingFields, known: variant.known },
+        {
+          prompts: variant.missing,
+          fields: variant.missingFields,
+          known: variant.known,
+          partnerAgeMissing: partnerAgeMissing(snapshot.statedPartner, snapshot.statedFigures),
+        },
         standInFor
       );
     }
@@ -1273,7 +1289,8 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
   if (execution.status === 'unavailable') {
     if (execution.missingInputs?.length) {
       const items = execution.missingInputs;
-      const reply = `Reply with ${items.length === 1 ? 'that' : 'those'} and I will run it.`;
+      const partner = execution.partnerAgeMissing ? ' Tell me your partner\'s age too and I will include them.' : '';
+      const reply = `Reply with ${items.length === 1 ? 'that' : 'those'} and I will run it.${partner}`;
       // Someone whose holdings are linked but cannot be simulated has already
       // linked; offering it again would be the wall in a new place.
       return execution.standInFor === 'unsupported_holdings'
@@ -1500,9 +1517,15 @@ const STATED_RETIREMENT_PLAN_INPUT_REQUEST: InputRequestSpec = {
 
 /** The form for a stated plan waiting on figures, or null for one that ran or failed otherwise. */
 export function statedRetirementPlanInputRequest(execution: StatedRetirementPlanExecution): InputRequest | null {
-  if (execution.status !== 'unavailable' || !execution.missingFields?.length) return null;
+  // A plan that ran without the partner asks for their age alone.
+  if (execution.status === 'completed') {
+    return execution.scenarios[0]?.missingPartnerAge
+      ? partnerAgeInputRequest(STATED_RETIREMENT_PLAN_CALCULATOR_ID, STATED_RETIREMENT_PLAN_INPUT_REQUEST.question)
+      : null;
+  }
+  if (!execution.missingFields?.length) return null;
   const request = buildInputRequest(
-    STATED_RETIREMENT_PLAN_INPUT_REQUEST,
+    execution.partnerAgeMissing ? withPartnerAgeField(STATED_RETIREMENT_PLAN_INPUT_REQUEST) : STATED_RETIREMENT_PLAN_INPUT_REQUEST,
     execution.missingFields,
     execution.knownInputs
   );

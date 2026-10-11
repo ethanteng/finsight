@@ -135,15 +135,7 @@ export function resolvePartner(args: {
   const socialSecurityAmount = take<number>('socialSecurityAnnual', savedNum('partnerSocialSecurityAnnual'));
   const pensionAmount = take<number>('pensionAnnual', savedNum('partnerRetirementIncome'));
   const age = take<number>('age', savedNum('partnerAge'));
-  if (age === undefined) {
-    // Anything that changes the plan once the age is known says there is a
-    // partner to plan for; a start age or inflation term with no income
-    // behind it does not.
-    const planned = (socialSecurityAmount ?? 0) > 0 || (pensionAmount ?? 0) > 0 ||
-      stated.planThroughAge !== undefined || savedNum('partnerPlanThroughAge') !== undefined ||
-      stated.survivorAnnualSpending !== undefined || savedNum('survivorAnnualSpending') !== undefined;
-    return planned ? { missingAge: true } : null;
-  }
+  if (age === undefined) return partnerAgeMissing(args.stated, args.statedFigures) ? { missingAge: true } : null;
 
   const ageGap = args.currentAge - age;
   const withDefault = <T extends number | string>(
@@ -214,6 +206,22 @@ export function resolvePartner(args: {
 
   const savedAt = savedDates.sort()[savedDates.length - 1];
   return { plan, origins, ...(savedAt && { savedAt }) };
+}
+
+/**
+ * Whether there is a partner to plan for whose age nobody has given: anything
+ * that would change the plan once the age is known, said in this decision or
+ * saved. A start age or inflation term with no income behind it is not one.
+ */
+export function partnerAgeMissing(stated: StatedPartner | undefined, statedFigures: StatedFigures | undefined): boolean {
+  const said = stated ?? {};
+  const saved = (key: Parameters<typeof savedNumber>[1]) => savedNumber(statedFigures, key);
+  if (said.age !== undefined || saved('partnerAge')) return false;
+  const socialSecurity = said.socialSecurityAnnual ?? saved('partnerSocialSecurityAnnual')?.value;
+  const pension = said.pensionAnnual ?? saved('partnerRetirementIncome')?.value;
+  return (socialSecurity ?? 0) > 0 || (pension ?? 0) > 0 ||
+    (said.planThroughAge ?? saved('partnerPlanThroughAge')?.value) !== undefined ||
+    (said.survivorAnnualSpending ?? saved('survivorAnnualSpending')?.value) !== undefined;
 }
 
 export interface HouseholdTimeline {

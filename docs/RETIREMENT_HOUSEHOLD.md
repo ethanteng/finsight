@@ -22,7 +22,7 @@ Each figure resolves the way the user's own do: the current decision, then Your 
 | Each partner's planning age | 95 | The same convention as the user's |
 | Spending after the first death | Unchanged | Nothing says it falls, and assuming it does would flatter the plan |
 
-A partner's age is never assumed. When anything that would change the plan is known about a partner (an income, their planning age, what one of them would spend alone) but their age is not, the calculators run the user's own plan and the answer asks for the age.
+A partner's age is never assumed. When anything that would change the plan is known about a partner (an income, their planning age, what one of them would spend alone) but their age is not, the calculators run the user's own plan and the answer asks for the age, in words and with a one-field form (`partnerAgeInputRequest`). That form is the stated plan's, Coast FIRE's or, for the holdings-based projection, the pipeline's. A form that is still waiting on the user's own figures adds the partner's age to its fields as optional (`withPartnerAgeField`), so one reply can supply both.
 
 A partner's Social Security figure is moved to the age they claim it by the same rules as the user's (`src/services/social-security-claiming.ts`), on the full retirement age the partner's own age implies. See "Claiming age" in `docs/RETIREMENT_INCOME.md`.
 
