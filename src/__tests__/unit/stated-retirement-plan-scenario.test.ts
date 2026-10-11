@@ -899,6 +899,18 @@ describe('retirement plan from stated figures', () => {
     );
   });
 
+  it('refuses when the partner claiming what-if is on the main case and cannot run', async () => {
+    const execution = await runStatedRetirementPlan(
+      NO_HOLDINGS,
+      plan({ ...LEAD, partnerSocialSecurityStartAge: 70 }),
+      householdRunner() as QuickPlanRunner
+    );
+    expect(execution).toMatchObject({
+      status: 'unavailable',
+      reason: 'To compare when your partner claims Social Security I need their age.',
+    });
+  });
+
   it('will not move a partner\'s claim into the past, or one already being paid', async () => {
     const past = await runStatedRetirementPlan(
       { ...NO_HOLDINGS, statedPartner: { age: 64, socialSecurityAnnual: 24_000, married: true } },

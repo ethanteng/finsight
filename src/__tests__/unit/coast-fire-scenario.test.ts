@@ -1146,6 +1146,20 @@ describe('Coast FIRE calculator', () => {
       expect(nothingToMove.comparisonUnavailableReason).toContain('no Social Security of their own');
     });
 
+    it('refuses when the partner claiming what-if is on the main case and cannot run', async () => {
+      // Planner instructions put the what-if on comparison; if it lands on
+      // primary instead, say why rather than answer as if it was never asked.
+      const execution = await runCoastFireScenario(
+        EMPTY_SNAPSHOT,
+        plan({ ...STATED, partnerSocialSecurityStartAge: 70 }),
+        householdRunner() as QuickPlanRunner
+      );
+      expect(execution).toMatchObject({
+        status: 'unavailable',
+        reason: 'To compare when your partner claims Social Security I need their age.',
+      });
+    });
+
     it('counts a survivor benefit when married, without a reserve to bridge to it, and asks when it does not know', async () => {
       const unknown = await runCoastFireScenario(
         { statedPartner: { ...PARTNER.statedPartner, married: undefined } },

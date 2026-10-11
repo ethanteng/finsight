@@ -1136,7 +1136,12 @@ export async function runStatedRetirementPlan(
       );
     }
     // A what-if on when the partner claims needs a partner it can move.
-    if (index > 0 && variant.partnerClaimingUnavailable) {
+    if (variant.partnerClaimingUnavailable) {
+      // On the main case the what-if is the ask: refuse rather than answer as
+      // if it had never been said. On a comparison, keep the main case.
+      if (index === 0) {
+        return unavailable(startedAt, variant.partnerClaimingUnavailable, undefined, standInFor);
+      }
       partnerClaimingUnavailable = variant.partnerClaimingUnavailable;
       continue;
     }
