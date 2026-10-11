@@ -1119,6 +1119,11 @@ async function fetchOrCreateRetirementAnalysis(args: {
       storedInput.annualWithdrawalAmount === annualWithdrawalAmount &&
       storedInput.withdrawalStartAge === withdrawalStartAge &&
       (storedInput.lifeExpectancy ?? 95) === planHorizon &&
+      // The household horizon can stay the same when only the user's own
+      // planning age changes (a younger partner still ends the plan later).
+      // That age still moves the first death and the survivor years, so it
+      // belongs in the key beside the horizon.
+      (storedInput.userPlanThroughAge ?? storedInput.lifeExpectancy ?? 95) === lifeExpectancy &&
       sameIncome &&
       sameSurvivorSpending &&
       (storedInput.annualContributionAmount ?? 0) === contribution.annualAmount &&
