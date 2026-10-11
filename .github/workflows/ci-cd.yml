@@ -188,8 +188,10 @@ jobs:
   # Backend Tests
   backend-tests:
     # Bounded so a hung job fails in minutes rather than burning the
-    # 360-minute default. Longest observed run of any job here is ~2.5 min.
-    timeout-minutes: 15
+    # 360-minute default. The unit suite (with coverage, and the Ask Linc
+    # eval running the real historical engine) takes 12-14 minutes on a
+    # hosted runner, so 15 left no room for runner variance.
+    timeout-minutes: 25
     runs-on: ubuntu-latest
     services:
       postgres:

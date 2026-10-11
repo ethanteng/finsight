@@ -249,6 +249,72 @@ export function resolvePartner(args: {
 }
 
 /**
+ * The partner claiming Social Security at another age (theirs): "what if my
+ * partner claims at 70?". Their own benefit moves from the figure as given,
+ * by Social Security's own rules, exactly as the user's does; with none of
+ * their own, only the age they would claim a spousal one moves. Spousal and
+ * survivor benefits follow from the plan when the household's incomes are
+ * worked out.
+ */
+export function partnerClaimingAt(
+  partner: ResolvedPartner,
+  claimAge: number,
+  asOfYear?: number
+): ResolvedPartner {
+  const { plan } = partner;
+  const origins = { ...partner.origins, socialSecurityStartAge: 'stated' as const };
+  const benefit = plan.socialSecurity;
+  if (!benefit) return { ...partner, plan: { ...plan, socialSecurityClaimAge: claimAge }, origins };
+  const quote = benefit.quote ?? { amount: benefit.annualAmount, age: benefit.startAge };
+  const claiming = benefitAtClaimingAge({
+    amount: quote.amount,
+    quotedAtAge: quote.age,
+    claimAge,
+    currentAge: plan.age,
+    ...(asOfYear !== undefined && { asOfYear }),
+  });
+  return {
+    ...partner,
+    plan: {
+      ...plan,
+      socialSecurity: {
+        annualAmount: claiming?.amount ?? quote.amount,
+        startAge: claimAge,
+        quote,
+        ...(claiming && { claiming }),
+      },
+      socialSecurityClaimAge: claimAge,
+    },
+    origins,
+  };
+}
+
+/**
+ * Why a what-if on when the partner claims cannot run, the way the user's own
+ * cannot: nobody to plan for, nothing it would change, a benefit already being
+ * paid, or a claiming age already behind them. Undefined when it can.
+ */
+export function partnerClaimingUnavailableReason(
+  partner: ResolvedPartner | undefined,
+  claimAge: number
+): string | undefined {
+  if (!partner) return 'To compare when your partner claims Social Security I need their age.';
+  const { plan } = partner;
+  // Unmarried with no benefit of their own, their claiming age moves nothing.
+  if (!plan.socialSecurity && !partner.married?.value) {
+    return 'Your partner has no Social Security of their own in this plan, so when they claim changes nothing. ' +
+      'Tell me their benefit and I will compare.';
+  }
+  if (plan.socialSecurity && plan.socialSecurity.startAge <= plan.age) {
+    return 'Your partner\'s Social Security is already being paid in this plan, so when they claim cannot change.';
+  }
+  if (claimAge < plan.age) {
+    return `Your partner claiming Social Security at ${claimAge} is already in the past at ${plan.age}.`;
+  }
+  return undefined;
+}
+
+/**
  * Whether there is a partner to plan for whose age nobody has given: anything
  * that would change the plan once the age is known, said in this decision or
  * saved. A start age or inflation term with no income behind it is not one.

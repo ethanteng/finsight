@@ -160,6 +160,29 @@ export function benefitAtClaimingAge(args: {
 }
 
 /**
+ * How a what-if changes a benefit the plan already claims at one age: from the
+ * plan's own age and amount to the what-if's, not from the figure as given,
+ * which may be for a third age. Undefined when the age does not move or the
+ * claiming rules applied to neither (so there is no full retirement age to
+ * name).
+ */
+export function claimingChange(
+  from: { annualAmount: number; startAge: number; claiming?: ClaimingAdjustment } | undefined,
+  to: { annualAmount: number; startAge: number; claiming?: ClaimingAdjustment } | undefined
+): ClaimingAdjustment | undefined {
+  if (!from || !to || from.startAge === to.startAge) return undefined;
+  const fullRetirementAge = to.claiming?.fullRetirementAge ?? from.claiming?.fullRetirementAge;
+  if (!fullRetirementAge) return undefined;
+  return {
+    fromAmount: from.annualAmount,
+    fromAge: from.startAge,
+    toAge: to.startAge,
+    amount: to.annualAmount,
+    fullRetirementAge,
+  };
+}
+
+/**
  * The age a Social Security figure is for. In order: the age the user named
  * for it; for a comparison that only moves the claiming age, the age the main
  * case's figure was for (so "what if I claim at 70?" moves the same benefit);
@@ -225,10 +248,19 @@ export function describeClaimingAdjustmentBriefly(
  * The sentence an answer adds when it rescaled a benefit, naming both amounts
  * and the rule, so the user can check it against their own statement.
  */
-export function describeClaimingAdjustment(adjustment: ClaimingAdjustment): string {
+export function describeClaimingAdjustment(
+  adjustment: ClaimingAdjustment,
+  /** Whose benefit it is: the user's own, or their partner's (whose ages these are). */
+  whose: 'user' | 'partner' = 'user'
+): string {
   const later = adjustment.toAge > adjustment.fromAge;
+  const rule = `(${later ? 'a credit for each month after' : 'a reduction for each month before'} full retirement ` +
+    `age, which I took as ${describeFullRetirementAge(adjustment.fullRetirementAge)} from ` +
+    `${whose === 'partner' ? 'their' : 'your'} age)`;
+  if (whose === 'partner') {
+    return `If your partner claims at ${adjustment.toAge} instead of ${adjustment.fromAge}, their Social Security of ` +
+      `${money(adjustment.fromAmount)} a year becomes ${money(adjustment.amount)} by Social Security's own rules ${rule}.`;
+  }
   return `Claimed at ${adjustment.toAge} instead of ${adjustment.fromAge}, Social Security of ` +
-    `${money(adjustment.fromAmount)} a year becomes ${money(adjustment.amount)} by Social Security's own rules ` +
-    `(${later ? 'a credit for each month after' : 'a reduction for each month before'} full retirement age, which I ` +
-    `took as ${describeFullRetirementAge(adjustment.fullRetirementAge)} from your age).`;
+    `${money(adjustment.fromAmount)} a year becomes ${money(adjustment.amount)} by Social Security's own rules ${rule}.`;
 }

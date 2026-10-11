@@ -6,6 +6,7 @@ import {
 } from '../../services/spending-flexibility';
 import { statedSpendingCutOf, validateExtractedInputs } from '../../openai/retirement-input-extraction';
 import { buildSaveOffer } from '../../openai/save-offer';
+import { describeSpendingFlexibilityResults } from '../../openai/spending-flexibility-evidence';
 import { acceptedFigureValue } from '../../services/stated-figures';
 
 const SAVED_AT = '2026-09-14T10:00:00.000Z';
@@ -47,9 +48,28 @@ describe('how much a user could cut in a bad market', () => {
   it('drops a cut no plan can be built on, falling back to what was saved', () => {
     // 90% of spending, or more than the plan spends, is a misreading.
     expect(resolveSpendingFlexibility({ stated: { percent: 90 }, statedFigures: saved(15), annualSpending: 60_000 }))
-      .toMatchObject({ kind: 'cut', cutShare: 0.15, origin: 'saved' });
+      .toMatchObject({ kind: 'cut', cutShare: 0.15, origin: 'saved', ignoredStated: true });
     expect(resolveSpendingFlexibility({ stated: { annualAmount: 80_000 }, annualSpending: 60_000 }))
-      .toMatchObject({ kind: 'comparison' });
+      .toMatchObject({ kind: 'comparison', ignoredStated: true });
+    // Nothing said is nothing set aside.
+    expect(resolveSpendingFlexibility({ stated: {}, annualSpending: 60_000 })).not.toHaveProperty('ignoredStated');
+    expect(resolveSpendingFlexibility({ annualSpending: 60_000 })).not.toHaveProperty('ignoredStated');
+  });
+
+  it('says why a stated cut was set aside, before what the plan ran instead', () => {
+    const resolution = resolveSpendingFlexibility({ stated: { essentialAnnual: 10_000 }, annualSpending: 60_000 });
+    const comparison = {
+      cutShare: 0.2, triggerDrawdown: 0.2, survivalRate: 0.9, sequencesTested: 500, sequencesSurvived: 450,
+      sequencesWithCuts: 100, medianYearsCut: 5, mostYearsCut: 12,
+    };
+    const text = describeSpendingFlexibilityResults({ resolution, comparison, survivalRate: 0.8 });
+    expect(text).toMatch(/^ I did not use the spending cut you described: it comes to more than 75% of the plan's spending, which I took as a misreading\. If you cut spending 20%/);
+    // Even when there is no comparison to report.
+    expect(describeSpendingFlexibilityResults({ resolution, comparison, survivalRate: 1 }))
+      .toBe(' I did not use the spending cut you described: it comes to more than 75% of the plan\'s spending, which I took as a misreading.');
+    expect(describeSpendingFlexibilityResults({
+      resolution: resolveSpendingFlexibility({ annualSpending: 60_000 }), comparison, survivalRate: 1,
+    })).toBe('');
   });
 
   it('hands the engine the user\'s cut, or the comparison beside fixed spending', () => {

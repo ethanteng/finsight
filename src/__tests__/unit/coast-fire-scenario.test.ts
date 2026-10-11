@@ -16,6 +16,7 @@ import { parseInputRequest } from '../../openai/input-request';
 import { NOTHING_LINKED } from '../../openai/linked-data';
 import {
   quickPlanIncomeStreams,
+  type QuickPlanFlexibility,
   type QuickPlanHousehold,
   type RetirementQuickPlanRequest,
   type RetirementQuickPlanResult,
@@ -87,6 +88,7 @@ const FIELDS = [
   'withdrawalRatePercent',
   'annualContribution',
   'lifeExpectancy',
+  'partnerSocialSecurityStartAge',
 ] as const;
 
 type Field = (typeof FIELDS)[number];
@@ -821,6 +823,167 @@ describe('Coast FIRE calculator', () => {
     expect(describeCoastFireScenarioExecution(past)).not.toContain('planning through age 60');
   });
 
+  describe('spending flexibility in the market-history test', () => {
+    /** The fake engine, reporting a cut whenever one is asked for. */
+    function flexibleRunner(survivalRate = 0.8) {
+      const base = fakeRunner(survivalRate);
+      const outcome = (cutShare: number, rate: number) => ({
+        cutShare,
+        triggerDrawdown: 0.2,
+        survivalRate: rate,
+        sequencesTested: 517,
+        sequencesSurvived: Math.round(rate * 517),
+        sequencesWithCuts: 207,
+        medianYearsCut: 9,
+        mostYearsCut: 24,
+      });
+      return jest.fn(async (
+        request: RetirementQuickPlanRequest,
+        _household?: QuickPlanHousehold,
+        flexibility?: QuickPlanFlexibility
+      ): Promise<RetirementQuickPlanResult> => ({
+        ...await base(request),
+        ...(flexibility?.spendingFlexibility && {
+          spendingFlexibility: outcome(flexibility.spendingFlexibility.cutShare, survivalRate),
+        }),
+        ...(flexibility?.spendingFlexibilityComparison && {
+          spendingFlexibilityComparison: outcome(flexibility.spendingFlexibilityComparison.cutShare, 0.93),
+        }),
+      }));
+    }
+
+    it('runs a 20% cut beside fixed spending when nobody has said, for the main case only', async () => {
+      const runner = flexibleRunner();
+      const execution = await runCoastFireScenario(
+        EMPTY_SNAPSHOT,
+        plan(STATED, { annualRetirementSpending: 60_000 }),
+        runner as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+
+      expect(runner.mock.calls.map((call) => call[2])).toEqual([
+        { spendingFlexibilityComparison: { cutShare: 0.2 } },
+        undefined,
+      ]);
+      expect(execution.scenarios[0].historicalTest?.spendingFlexibility).toMatchObject({
+        resolution: { kind: 'comparison', cutShare: 0.2, annualCut: 16_000 },
+        comparison: { survivalRate: 0.93 },
+      });
+      expect(execution.scenarios[1].historicalTest?.spendingFlexibility).toBeUndefined();
+
+      const disclosure = describeCoastFireScenarioExecution(execution)!;
+      expect(disclosure).toContain(
+        'If you cut spending 20% ($16,000 a year) in any year that started with your portfolio more than 20% below ' +
+        'its inflation-adjusted value when withdrawals began, and spent in full again once it recovered, the plan would ' +
+        'last in 93% of historical sequences instead of 80%'
+      );
+      expect(disclosure).toContain('Tell me how much of your spending you could cut in a bad market');
+      expect(disclosure).not.toContain('full spending every year');
+
+      const facts = coastFireScenarioCanonicalFacts(execution);
+      expect(facts.find((fact) => fact.id.endsWith('_history_flexible_comparison_survival_rate'))).toMatchObject({
+        value: 93,
+        label: expect.stringContaining('coasting from today: a comparison the user has not chosen'),
+      });
+      expect(facts.find((fact) => fact.id.endsWith('_history_survival_rate'))?.label).not.toContain('cutting spending');
+      expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+      // Nothing the user said, so nothing to save.
+      expect(coastFireSavableFigures(execution).map((figure) => figure.key)).not.toContain('spendingCutPercent');
+    });
+
+    it('runs the user\'s own cut in every case\'s test, and says the number itself does not cut', async () => {
+      const runner = flexibleRunner(0.88);
+      const execution = await runCoastFireScenario(
+        { statedSpendingCut: { percent: 25 } },
+        plan(STATED, { annualRetirementSpending: 60_000 }),
+        runner as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+
+      expect(runner.mock.calls.map((call) => call[2])).toEqual([
+        { spendingFlexibility: { cutShare: 0.25 } },
+        { spendingFlexibility: { cutShare: 0.25 } },
+      ]);
+      const disclosure = describeCoastFireScenarioExecution(execution)!;
+      expect(disclosure).toContain(
+        'It plans on cutting spending 25% ($20,000 a year) in any year that starts with your portfolio more than 20% ' +
+        'below its inflation-adjusted value when withdrawals began, and spending in full again once it recovers.'
+      );
+      expect(disclosure).toContain('It plans on cutting spending 25% ($15,000 a year)');
+      expect(disclosure).toContain(
+        'With your 25% cut, spending was cut in 40% of the 517 historical sequences, for a median of 9 years and at most 24 years.'
+      );
+      expect(disclosure).toContain('The Coast FIRE number itself is a single straight line — the same return every year, and full spending every year.');
+      expect(disclosure).not.toContain('If you cut spending 20%');
+      // The straight line is the same with or without a cut.
+      expect(execution.scenarios[0].metrics.coastFireNumber)
+        .toBe((await runCoastFireScenario(EMPTY_SNAPSHOT, plan(STATED)) as CompletedCoastFireScenarioExecution)
+          .scenarios[0].metrics.coastFireNumber);
+
+      const facts = coastFireScenarioCanonicalFacts(execution);
+      const primaryFacts = facts.filter((fact) => fact.provenance.scenarioId === execution.scenarios[0].id);
+      expect(primaryFacts.find((fact) => fact.id.endsWith('_history_spending_cut_percent'))).toMatchObject({
+        value: 25,
+        provenance: expect.objectContaining({ kind: 'scenario_input' }),
+      });
+      expect(primaryFacts.find((fact) => fact.id.endsWith('_history_spending_cut_annual'))?.value).toBe(20_000);
+      expect(primaryFacts.find((fact) => fact.id.endsWith('_history_survival_rate'))?.label)
+        .toContain('cutting spending 25% in a bad market');
+      expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+
+      expect(coastFireSavableFigures(execution)).toContainEqual({ key: 'spendingCutPercent', value: 25 });
+      expect(buildSaveOffer('coast_fire', coastFireSavableFigures(execution), {})?.items)
+        .toContainEqual(expect.objectContaining({ key: 'spendingCutPercent', display: '25%' }));
+    });
+
+    it('gives a case with a cut its own id, so a cached answer is never reused across cuts', async () => {
+      const without = await runCoastFireScenario(
+        { statedSpendingCut: { percent: 0 } },
+        plan(STATED),
+        flexibleRunner() as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+      const unstated = await runCoastFireScenario(EMPTY_SNAPSHOT, plan(STATED)) as CompletedCoastFireScenarioExecution;
+      const withCut = await runCoastFireScenario(
+        { statedSpendingCut: { percent: 25 } },
+        plan(STATED),
+        flexibleRunner() as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+
+      expect(without.scenarios[0].id).toBe(unstated.scenarios[0].id);
+      expect(withCut.scenarios[0].id).not.toBe(unstated.scenarios[0].id);
+    });
+
+    it('says when the user could not cut, and runs no comparison', async () => {
+      const runner = flexibleRunner();
+      const execution = await runCoastFireScenario(
+        { statedSpendingCut: { percent: 0 } },
+        plan(STATED),
+        runner as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+
+      expect(runner.mock.calls[0][2]).toBeUndefined();
+      const disclosure = describeCoastFireScenarioExecution(execution)!;
+      expect(disclosure).toContain('It plans on no spending cuts in a bad market, since you said you could not cut.');
+      expect(disclosure).not.toContain('If you cut spending');
+      expect(coastFireSavableFigures(execution)).toContainEqual({ key: 'spendingCutPercent', value: 0 });
+    });
+
+    it('names a stated cut it could not use, and runs the comparison instead', async () => {
+      const runner = flexibleRunner();
+      const execution = await runCoastFireScenario(
+        { statedSpendingCut: { percent: 90 } },
+        plan(STATED),
+        runner as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+
+      expect(runner.mock.calls[0][2]).toEqual({ spendingFlexibilityComparison: { cutShare: 0.2 } });
+      const disclosure = describeCoastFireScenarioExecution(execution)!;
+      expect(disclosure).toContain(
+        'I did not use the spending cut you described: it comes to more than 75% of the plan\'s spending, which I took as a misreading.'
+      );
+      expect(disclosure).toContain('If you cut spending 20% ($16,000 a year)');
+      expect(coastFireSavableFigures(execution).map((figure) => figure.key)).not.toContain('spendingCutPercent');
+    });
+  });
+
   describe('with a partner', () => {
     /** The fake engine, planning for a partner the way the quick plan does. */
     function householdRunner() {
@@ -930,6 +1093,71 @@ describe('Coast FIRE calculator', () => {
         'partnerMarried',
       ]));
       expect(coastFireInputRequest(execution)).toBeNull();
+    });
+
+    it('compares the partner claiming at another age, moving their benefit by the same rules', async () => {
+      const runner = householdRunner();
+      const execution = await runCoastFireScenario(
+        PARTNER,
+        plan({ ...STATED, socialSecurityAnnual: 30_000 }, { partnerSocialSecurityStartAge: 70 }),
+        runner as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+
+      expect(execution.scenarios.map((scenario) => scenario.label))
+        .toEqual(['Your partner claiming Social Security at 67', 'Your partner claiming Social Security at 70']);
+      const partnerBenefit = (index: number) => execution.scenarios[index].metrics.incomes
+        ?.find((income) => income.owner === 'partner' && income.kind === 'social_security');
+      // Their 67 and 70 are the user's 70 and 73.
+      expect(partnerBenefit(0)).toMatchObject({ annualAmount: 20_000, startAge: 70 });
+      expect(partnerBenefit(1)).toMatchObject({ annualAmount: 24_800, startAge: 73 });
+      // The history runs each case with the partner as that case plans them.
+      expect(runner.mock.calls.map((call) => call[1]?.partner.socialSecurity?.annualAmount)).toEqual([20_000, 24_800]);
+      expect(execution.scenarios[1].metrics.retirementTarget).toBeLessThan(execution.scenarios[0].metrics.retirementTarget);
+
+      const disclosure = describeCoastFireScenarioExecution(execution)!;
+      expect(disclosure).toContain(
+        'If your partner claims at 70 instead of 67, their Social Security of $20,000 a year becomes $24,800 by ' +
+        'Social Security\'s own rules (a credit for each month after full retirement age, which I took as 67 from their age).'
+      );
+      const facts = coastFireScenarioCanonicalFacts(execution);
+      const comparisonFacts = facts.filter((fact) => fact.provenance.scenarioId === execution.scenarios[1].id);
+      expect(comparisonFacts.find((fact) => fact.id.endsWith('_partner_social_security_annual'))?.value).toBe(24_800);
+      expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+      // A what-if is never offered for Your numbers.
+      expect(coastFireSavableFigures(execution).map((figure) => figure.key)).not.toContain('partnerSocialSecurityStartAge');
+    });
+
+    it('says why it cannot compare when the partner claims, without their age or a benefit it would move', async () => {
+      const noPartner = await runCoastFireScenario(
+        EMPTY_SNAPSHOT,
+        plan(STATED, { partnerSocialSecurityStartAge: 70 }),
+        householdRunner() as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+      expect(noPartner.scenarios).toHaveLength(1);
+      expect(describeCoastFireScenarioExecution(noPartner)).toContain(
+        'I could not run the comparison case: To compare when your partner claims Social Security I need their age.'
+      );
+
+      const nothingToMove = await runCoastFireScenario(
+        { statedPartner: { age: 35 } },
+        plan(STATED, { partnerSocialSecurityStartAge: 70 }),
+        householdRunner() as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+      expect(nothingToMove.comparisonUnavailableReason).toContain('no Social Security of their own');
+    });
+
+    it('refuses when the partner claiming what-if is on the main case and cannot run', async () => {
+      // Planner instructions put the what-if on comparison; if it lands on
+      // primary instead, say why rather than answer as if it was never asked.
+      const execution = await runCoastFireScenario(
+        EMPTY_SNAPSHOT,
+        plan({ ...STATED, partnerSocialSecurityStartAge: 70 }),
+        householdRunner() as QuickPlanRunner
+      );
+      expect(execution).toMatchObject({
+        status: 'unavailable',
+        reason: 'To compare when your partner claims Social Security I need their age.',
+      });
     });
 
     it('counts a survivor benefit when married, without a reserve to bridge to it, and asks when it does not know', async () => {

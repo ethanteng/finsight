@@ -204,6 +204,96 @@ describe('retirement scenario runner', () => {
       ]);
     });
 
+    it('moves the partner\'s benefit when the what-if has them claim at another age', async () => {
+      const analyzer = jest.fn(async () => analysis(0.85));
+      const execution = await runRetirementScenario(coupleSnapshot(), {
+        requested: true,
+        primary: {
+          type: 'historical_cpi',
+          overrides: { partnerSocialSecurityStartAge: 70, sources: { partnerSocialSecurityStartAge: 'if she waits until 70' } },
+        },
+      }, analyzer);
+
+      const input = (analyzer.mock.calls[0] as any[])[0];
+      expect(input.lifeExpectancy).toBe(97);
+      // Their 70 is the user's 72, and their $32,000 at 67 is $39,680 at 70.
+      expect(input.incomeStreams).toEqual([
+        { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true, endAge: 95 },
+        { label: 'your partner\'s Social Security', annualAmount: 39_680, startAge: 72, inflationAdjusted: true },
+      ]);
+      if (execution.status !== 'completed') throw new Error('not completed');
+      expect(execution.scenarios[0]).toMatchObject({
+        label: 'Historical CPI-linked withdrawals with your partner claiming Social Security at 70',
+        partnerClaiming: { fromAge: 67, toAge: 70, fromAmount: 32_000, amount: 39_680 },
+      });
+      const disclosure = describeRetirementScenarioExecution(execution)!;
+      expect(disclosure).toContain('your partner claiming Social Security at 70');
+      expect(disclosure).toContain(
+        'If your partner claims at 70 instead of 67, their Social Security of $32,000 a year becomes $39,680 by ' +
+        'Social Security\'s own rules'
+      );
+      const facts = retirementScenarioCanonicalFacts(execution);
+      expect(facts.find((fact) => fact.id.endsWith('_partner_social_security_at_claiming_age'))?.value).toBe(39_680);
+      expect(facts.find((fact) => fact.id.endsWith('_partner_social_security_claiming_change'))?.value).toBe(24);
+      expect(compactRetirementScenarioExecution(execution)).toMatchObject({
+        scenarios: [expect.objectContaining({ partnerClaiming: expect.objectContaining({ amount: 39_680 }) }), expect.anything()],
+      });
+    });
+
+    it('reports the partner\'s move from the age the plan claims at, not the age their figure is for', async () => {
+      // Their $32,000 is for 67, but the plan has them claim at 62: $22,400.
+      const data = coupleSnapshot();
+      const household = data.retirementAnalysis._household;
+      household.plan = {
+        ...household.plan,
+        socialSecurity: {
+          annualAmount: 22_400,
+          startAge: 62,
+          quote: { amount: 32_000, age: 67 },
+          claiming: { fromAmount: 32_000, fromAge: 67, toAge: 62, amount: 22_400, fullRetirementAge: { years: 67, months: 0 } },
+        },
+        socialSecurityClaimAge: 62,
+      };
+      data.retirementAnalysis._storedInputParams.incomeStreams[1] =
+        { label: 'your partner\'s Social Security', annualAmount: 22_400, startAge: 64, inflationAdjusted: true };
+      const whatIf = async (age: number) => {
+        const execution = await runRetirementScenario(data, {
+          requested: true,
+          primary: {
+            type: 'historical_cpi',
+            overrides: { partnerSocialSecurityStartAge: age, sources: { partnerSocialSecurityStartAge: `if she claims at ${age}` } },
+          },
+        }, jest.fn(async () => analysis(0.85)));
+        if (execution.status !== 'completed') throw new Error('not completed');
+        return execution;
+      };
+
+      const later = await whatIf(70);
+      expect(later.scenarios[0].partnerClaiming).toEqual({
+        fromAmount: 22_400, fromAge: 62, toAge: 70, amount: 39_680, fullRetirementAge: { years: 67, months: 0 },
+      });
+      expect(describeRetirementScenarioExecution(later)).toContain(
+        'If your partner claims at 70 instead of 62, their Social Security of $22,400 a year becomes $39,680'
+      );
+      // Back to the age the figure is for: still a move, and still said.
+      const atQuote = await whatIf(67);
+      expect(atQuote.scenarios[0].partnerClaiming).toMatchObject({ fromAge: 62, fromAmount: 22_400, toAge: 67, amount: 32_000 });
+    });
+
+    it('cannot move a partner\'s claiming age without a partner to plan for', async () => {
+      const execution = await runRetirementScenario(snapshot(), {
+        requested: true,
+        primary: {
+          type: 'historical_cpi',
+          overrides: { partnerSocialSecurityStartAge: 70, sources: { partnerSocialSecurityStartAge: 'if she waits until 70' } },
+        },
+      }, jest.fn(async () => analysis(0.85)));
+      expect(execution).toMatchObject({
+        status: 'unavailable',
+        reason: 'To compare when your partner claims Social Security I need their age.',
+      });
+    });
+
     it('runs a planning-age what-if that only moves when the survivor years begin', async () => {
       // A younger partner with no incomes: living to 98 leaves the horizon at
       // the partner's 100 and moves only the survivor's spending.
