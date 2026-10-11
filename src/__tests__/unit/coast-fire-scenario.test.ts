@@ -86,6 +86,7 @@ const FIELDS = [
   'realReturnRatePercent',
   'withdrawalRatePercent',
   'annualContribution',
+  'lifeExpectancy',
 ] as const;
 
 type Field = (typeof FIELDS)[number];
@@ -739,6 +740,48 @@ describe('Coast FIRE calculator', () => {
     }, 120_000);
   });
 
+  it('plans through the age the user names, and compares another', async () => {
+    const runner = fakeRunner();
+    const execution = await runCoastFireScenario(
+      { statedFigures: { planThroughAge: { value: 90, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' } } },
+      plan({ ...STATED, annualRetirementIncome: 12_000, lifeExpectancy: 92 }, { lifeExpectancy: 100 }),
+      runner as QuickPlanRunner
+    ) as CompletedCoastFireScenarioExecution;
+
+    // What the user said outranks what they saved.
+    expect(execution.scenarios.map((scenario) => scenario.metrics.planThroughAge)).toEqual([92, 100]);
+    expect(runner.mock.calls.map(([request]) => request.lifeExpectancy)).toEqual([92, 100]);
+    expect(execution.scenarios.map((scenario) => scenario.label)).toEqual(['Planning through 92', 'Planning through 100']);
+    expect(execution.scenarios[0].assumptions).toContainEqual(expect.objectContaining({
+      key: 'lifeExpectancy', value: 92, origin: 'user', unit: 'age',
+    }));
+    const facts = coastFireScenarioCanonicalFacts(execution);
+    expect(facts.find((fact) => fact.id.endsWith('_life_expectancy'))).toMatchObject({ value: 92, unit: 'age' });
+    expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+    expect(coastFireSavableFigures(execution)).toContainEqual({ key: 'planThroughAge', value: 92 });
+  });
+
+  it('reports a planning age the retirement would already run past instead of moving it', async () => {
+    const execution = await runCoastFireScenario(EMPTY_SNAPSHOT, plan({ ...STATED, lifeExpectancy: 60, retirementAge: 62 }));
+    expect(execution).toMatchObject({ status: 'unavailable', reason: 'The age to plan through must be after the retirement age.' });
+  });
+
+  it('asks for a planning age in its form, showing the one saved', async () => {
+    const execution = await runCoastFireScenario(
+      { statedFigures: { planThroughAge: { value: 92, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' } } },
+      plan({ retirementAge: 55 })
+    );
+    const field = coastFireInputRequest(execution)!.fields.find((item) => item.id === 'lifeExpectancy');
+    expect(field).toMatchObject({
+      label: 'Plan through age',
+      minimum: 60,
+      maximum: 110,
+      value: 92,
+      valueNote: 'From Your numbers',
+      sentence: 'Plan through age {value}.',
+    });
+  });
+
   it('values incomes and runs the history through the planning age saved in Your numbers', async () => {
     const runner = fakeRunner();
     const savedAt = '2026-09-14T10:00:00.000Z';
@@ -885,7 +928,8 @@ describe('Coast FIRE calculator', () => {
         required: false,
         defaultNote: 'If left blank, I plan without your partner',
       });
-      expect(request.fields).toHaveLength(13);
+      // The calculator's thirteen fields and the partner's age.
+      expect(request.fields).toHaveLength(14);
       expect(parseInputRequest(JSON.parse(JSON.stringify(request)))).toEqual(request);
     });
   });
