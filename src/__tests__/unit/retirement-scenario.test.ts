@@ -219,6 +219,34 @@ describe('retirement scenario runner', () => {
         { label: 'your partner\'s Social Security', annualAmount: 32_000, startAge: 69, inflationAdjusted: true },
       ]);
     });
+
+    it('rejects a planning-age what-if that ends before withdrawals even when a younger partner extends the horizon', async () => {
+      const data = coupleSnapshot();
+      // Partner 10 years younger: household horizon stays past withdrawal start
+      // while the user's own planning age of 55 does not.
+      const plan = { age: 40, planThroughAge: 95 };
+      const timeline = householdTimeline({ currentAge: 50, userPlanThroughAge: 95, partner: plan });
+      data.retirementAnalysis._household = {
+        plan,
+        origins: { age: 'stated', planThroughAge: 'default' },
+        timeline,
+      };
+      data.retirementAnalysis._storedInputParams.lifeExpectancy = timeline.horizonAge;
+      data.retirementAnalysis._storedInputParams.incomeStreams = [];
+
+      const execution = await runRetirementScenario(data, {
+        requested: true,
+        primary: {
+          type: 'historical_cpi',
+          overrides: { lifeExpectancy: 55, sources: { lifeExpectancy: 'if I only live to 55' } },
+        },
+      }, jest.fn(async () => analysis(0.85)));
+
+      expect(execution.status).toBe('unavailable');
+      if (execution.status === 'unavailable') {
+        expect(execution.reason).toMatch(/Life expectancy must be later/i);
+      }
+    });
   });
 
   it('claims the baseline\'s Social Security at another age by Social Security\'s rules', async () => {

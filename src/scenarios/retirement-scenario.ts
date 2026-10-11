@@ -414,6 +414,11 @@ function resolveVariant(
     );
   }
   if (partner && userPlanThroughAge !== undefined) {
+    // The household horizon can clear validation while the user's own planning
+    // age falls at or before withdrawals begin (younger partner). Reject that.
+    if (userPlanThroughAge <= input.withdrawalStartAge) {
+      return { unavailableReason: 'Life expectancy must be later than the withdrawal start age.' };
+    }
     const timeline = householdTimeline({ currentAge: input.currentAge, userPlanThroughAge, partner: partner.plan });
     input.lifeExpectancy = timeline.horizonAge;
     // A benefit claimed at another age can change which of the two is smaller.
