@@ -137,13 +137,17 @@ export function applyOverridesToTransactions(
   return applied;
 }
 
-/** A payee and the way its transactions move money: what a category rule is for. */
-export interface CategoryRuleSubject {
+/** A payee, keyed the way `matchingTransactions` matches it. */
+export interface CategoryRulePayee {
   counterpartyKey: string;
   /** The key the payee had before reference words were dropped whole; set only where it differs. */
   legacyCounterpartyKey?: string;
-  direction: 'in' | 'out';
   investment: boolean;
+}
+
+/** A payee and the way its transactions move money: what a category rule is for. */
+export interface CategoryRuleSubject extends CategoryRulePayee {
+  direction: 'in' | 'out';
 }
 
 export interface CategoryRule {
@@ -155,16 +159,53 @@ export interface CategoryRule {
   category: string[];
 }
 
+/** A transaction's payee as a rule names it; null when it has no name to match on. */
+export function categoryRulePayee(transaction: any): CategoryRulePayee | null {
+  const key = counterpartyKey(transaction?.merchant_name, transaction?.name);
+  if (!key) return null;
+  const legacy = legacyCounterpartyKey(transaction?.merchant_name, transaction?.name);
+  return { counterpartyKey: key, ...(legacy && { legacyCounterpartyKey: legacy }), investment: isInvestmentActivity(transaction) };
+}
+
 /**
  * What a rule would be for, keyed the way `matchingTransactions` matches: null when
  * the payee has no name to match on or which way the money moves can't be told.
+ * The direction is the row's own unless one is given.
  */
-export function categoryRuleSubject(transaction: any): CategoryRuleSubject | null {
-  const key = counterpartyKey(transaction?.merchant_name, transaction?.name);
-  const direction = moneyDirection(transaction);
-  if (!key || !direction) return null;
-  const legacy = legacyCounterpartyKey(transaction?.merchant_name, transaction?.name);
-  return { counterpartyKey: key, ...(legacy && { legacyCounterpartyKey: legacy }), direction, investment: isInvestmentActivity(transaction) };
+export function categoryRuleSubject(transaction: any, direction = moneyDirection(transaction)): CategoryRuleSubject | null {
+  const payee = categoryRulePayee(transaction);
+  return payee && direction ? { ...payee, direction } : null;
+}
+
+/**
+ * Which way a transaction moves money as its provider classified it. A category the
+ * user chose restates the row's classification, and can turn it around: a payment out
+ * recategorized as income reads as money in. Rules are matched against the provider's
+ * classification of new transactions, so a user-stamped row is read with the provider
+ * category its override recorded stamped back. Null when that category is not known.
+ */
+export function providerMoneyDirection(transaction: any, originalCategory: readonly string[] | null | undefined): 'in' | 'out' | null {
+  if (!transaction) return null;
+  if (transaction.category_source !== 'user') return moneyDirection(transaction);
+  if (!originalCategory || originalCategory.length === 0) return null;
+  const asProvided = { ...transaction };
+  stampCategoryFieldsOnTransaction(asProvided, [...originalCategory], 'provider');
+  return moneyDirection(asProvided);
+}
+
+/**
+ * The rule a transaction's payee takes or has, keyed by the provider's direction:
+ * for a row the user categorized, the one its override's restore point gives. A row
+ * whose restore point says nothing is read as it stands.
+ */
+export async function categoryRuleSubjectFor(userId: string, transaction: any): Promise<CategoryRuleSubject | null> {
+  const id = resolveProviderTransactionId(transaction);
+  if (transaction?.category_source !== 'user' || !id) return categoryRuleSubject(transaction);
+  const override = await getPrismaClient().transactionCategoryOverride.findUnique({
+    where: { userId_transactionId: { userId, transactionId: id } },
+    select: { originalCategory: true },
+  });
+  return categoryRuleSubject(transaction, providerMoneyDirection(transaction, override?.originalCategory) ?? moneyDirection(transaction));
 }
 
 /** Whether a rule is for this payee: by its key, or by the key it had when the rule was made. */
@@ -188,7 +229,7 @@ export async function getCategoryRules(userId: string): Promise<CategoryRule[]> 
 
 /** The rule for a transaction's payee, if the user made one. */
 export async function findCategoryRule(userId: string, transaction: any): Promise<CategoryRule | null> {
-  const subject = categoryRuleSubject(transaction);
+  const subject = await categoryRuleSubjectFor(userId, transaction);
   if (!subject) return null;
   return (await getCategoryRules(userId)).find(rule => ruleCovers(rule, subject)) ?? null;
 }
@@ -230,12 +271,18 @@ export async function applyCategoryOverrides(userId: string, data: any): Promise
     ];
     const fromRules = overridesFromRules(transactions, overrides, await getCategoryRules(userId));
     if (fromRules.length > 0) {
-      // A concurrent save may have given one an override already; that one stands.
-      await getPrismaClient().transactionCategoryOverride.createMany({
+      const prisma = getPrismaClient();
+      await prisma.transactionCategoryOverride.createMany({
         data: fromRules.map(override => ({ userId, ...override })),
         skipDuplicates: true,
       });
-      for (const override of fromRules) overrides.set(override.transactionId, override.category);
+      // A save since the overrides were read may have given one a category of its
+      // own, which the insert skipped; what is stored now is what gets stamped.
+      const stored = await prisma.transactionCategoryOverride.findMany({
+        where: { userId, transactionId: { in: fromRules.map(override => override.transactionId) } },
+        select: { transactionId: true, category: true },
+      });
+      for (const row of stored) overrides.set(row.transactionId, row.category);
     }
   } catch (error) {
     console.warn('Failed to apply transaction category rules (non-fatal):', error);

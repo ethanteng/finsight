@@ -2,12 +2,15 @@ import express from 'express';
 import { requireAuth, AuthenticatedRequest } from './middleware';
 import { getPrismaClient } from '../prisma-client';
 import {
+  categoryRulePayee,
   categoryRuleSubject,
+  categoryRuleSubjectFor,
   findCategoryRule,
   findMatchingSnapshotTransactions,
   findSnapshotTransaction,
   getCategoryRules,
   moneyDirection,
+  providerMoneyDirection,
   patchSnapshotTransactionCategories,
   patchSnapshotTransactionCategory,
   providerCategoryFromTransaction,
@@ -87,7 +90,10 @@ async function applyToMatching(
   }
   const rows = [found.target, ...found.matches];
   const prisma = getPrismaClient();
-  const subject = categoryRuleSubject(found.target);
+  // Keyed by the way the payee moves money as its provider classified it, so a
+  // target the user already recategorized across a cash-flow boundary updates the
+  // rule that did it rather than starting one the other way.
+  const subject = await categoryRuleSubjectFor(userId, found.target);
   const label = String(found.target?.merchant_name || found.target?.name || '').trim().slice(0, RULE_LABEL_MAX_LENGTH);
   // Every override is written before the snapshot is patched, for the same reason
   // as a single edit: no user category in the JSON blob without a row behind it.
@@ -239,13 +245,16 @@ router.delete('/:transactionId', requireAuth, async (req: AuthenticatedRequest, 
 
     // A rule that gave the payee this category would give the next one it again,
     // so restoring one of them stops the rule; the others keep their categories.
-    // Matched by payee and category rather than direction, which the user's
-    // category may have changed on the row.
-    const restored = snapshotTransaction && categoryRuleSubject(snapshotTransaction);
+    // Rules match the provider's direction, which the restored category gives back;
+    // when it says none, every same-category rule for the payee goes, since any of
+    // them would undo the restore.
+    const payee = snapshotTransaction && categoryRulePayee(snapshotTransaction);
+    const direction = snapshotTransaction ? providerMoneyDirection(snapshotTransaction, existing.originalCategory) : null;
     const sameCategory = (rule: { category: string[] }) => rule.category.join('|') === existing.category.join('|');
-    const rules = restored
-      ? (await getCategoryRules(userId)).filter(rule => sameCategory(rule) && rule.investment === restored.investment
-        && (rule.counterpartyKey === restored.counterpartyKey || rule.counterpartyKey === restored.legacyCounterpartyKey))
+    const rules = payee
+      ? (await getCategoryRules(userId)).filter(rule => sameCategory(rule) && rule.investment === payee.investment
+        && (direction === null || rule.direction === direction)
+        && (rule.counterpartyKey === payee.counterpartyKey || rule.counterpartyKey === payee.legacyCounterpartyKey))
       : [];
     if (rules.length > 0) {
       await getPrismaClient().transactionCategoryRule.deleteMany({ where: { userId, id: { in: rules.map(rule => rule.id) } } });

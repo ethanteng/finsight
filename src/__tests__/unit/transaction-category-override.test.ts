@@ -17,8 +17,10 @@ jest.mock('../../prisma-client', () => ({ getPrismaClient: () => prisma }));
 import {
   applyCategoryOverrides,
   applyOverridesToTransactions,
+  categoryRuleSubject,
   findSnapshotTransactionCategory,
   overridesFromRules,
+  providerMoneyDirection,
   matchingTransactions,
   patchSnapshotTransactionCategories,
   patchSnapshotTransactionCategory,
@@ -334,7 +336,9 @@ describe('a payee’s category rule', () => {
   });
 
   it('saves the overrides it gives at ingestion, then stamps them like any other', async () => {
-    prisma.transactionCategoryOverride.findMany.mockResolvedValue([]);
+    prisma.transactionCategoryOverride.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ transactionId: 'new-1', category: groceries }]);
     prisma.transactionCategoryRule.findMany.mockResolvedValue([rule]);
     prisma.transactionCategoryOverride.createMany.mockResolvedValue({ count: 1 });
     const data = { bankingTransactions: [purchase('new-1')] };
@@ -346,6 +350,18 @@ describe('a payee’s category rule', () => {
     expect(data.bankingTransactions[0]).toMatchObject({ category: groceries, category_source: 'user' });
   });
 
+  it('stamps what is stored when a save beat the rule to a transaction', async () => {
+    // Read before the user saved one; the insert then skips it, and the user's stands.
+    prisma.transactionCategoryOverride.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ transactionId: 'new-1', category: ['SHOPS'] }]);
+    prisma.transactionCategoryRule.findMany.mockResolvedValue([rule]);
+    prisma.transactionCategoryOverride.createMany.mockResolvedValue({ count: 0 });
+    const data = { bankingTransactions: [purchase('new-1')] };
+    await applyCategoryOverrides('user-1', data);
+    expect(data.bankingTransactions[0]).toMatchObject({ category: ['SHOPS'], category_source: 'user' });
+  });
+
   it('still applies the saved overrides when the rules cannot be read', async () => {
     prisma.transactionCategoryOverride.findMany.mockResolvedValue([{ transactionId: 'new-1', category: ['SHOPS'] }]);
     prisma.transactionCategoryRule.findMany.mockRejectedValue(new Error('relation does not exist'));
@@ -354,6 +370,16 @@ describe('a payee’s category rule', () => {
     await applyCategoryOverrides('user-1', data);
     expect(data.bankingTransactions[0]).toMatchObject({ category: ['SHOPS'], category_source: 'user' });
     warn.mockRestore();
+  });
+
+  it('reads a recategorized transaction’s direction from the provider category it had', () => {
+    // A payment out the user called income reads as money in on the row.
+    const stamped = { transaction_id: 'txn-1', name: 'VENMO', merchant_name: 'Venmo', amount: -1200, category: ['INCOME'], category_source: 'user', transaction_type: 'income' };
+    expect(providerMoneyDirection(stamped, ['TRANSFER_OUT'])).toBe('out');
+    expect(categoryRuleSubject(stamped)!.direction).toBe('in');
+    expect(providerMoneyDirection(stamped, [])).toBeNull();
+    // A row the user never categorized is the provider's already.
+    expect(providerMoneyDirection({ ...stamped, category_source: undefined }, null)).toBe('in');
   });
 
   it('writes nothing when no rule covers a new transaction', async () => {
