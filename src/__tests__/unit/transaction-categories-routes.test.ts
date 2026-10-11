@@ -219,6 +219,13 @@ describe('DELETE /api/transaction-categories/:transactionId', () => {
     expect(response.status).toBe(200);
     expect(response.body.data).toMatchObject({ category: ['TRANSFER_OUT'], ruleRemoved: true });
     expect(prisma.transactionCategoryRule.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1', id: { in: ['rule-venmo'] } } });
+    // Rules leave before the override, in one write, so a concurrent revision
+    // cannot recreate the override from a rule that is about to go.
+    expect(prisma.$transaction).toHaveBeenCalled();
+    const ops = prisma.$transaction.mock.calls[0][0] as Promise<unknown>[];
+    expect(ops).toHaveLength(2);
+    expect(prisma.transactionCategoryRule.deleteMany.mock.invocationCallOrder[0])
+      .toBeLessThan(prisma.transactionCategoryOverride.delete.mock.invocationCallOrder[0]);
     // Only the restored transaction changes.
     const written = prisma.financialSummarySnapshot.updateMany.mock.calls[0][0].data.transactions;
     expect(written.map((transaction: any) => transaction.category[0])).toEqual([

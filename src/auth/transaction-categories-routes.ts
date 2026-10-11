@@ -239,15 +239,14 @@ router.delete('/:transactionId', requireAuth, async (req: AuthenticatedRequest, 
       }
     }
 
-    await getPrismaClient().transactionCategoryOverride.delete({
-      where: { userId_transactionId: { userId, transactionId } },
-    });
-
     // A rule that gave the payee this category would give the next one it again,
     // so restoring one of them stops the rule; the others keep their categories.
     // Rules match the provider's direction, which the restored category gives back;
     // when it says none, every same-category rule for the payee goes, since any of
     // them would undo the restore.
+    // Drop the rule(s) before the override: a concurrent revision's
+    // applyCategoryOverrides would otherwise recreate the override from the
+    // still-living rule once the row is gone.
     const payee = snapshotTransaction && categoryRulePayee(snapshotTransaction);
     const direction = snapshotTransaction ? providerMoneyDirection(snapshotTransaction, existing.originalCategory) : null;
     const sameCategory = (rule: { category: string[] }) => rule.category.join('|') === existing.category.join('|');
@@ -256,9 +255,15 @@ router.delete('/:transactionId', requireAuth, async (req: AuthenticatedRequest, 
         && (direction === null || rule.direction === direction)
         && (rule.counterpartyKey === payee.counterpartyKey || rule.counterpartyKey === payee.legacyCounterpartyKey))
       : [];
-    if (rules.length > 0) {
-      await getPrismaClient().transactionCategoryRule.deleteMany({ where: { userId, id: { in: rules.map(rule => rule.id) } } });
-    }
+    const prisma = getPrismaClient();
+    await prisma.$transaction([
+      ...(rules.length > 0
+        ? [prisma.transactionCategoryRule.deleteMany({ where: { userId, id: { in: rules.map(rule => rule.id) } } })]
+        : []),
+      prisma.transactionCategoryOverride.delete({
+        where: { userId_transactionId: { userId, transactionId } },
+      }),
+    ]);
 
     scheduleCashFlowCatchUp(userId, 'transaction-category-restored');
 
