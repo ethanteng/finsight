@@ -2117,13 +2117,21 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
     },
     typicalCategories: (['income', 'spending'] as const)
       .filter(flow => (flow === 'income' ? model.typical.incomeSource : model.typical.spendingSource) === 'transactions')
-      .flatMap(flow => typicalCategoryParts(model, flow).map(part => ({
-        flow,
-        key: part.key,
-        label: part.label,
-        monthlyAmount: roundCents(part.monthly),
-        ...itemTransactions(describe, part.entryIds.flatMap(id => entriesById.get(id) ?? []), categoryRef(flow, part.key)),
-      }))),
+      .flatMap(flow => {
+        const parts = typicalCategoryParts(model, flow);
+        const monthlyRate = roundCents(
+          (flow === 'income' ? model.typical.dailyIncome : model.typical.dailySpending) * DAYS_PER_MONTH
+        );
+        // Rounded together so the listed categories add up to the side's typical total.
+        const monthlies = roundCentsToTotal(parts.map(part => part.monthly), monthlyRate);
+        return parts.map((part, index) => ({
+          flow,
+          key: part.key,
+          label: part.label,
+          monthlyAmount: monthlies[index],
+          ...itemTransactions(describe, part.entryIds.flatMap(id => entriesById.get(id) ?? []), categoryRef(flow, part.key)),
+        }));
+      }),
     adjustments: summarizeAdjustments(model),
     plannedEvents: model.plannedEvents.map(event => {
       const upcoming = expandPlannedEvent(event, model.forecastStart, model.forecastEndLimit);
