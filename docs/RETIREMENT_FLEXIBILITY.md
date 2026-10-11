@@ -4,7 +4,7 @@ A plan that spends the same amount every year has to survive its worst sequences
 
 ## The rule
 
-At the start of each withdrawal year after the first, the engine looks at the portfolio in today's dollars. If it is more than 20% below its inflation-adjusted value when withdrawals began (`SPENDING_CUT_TRIGGER`), that year's spending is cut by the user's share. Otherwise spending is full. There is one cut, it never stacks, and spending never rises above the plan (`src/retirement-analytics/engine/withdrawal-simulator.ts`).
+At the start of each withdrawal year after the first, the engine looks at the balance carried into the year, before that month's return, in today's dollars. If it is more than 20% below its inflation-adjusted value when withdrawals began (`SPENDING_CUT_TRIGGER`), that year's spending is cut by the user's share. Otherwise spending is full. There is one cut, it never stacks, and spending never rises above the plan (`src/retirement-analytics/engine/withdrawal-simulator.ts`).
 
 - The cut applies to what the household spends, before income: Social Security and a pension still pay what they pay, so the portfolio draw falls by the whole cut.
 - It composes with the withdrawal policy and with a survivor's spending.
@@ -15,18 +15,20 @@ Each run reports what the cut did (`SpendingFlexibilityOutcome`): the share of s
 
 ### What it costs
 
-The survival a cut buys comes from cutting often and for a long time, and the answer says so. On the real engine, $1,000,000 at 65 on the balanced preset, spending $48,000 a year through 95 with no other income, lasts in 83% of sequences on fixed spending. With a 20% cut under this rule it lasts in 97%, but spending is cut in 56% of the sequences, for a median of 13 years and at most 29. An ordinary spend-down drifts more than 20% below its starting value in the second half of retirement, and a portfolio that falls well behind tends to stay behind.
+The survival a cut buys comes from cutting often and for a long time, and the answer says so. On the real engine, $1,000,000 at 65 on the balanced preset, spending $48,000 a year through 95 with no other income, lasts in 83% of sequences on fixed spending. With a 20% cut under this rule it lasts in 97%, but spending is cut in 57% of the sequences, for a median of 13 years and at most 29. An ordinary spend-down drifts more than 20% below its starting value in the second half of retirement, and a portfolio that falls well behind tends to stay behind.
 
 The alternatives were measured on the same plan and rejected:
 
 | Trigger | Lasts | Sequences cut | Median years cut |
 | --- | --- | --- | --- |
 | None (fixed spending) | 83% | — | — |
-| Balance 20% below its real start (chosen) | 97% | 56% | 13 |
-| Balance 30% below | 95% | 47% | 14 |
+| Balance 20% below its real start (chosen) | 97% | 57% | 13 |
+| Balance 30% below | 95% | 48% | 14.5 |
 | Balance 40% below | 94% | 39% | 15 |
-| 20% behind the typical historical path | 98% | 62% | 14 |
-| Investments down 20% after inflation since retirement (ignores withdrawals) | 84% | 18% | 2 |
+| 20% behind the typical historical path* | 98% | 62% | 14 |
+| Investments down 20% after inflation since retirement (ignores withdrawals)* | 84% | 18% | 2 |
+
+\* Measured with the check read after the anniversary month's return, one month later than the rule as built; the balance rows were measured as built.
 
 The returns-only trigger cuts only in genuinely bad markets, and buys almost nothing: failures come from long mediocre stretches under steady withdrawals, which it never sees. Deeper balance triggers cut less often, but once a cut starts it lasts as long, for less survival. The chosen rule buys the most and reports its cost.
 

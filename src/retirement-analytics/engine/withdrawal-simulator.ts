@@ -158,6 +158,15 @@ export function simulateWithdrawals(
   let recoveryMonth: number | null = null;
 
   for (let month = 0; month < months; month++) {
+    // Each withdrawal anniversary decides the coming year from the balance
+    // carried into it -- before this month's return and inflation -- in
+    // today's dollars: cut while it is more than the trigger below where the
+    // portfolio stood when withdrawals began.
+    if (flexibility && month > withdrawalDelayMonths && (month - withdrawalDelayMonths) % 12 === 0) {
+      const carried = usEquity + intlEquity + bonds + tips + cash;
+      const realCarried = cumulativeInflation > 0 ? carried / cumulativeInflation : carried;
+      cuttingThisYear = realCarried < realPortfolioValueAtWithdrawalStart * (1 - SPENDING_CUT_TRIGGER);
+    }
     const usRet = sequence.assetBasketReturns.usEquity[month] ?? 0;
     const intlRet = sequence.assetBasketReturns.internationalEquity[month] ?? 0;
     const bondRet = sequence.assetBasketReturns.nominalBonds[month] ?? 0;
@@ -221,13 +230,6 @@ export function simulateWithdrawals(
       if (month >= stream.startMonth && month < stream.endMonth) {
         incomeThisMonth += stream.indexed ? stream.monthlyAmount * cumulativeInflation : stream.monthlyAmount;
       }
-    }
-    // Each withdrawal anniversary decides the coming year: cut while the
-    // portfolio, in today's dollars, is more than the trigger below where it
-    // stood when withdrawals began.
-    if (flexibility && withdrawing && month > withdrawalDelayMonths && (month - withdrawalDelayMonths) % 12 === 0) {
-      const realValue = cumulativeInflation > 0 ? portfolioValue / cumulativeInflation : portfolioValue;
-      cuttingThisYear = realValue < realPortfolioValueAtWithdrawalStart * (1 - SPENDING_CUT_TRIGGER);
     }
     const cut = flexibility && cuttingThisYear ? 1 - flexibility.cutShare : 1;
     if (withdrawing && cut < 1) monthsSpendingCut += 1;

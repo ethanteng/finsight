@@ -1239,6 +1239,16 @@ describe('spending cut in a bad market', () => {
     expect(outcome.finalValue).toBeCloseTo(((1_000 * 0.7 - 12) - 0.5) * 1.5 - 0.5 * 11 - 12);
   });
 
+  it('decides from the balance carried into the year, not the anniversary month\'s return', () => {
+    // $688 is carried into year two, below $800, so the year is cut even
+    // though the anniversary month itself rallies 50%.
+    const sequence = flatSequence(24);
+    sequence.assetBasketReturns.usEquity[0] = -0.3;
+    sequence.assetBasketReturns.usEquity[12] = 0.5;
+    const outcome = simulateWithdrawals(equityOnly, 1_000, sequence, 12, { spendingFlexibility: { cutShare: 0.5 } });
+    expect(outcome.monthsSpendingCut).toBe(12);
+  });
+
   it('measures the fall in today\'s dollars', () => {
     // Nothing spent and no returns, but 2% inflation a month leaves $1,000
     // worth about $788 of today's money after a year.
