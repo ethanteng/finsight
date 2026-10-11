@@ -1250,7 +1250,10 @@ function describeHousehold(scenario: StatedRetirementPlanResult): string {
     ...describeHouseholdTimeline(household, {
       ...(scenario.mode === 'plan' && { annual: scenario.inputs.annualSpending }),
       ...(household.survivorSpending && { survivor: household.survivorSpending }),
-    }),
+    }, household.incomeStreams.map((stream) => {
+      const { kind } = incomeOfStream(stream);
+      return { kind, ...(stream.endAge !== undefined && { endAge: stream.endAge }) };
+    })),
   ];
   // When the user's own income stops, said once beside theirs.
   const ownEnds = household.incomeStreams

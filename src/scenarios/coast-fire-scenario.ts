@@ -1557,7 +1557,10 @@ function describeHousehold(scenario: CoastFireScenarioResult): string {
   const clauses = describeHouseholdTimeline(household, {
     annual: m.annualRetirementSpending,
     ...(m.spendingChange && { survivor: m.spendingChange }),
-  });
+  }, m.incomes?.map((income) => ({
+    kind: income.kind,
+    ...(income.endAge !== undefined && { endAge: income.endAge }),
+  })));
   const level = m.levelSpending !== undefined && m.spendingChange
     ? ` I counted spending as ${money(m.levelSpending)} a year: the level amount with the same value over retirement as ` +
       `${money(m.annualRetirementSpending)} a year until your ${m.spendingChange.fromAge} and ${money(m.spendingChange.annualAmount)} after.`

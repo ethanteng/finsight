@@ -83,6 +83,9 @@ export function describePartnerIncome(stream: RetirementIncomeStream, household:
  * first, and what changes then. Each part names its source the way the
  * incomes do, so a partner's age or horizon the user never gave is the
  * easiest thing to correct.
+ *
+ * Pass the incomes the run counted so the first-death clause only names the
+ * Social Security survivor rule or a pension stop when those actually apply.
  */
 export function describeHouseholdTimeline(
   household: PlannedHousehold,
@@ -91,7 +94,8 @@ export function describeHouseholdTimeline(
     annual?: number;
     /** What the survivor spends from the first death, when the run counted it. */
     survivor?: { fromAge: number; annualAmount: number };
-  }
+  },
+  countedIncomes?: ReadonlyArray<{ kind: 'social_security' | 'pension'; endAge?: number }>
 ): string[] {
   const { plan, origins, timeline } = household;
   const source = (field: keyof typeof origins) =>
@@ -114,7 +118,21 @@ export function describeHouseholdTimeline(
       : spending.annual !== undefined
         ? `, and spending stays ${money(spending.annual)} a year unless you tell me what one of you would spend alone`
         : '';
-    parts.push(`from when ${first}, the survivor keeps the larger Social Security benefit and a pension stops with the person it belongs to${after}`);
+    const incomes = countedIncomes ?? [
+      ...(plan.socialSecurity ? [{ kind: 'social_security' as const }] : []),
+      ...(plan.pension ? [{ kind: 'pension' as const }] : []),
+    ];
+    const socialSecurityCount = incomes.filter((income) => income.kind === 'social_security').length;
+    const incomeRules = [
+      socialSecurityCount >= 2 ? 'the survivor keeps the larger Social Security benefit' : null,
+      incomes.some((income) => income.kind === 'pension' && (countedIncomes ? income.endAge !== undefined : true))
+        ? 'a pension stops with the person it belongs to'
+        : null,
+    ].filter((clause): clause is string => Boolean(clause));
+    if (incomeRules.length > 0 || after) {
+      const rules = incomeRules.length > 0 ? `, ${incomeRules.join(' and ')}` : '';
+      parts.push(`from when ${first}${rules}${after}`);
+    }
   }
   return parts;
 }

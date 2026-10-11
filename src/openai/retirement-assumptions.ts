@@ -106,10 +106,15 @@ export function describeRetirementAssumptions(
     );
   }
   parts.push(...describeIncome(values.incomeStreams, analysis._incomeOrigins, analysis._household));
+  const countedIncomes = values.incomeStreams?.map((stream) => {
+    const { kind } = incomeOfStream(stream);
+    return { kind, ...(stream.endAge !== undefined && { endAge: stream.endAge }) };
+  });
   parts.push(...describeHousehold(
     analysis._household,
     values.annualWithdrawalAmount,
-    analysis._storedInputParams?.survivorSpending
+    analysis._storedInputParams?.survivorSpending,
+    countedIncomes
   ));
   parts.push(...describeContribution(values, analysis._contributionOrigin));
   if (parts.length === 0) return null;
@@ -174,13 +179,14 @@ function describeIncome(
 function describeHousehold(
   household: RetirementHousehold | undefined,
   spending: number | undefined,
-  survivorSpending: { fromAge: number; annualAmount: number } | undefined
+  survivorSpending: { fromAge: number; annualAmount: number } | undefined,
+  incomeStreams: readonly { kind: 'social_security' | 'pension'; endAge?: number }[] | undefined
 ): string[] {
   if (!household || 'missingAge' in household) return [];
   return describeHouseholdTimeline(household, {
     ...(typeof spending === 'number' && { annual: spending }),
     ...(survivorSpending && { survivor: survivorSpending }),
-  });
+  }, incomeStreams);
 }
 
 const MONTH_NAMES = [

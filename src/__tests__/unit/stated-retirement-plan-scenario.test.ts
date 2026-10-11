@@ -702,8 +702,8 @@ describe('retirement plan from stated figures', () => {
       'Planning for you and your partner, 42 today; the plan runs until your partner reaches 95, an age I assumed, when you would be 98.'
     );
     expect(disclosure).toContain(
-      'From when you reach 95, the survivor keeps the larger Social Security benefit and a pension stops with the ' +
-      'person it belongs to, and spending stays $70,000 a year unless you tell me what one of you would spend alone.'
+      'From when you reach 95, the survivor keeps the larger Social Security benefit, and spending stays $70,000 a year ' +
+      'unless you tell me what one of you would spend alone.'
     );
 
     const facts = statedRetirementPlanCanonicalFacts(execution);
