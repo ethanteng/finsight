@@ -18,6 +18,7 @@ import {
   applyCategoryOverrides,
   applyOverridesToTransactions,
   categoryRuleSubject,
+  inferCategoryRules,
   findSnapshotTransactionCategory,
   overridesFromRules,
   providerMoneyDirection,
@@ -404,6 +405,65 @@ describe('a payee’s category rule', () => {
     prisma.transactionCategoryOverride.createMany.mockClear();
     await applyCategoryOverrides('user-1', { bankingTransactions: [purchase('new-1')] });
     expect(prisma.transactionCategoryOverride.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('inferring rules from categories chosen before rules existed', () => {
+  const rent = ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'];
+  // Venmo payments out, each recategorized as rent; the row now reads as an expense.
+  const venmo = (id: string, date: string) => ({
+    transaction_id: id, date, name: 'VENMO PAYMENT', merchant_name: 'Venmo', amount: -1200,
+    category: rent, category_source: 'user', transaction_type: 'expense',
+  });
+  const override = (transactionId: string, category = rent, originalCategory = ['TRANSFER_OUT']) => ({ transactionId, category, originalCategory });
+
+  it('makes a rule where a payee’s transactions carry one category the user chose', () => {
+    const { rules, setAside } = inferCategoryRules(
+      [venmo('v1', '2026-08-01'), venmo('v2', '2026-09-01')],
+      [override('v1'), override('v2')],
+      [],
+    );
+    expect(setAside).toBe(0);
+    expect(rules).toEqual([{
+      counterpartyKey: 'venmo', direction: 'out', investment: false, label: 'Venmo', category: rent, transactionCount: 2, directionFrom: 'provider',
+    }]);
+  });
+
+  it('keys it by the provider’s direction, however the user’s category reads', () => {
+    const asIncome = (id: string) => ({ ...venmo(id, '2026-09-01'), category: ['INCOME'], transaction_type: 'income' });
+    const { rules } = inferCategoryRules([asIncome('v1'), asIncome('v2')], [override('v1', ['INCOME']), override('v2', ['INCOME'])], []);
+    expect(rules.map(rule => rule.direction)).toEqual(['out']);
+  });
+
+  it('makes none from one transaction, from two categories, or where a rule already is', () => {
+    const transactions = [venmo('v1', '2026-08-01'), venmo('v2', '2026-09-01'), venmo('v3', '2026-10-01')];
+    expect(inferCategoryRules(transactions, [override('v1')], []).rules).toEqual([]);
+    expect(inferCategoryRules(transactions, [override('v1'), override('v2'), override('v3', ['GENERAL_SERVICES'])], []).rules).toEqual([]);
+    expect(inferCategoryRules(transactions, [override('v1'), override('v2')], [{ counterpartyKey: 'venmo', direction: 'out', investment: false }]).rules)
+      .toEqual([]);
+  });
+
+  it('reads the direction from the chosen category where the provider’s says nothing, and says so', () => {
+    // An old text category names no type, so it can't say which way the money went.
+    const { rules } = inferCategoryRules(
+      [venmo('v1', '2026-09-01'), venmo('v2', '2026-09-02')],
+      [override('v1', rent, ['Transfer']), override('v2', rent, [])],
+      [],
+    );
+    expect(rules).toEqual([expect.objectContaining({ counterpartyKey: 'venmo', direction: 'out', directionFrom: 'user_category' })]);
+  });
+
+  it('sets aside what it cannot key: gone from the snapshot, unnamed, or no direction either way', () => {
+    const unnamed = { ...venmo('u1', '2026-09-01'), name: '', merchant_name: '' };
+    // A category with no cash-flow meaning, on a row with no type left to read.
+    const untyped = { ...venmo('x1', '2026-09-01'), category: ['OTHER'], transaction_type: undefined };
+    const { rules, setAside } = inferCategoryRules(
+      [venmo('v1', '2026-09-01'), unnamed, untyped],
+      [override('gone'), override('u1'), override('x1', ['OTHER'], [])],
+      [],
+    );
+    expect(rules).toEqual([]);
+    expect(setAside).toBe(3);
   });
 });
 

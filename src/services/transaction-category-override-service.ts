@@ -256,6 +256,84 @@ export function overridesFromRules(
   return created;
 }
 
+/** A rule `inferCategoryRules` would create, and the overrides it was inferred from. */
+export interface InferredCategoryRule extends CategoryRuleSubject {
+  label: string;
+  category: string[];
+  /** How many of the payee's transactions already carry the category. */
+  transactionCount: number;
+  /**
+   * Where its direction came from: the provider's category on record, or, where
+   * that says nothing (an old text category), the user's own, as a save would.
+   */
+  directionFrom: 'provider' | 'user_category';
+}
+
+/**
+ * Rules for payees the user categorized before rules existed: each payee and
+ * direction where at least two transactions carry the same category the user
+ * chose, and none carries another. Applying a category to a payee's other
+ * transactions always left exactly that, so it is read as the user's standing
+ * choice; one transaction, or two categories, is not.
+ *
+ * A transaction is keyed the way a rule is, by the provider's direction, which
+ * its override's restore point gives. Where that says nothing, as an old text
+ * category does, the row's own direction stands in, as it does when a rule is
+ * saved, and the rule says so. One that has left the snapshot, whose payee has no
+ * name, or whose direction can't be told either way is set aside. A payee that
+ * already has a rule in that direction is left to it.
+ */
+export function inferCategoryRules(
+  transactions: readonly any[],
+  overrides: ReadonlyArray<{ transactionId: string; category: readonly string[]; originalCategory: readonly string[] }>,
+  existingRules: ReadonlyArray<Pick<CategoryRule, 'counterpartyKey' | 'direction' | 'investment'>>
+): { rules: InferredCategoryRule[]; setAside: number } {
+  const byId = new Map<string, any>();
+  for (const transaction of transactions) {
+    const id = resolveProviderTransactionId(transaction);
+    if (id) byId.set(id, transaction);
+  }
+  const groups = new Map<string, {
+    subject: CategoryRuleSubject; categories: Set<string>; category: string[]; latest: any; count: number; fromUser: boolean;
+  }>();
+  let setAside = 0;
+  for (const override of overrides) {
+    const transaction = byId.get(override.transactionId);
+    const provider = transaction ? providerMoneyDirection(transaction, override.originalCategory) : null;
+    const direction = provider ?? (transaction ? moneyDirection(transaction) : null);
+    const subject = direction ? categoryRuleSubject(transaction, direction) : null;
+    if (!subject || override.category.length === 0) {
+      setAside += 1;
+      continue;
+    }
+    const key = `${subject.counterpartyKey}|${subject.direction}|${subject.investment}`;
+    const group = groups.get(key)
+      ?? { subject, categories: new Set<string>(), category: [...override.category], latest: transaction, count: 0, fromUser: false };
+    if (!provider) group.fromUser = true;
+    group.categories.add(override.category.join('|'));
+    group.count += 1;
+    if (String(transaction?.date ?? '') > String(group.latest?.date ?? '')) group.latest = transaction;
+    groups.set(key, group);
+  }
+  const rules: InferredCategoryRule[] = [];
+  for (const group of groups.values()) {
+    if (group.count < 2 || group.categories.size !== 1) continue;
+    if (existingRules.some(rule => ruleCovers(rule, group.subject))) continue;
+    // A rule is saved under the payee's key as it is now.
+    rules.push({
+      counterpartyKey: group.subject.counterpartyKey,
+      direction: group.subject.direction,
+      investment: group.subject.investment,
+      label: String(group.latest?.merchant_name || group.latest?.name || '').trim(),
+      category: group.category,
+      transactionCount: group.count,
+      directionFrom: group.fromUser ? 'user_category' : 'provider',
+    });
+  }
+  rules.sort((left, right) => right.transactionCount - left.transactionCount || left.label.localeCompare(right.label));
+  return { rules, setAside };
+}
+
 /**
  * Re-applies stored overrides to freshly ingested provider data, first giving each
  * new transaction a rule covers an override of its own.

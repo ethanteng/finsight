@@ -288,6 +288,7 @@ Applying a category to a payee's other transactions also saves it as that payee'
 - **The user's own choice wins:** a transaction with an override is never touched by a rule.
 - **Restoring** a transaction's original category removes the rule that gave its payee that category, since the rule would give the next one the same. The payee's other transactions keep theirs. The picker says so, and also offers to stop the rule on its own (`DELETE /api/transaction-categories/rules/:id`).
 - **Failing safe:** a rule that cannot be read or saved costs nothing already saved. The stored overrides are applied regardless, and the rule is tried again on the next revision.
+- **Edits from before rules:** applying a category to matching transactions used to save only the transactions. `npm run backfill:category-rules` infers rules from them (`inferCategoryRules`): a payee and direction where at least two transactions carry one category the user chose, and none another. A rule is keyed by the provider's direction where its recorded category gives one, and otherwise by the chosen category's, which the dry run flags for review. It is a dry run unless given `--apply`, which needs the rules migration deployed; `--user <email or id>` limits it to one user, and a payee that already has a rule is left alone, so running it again creates nothing new.
 
 ## Ask Linc
 

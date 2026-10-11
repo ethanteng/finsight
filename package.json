@@ -54,6 +54,7 @@
     "rebuild": "npm run clean && npm install && npm run build",
     "clean:all": "npm run clean && rm -rf prisma/migrations_backup",
     "fix:duplicate-accounts": "npx ts-node scripts/fix-duplicate-accounts.ts",
+    "backfill:category-rules": "npx ts-node scripts/backfill-category-rules.ts",
     "build:market-dataset": "npx ts-node scripts/build-market-dataset.ts",
     "sync:soro": "npx ts-node scripts/sync-soro-to-ghost.ts",
     "social": "npx ts-node scripts/generate-social-posts.ts",
