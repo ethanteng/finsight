@@ -70,9 +70,9 @@ const PLAN_FIELDS: Array<Field & { id: StatedFigureKey }> = [
 
 /**
  * A spouse or partner, for plans that should run for two. Linc counts their
- * incomes from their own ages, runs the plan until the younger of you reaches
- * their planning age, and keeps the larger Social Security benefit for the
- * survivor (see `src/services/household.ts`).
+ * incomes from their own ages, runs the plan until the later of your planning
+ * ages, and at the first death keeps the larger Social Security benefit for
+ * the survivor (see `src/services/household.ts`).
  */
 const PARTNER_FIELDS: Array<Field & { id: StatedFigureKey }> = [
   { id: 'partnerAge', label: 'Your partner\'s age', kind: 'age', required: false, minimum: 18, maximum: 90, sentence: '{value}', hint: 'Leave blank if you plan alone.' },
@@ -541,7 +541,7 @@ export default function YourNumbersPageClient() {
               <SaveRow saving={saving === 'plan'} status={status.plan ?? null} onSave={() => void savePlan()} label="Save plan" />
             </Section>
 
-            <Section title="Your partner" description="If you plan as a couple, Linc counts their incomes from their own ages and runs the plan until the younger of you reaches your planning age. When the first of you does, the survivor keeps the larger Social Security benefit.">
+            <Section title="Your partner" description="If you plan as a couple, Linc counts their incomes from their own ages and runs the plan until the later of your planning ages. When the first of you reaches theirs, the survivor keeps the larger Social Security benefit.">
               <div className="grid gap-4 sm:grid-cols-2">
                 {PARTNER_FIELDS.map((field) => {
                   const saved = figures[field.id];
