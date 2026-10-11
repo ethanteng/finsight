@@ -680,7 +680,11 @@ describe('CashFlowPageClient', () => {
       fireEvent.click(within(section).getByRole('button', { name: 'Choices for United Airlines' }));
       // A one-off is left out already, so leaving its payee out is not offered.
       expect(within(section).queryByRole('button', { name: 'Leave out everything from United Airlines' })).not.toBeInTheDocument();
-      fireEvent.change(within(section).getByLabelText('How often amounts from United Airlines come'), { target: { value: '12' } });
+      const howOften = within(section).getByLabelText('How often amounts from United Airlines come');
+      fireEvent.change(howOften, { target: { value: '12' } });
+      // The pick stays selected while the save runs; a controlled value bound only
+      // to the report would snap back to "Often" until the reload lands.
+      expect(howOften).toHaveValue('12');
       await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
       expect(posted(calls)).toEqual({ kind: 'spread_payee', flow: 'spending', key: 'united airlines', spreadMonths: 12 });
     });

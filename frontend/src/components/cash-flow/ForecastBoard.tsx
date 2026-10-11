@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, createContext, useContext, useState } from 'react';
+import { Fragment, createContext, useContext, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowDownLeft, ArrowLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, CalendarClock, ChevronRight, CreditCard, Waves,
@@ -174,7 +174,14 @@ function PayeeChoices({ transaction, spread, basisDays, busy, onSpread, onLeaveO
   onLeaveOut?: () => void;
 }) {
   const payee = transaction.label;
-  const months = spread?.spreadMonths ?? null;
+  const committed = spread?.spreadMonths ?? null;
+  // Keep the user's pick while the save is in flight; the controlled value would
+  // otherwise snap back to "Often" until the reloaded report carries the choice.
+  const [draft, setDraft] = useState<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (!busy) setDraft(undefined);
+  }, [busy, committed]);
+  const months = draft !== undefined ? draft : committed;
   return (
     <div className="mt-1.5 space-y-2 rounded-lg bg-[#f3f2e9] p-2.5 text-xs">
       <label className="block">
@@ -182,7 +189,11 @@ function PayeeChoices({ transaction, spread, basisDays, busy, onSpread, onLeaveO
         <select
           value={months ?? ''}
           disabled={busy}
-          onChange={event => onSpread(event.target.value ? Number(event.target.value) : null)}
+          onChange={event => {
+            const next = event.target.value ? Number(event.target.value) : null;
+            setDraft(next);
+            onSpread(next);
+          }}
           className="mt-1 block w-full rounded-lg border border-[#102319]/15 bg-white px-2 py-1.5 text-xs text-[#102319] disabled:opacity-50"
         >
           <option value="">Often (your last {basisDays} days)</option>
@@ -489,10 +500,16 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
   // The report names the choice that holds a transaction in a typical rate:
   // counted although it looked like a one-off, or spread over its payee's months.
   const choice = (id: string | null | undefined) => (id ? adjustments.find(adjustment => adjustment.id === id) : undefined);
+  // A one-off is not yet in a typical rate, so it has no spreadBy; look up the
+  // payee's spread choice directly so the control can show what is already set.
+  const payeeSpread = (transaction: CashFlowItemTransaction, flow: Flow) =>
+    choice(transaction.spreadBy)
+    ?? adjustments.find(adjustment =>
+      adjustment.kind === 'spread_payee' && adjustment.flow === flow && adjustment.key === transaction.payeeKey);
   const spreadPayee = (transaction: CashFlowItemTransaction, flow: Flow, months: number | null) => {
     if (!transaction.payeeKey) return;
     if (months !== null) return adjust({ kind: 'spread_payee', flow, key: transaction.payeeKey, spreadMonths: months });
-    const spread = choice(transaction.spreadBy);
+    const spread = payeeSpread(transaction, flow);
     return spread ? undo(spread) : undefined;
   };
   // Below a transaction in a typical rate: the user's choice that holds it there.
@@ -514,7 +531,7 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
     content: (
       <PayeeChoices
         transaction={transaction}
-        spread={choice(transaction.spreadBy)}
+        spread={payeeSpread(transaction, flow)}
         basisDays={basisDays}
         busy={busy}
         onSpread={months => void spreadPayee(transaction, flow, months)}
@@ -733,7 +750,7 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
                         <ChoicesToggle label={`Choices for ${item.label}`}>
                           <PayeeChoices
                             transaction={item}
-                            spread={undefined}
+                            spread={payeeSpread(item, item.flow)}
                             basisDays={basisDays}
                             busy={busy}
                             onSpread={months => void spreadPayee(item, item.flow, months)}
