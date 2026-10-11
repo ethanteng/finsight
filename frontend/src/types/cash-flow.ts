@@ -277,7 +277,7 @@ export interface CashFlowReport {
   oneOffs: Array<{ id: string; date: string; label: string; flow: 'income' | 'spending'; amount: number; category: string | null }>;
   /** How large a non-repeating amount must be to be a one-off, by direction; null without a basis. */
   oneOffThresholds: { income: number; spending: number } | null;
-  /** The payees behind the typical rates, largest first. */
+  /** Every payee behind the typical rates, largest first. */
   typicalPayees: CashFlowTypicalPayee[];
   /** The user's choices about what the forecast counts. */
   adjustments: CashFlowAdjustment[];
