@@ -3,6 +3,7 @@ import {
   applySurvivorRule,
   householdIncomeStreams,
   householdTimeline,
+  partnerAgeMissing,
   partnerIncomes,
   partnerSavableFigures,
   resolvePartner,
@@ -30,6 +31,11 @@ describe('a partner in the plan', () => {
       .toEqual({ missingAge: true });
     // A claiming age with no benefit behind it does not.
     expect(resolvePartner({ stated: { socialSecurityStartAge: 70 }, retirementAge: 65, currentAge: 60 })).toBeNull();
+    // The same check, for a form that is still waiting on the user's own figures.
+    expect(partnerAgeMissing({ pensionAnnual: 12_000 }, undefined)).toBe(true);
+    expect(partnerAgeMissing({ pensionAnnual: 12_000 }, { partnerAge: saved(55) })).toBe(false);
+    expect(partnerAgeMissing({ pensionAnnual: 0 }, { partnerRetirementIncome: saved(12_000) })).toBe(false);
+    expect(partnerAgeMissing(undefined, undefined)).toBe(false);
   });
 
   it('takes what the user said, then Your numbers, then named defaults', () => {

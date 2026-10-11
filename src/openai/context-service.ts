@@ -913,6 +913,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
   let incomeOrigins: RetirementIncomeOrigins | undefined = undefined;
   let contributionOrigin: RetirementContributionOrigin | undefined = undefined;
   let household: RetirementHousehold | undefined = undefined;
+  let planThroughAgeOrigin: { origin: 'saved'; savedAt: string } | undefined = undefined;
   const withSources = (analysis: RetirementAnalysis): RetirementAnalysisResolution => {
     const covered = withCoverage(analysis);
     const assumed = Object.keys(assumedInputs).length > 0 ? { _assumedInputs: assumedInputs } : {};
@@ -924,6 +925,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         ...(incomeOrigins && { _incomeOrigins: incomeOrigins }),
         ...(contributionOrigin && { _contributionOrigin: contributionOrigin }),
         ...(household && { _household: household }),
+        ...(planThroughAgeOrigin && { _planThroughAgeOrigin: planThroughAgeOrigin }),
       },
     };
   };
@@ -981,7 +983,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
     retirementAge,
     annualWithdrawalAmount,
     withdrawalStartAge,
-    lifeExpectancy,
+    lifeExpectancy: resolvedLifeExpectancy,
     missingParams,
     confirmationRequiredParams,
     assumed,
@@ -996,6 +998,17 @@ async function fetchOrCreateRetirementAnalysis(args: {
     assumeWhenMissing: { currentAnnualSpending },
   });
   assumedInputs = assumed;
+  // The planning age saved in Your numbers stands after anything said in this
+  // decision and before what an earlier run stored, like the rest of the
+  // plan. One the withdrawals would already run past is no plan, and is left
+  // out.
+  const savedPlanThroughAge = savedNumber(statedFigures, 'planThroughAge');
+  const planThroughFromSaved = questionParams.lifeExpectancy == null &&
+    savedPlanThroughAge !== undefined &&
+    withdrawalStartAge != null &&
+    savedPlanThroughAge.value > withdrawalStartAge;
+  const lifeExpectancy = planThroughFromSaved ? savedPlanThroughAge!.value : resolvedLifeExpectancy;
+  if (planThroughFromSaved) planThroughAgeOrigin = { origin: 'saved', savedAt: savedPlanThroughAge!.savedAt };
 
   if (
     missingParams.length > 0 ||
@@ -1106,6 +1119,11 @@ async function fetchOrCreateRetirementAnalysis(args: {
       storedInput.annualWithdrawalAmount === annualWithdrawalAmount &&
       storedInput.withdrawalStartAge === withdrawalStartAge &&
       (storedInput.lifeExpectancy ?? 95) === planHorizon &&
+      // The household horizon can stay the same when only the user's own
+      // planning age changes (a younger partner still ends the plan later).
+      // That age still moves the first death and the survivor years, so it
+      // belongs in the key beside the horizon.
+      (storedInput.userPlanThroughAge ?? storedInput.lifeExpectancy ?? 95) === lifeExpectancy &&
       sameIncome &&
       sameSurvivorSpending &&
       (storedInput.annualContributionAmount ?? 0) === contribution.annualAmount &&

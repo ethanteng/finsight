@@ -12,6 +12,7 @@ import {
 } from '../../scenarios/coast-fire-scenario';
 import { calculateCoastFire } from '../../services/coast-fire';
 import { validateCanonicalFactPack } from '../../openai/canonical-facts';
+import { parseInputRequest } from '../../openai/input-request';
 import { NOTHING_LINKED } from '../../openai/linked-data';
 import {
   quickPlanIncomeStreams,
@@ -738,6 +739,30 @@ describe('Coast FIRE calculator', () => {
     }, 120_000);
   });
 
+  it('values incomes and runs the history through the planning age saved in Your numbers', async () => {
+    const runner = fakeRunner();
+    const savedAt = '2026-09-14T10:00:00.000Z';
+    const execution = await runCoastFireScenario(
+      { statedFigures: { planThroughAge: { value: 90, savedAt, source: 'page' } } },
+      plan({ ...STATED, annualRetirementIncome: 12_000 }),
+      runner as QuickPlanRunner
+    ) as CompletedCoastFireScenarioExecution;
+
+    expect(execution.scenarios[0].metrics.planThroughAge).toBe(90);
+    expect(runner.mock.calls[0][0]).toMatchObject({ lifeExpectancy: 90 });
+    expect(describeCoastFireScenarioExecution(execution)).toContain('planning through age 90');
+    expect(describeCoastFireScenarioExecution(execution)).toContain('saved Sep 14, 2026');
+
+    // A saved age the retirement would already run past is no plan.
+    const past = await runCoastFireScenario(
+      { statedFigures: { planThroughAge: { value: 60, savedAt, source: 'page' } } },
+      plan({ ...STATED, retirementAge: 62 }),
+      fakeRunner() as QuickPlanRunner
+    ) as CompletedCoastFireScenarioExecution;
+    expect(past.scenarios[0].metrics.planThroughAge).toBe(95);
+    expect(describeCoastFireScenarioExecution(past)).not.toContain('planning through age 60');
+  });
+
   describe('with a partner', () => {
     /** The fake engine, planning for a partner the way the quick plan does. */
     function householdRunner() {
@@ -835,10 +860,33 @@ describe('Coast FIRE calculator', () => {
       );
     });
 
-    it('leaves a partner\'s incomes out until it knows their age', async () => {
+    it('leaves a partner\'s incomes out until it knows their age, and asks for it in a form', async () => {
       const execution = await runCoastFireScenario({ statedPartner: { socialSecurityAnnual: 20_000 } }, plan(STATED));
       expect((execution as CompletedCoastFireScenarioExecution).scenarios[0].metrics.planThroughAge).toBe(95);
       expect(describeCoastFireScenarioExecution(execution)).toContain('I did not plan for your partner, since I need their age');
+      expect(coastFireInputRequest(execution)).toMatchObject({
+        calculatorId: 'coast_fire',
+        title: 'Include your partner',
+        submitLabel: 'Include my partner',
+        fields: [{ id: 'partnerAge', required: true, minimum: 18, maximum: 90, sentence: 'My partner is {value} years old.' }],
+      });
+    });
+
+    it('adds the partner\'s age to the form that asks for the user\'s own figures', async () => {
+      const execution = await runCoastFireScenario(
+        { statedFigures: { partnerPlanThroughAge: { value: 92, savedAt: '2026-09-14T10:00:00.000Z', source: 'page' } } },
+        plan({ retirementAge: 55 })
+      );
+
+      expect(execution).toMatchObject({ status: 'unavailable', partnerAgeMissing: true });
+      expect(describeCoastFireScenarioExecution(execution)).toContain('Tell me your partner\'s age too and I will include them.');
+      const request = coastFireInputRequest(execution)!;
+      expect(request.fields.find((field) => field.id === 'partnerAge')).toMatchObject({
+        required: false,
+        defaultNote: 'If left blank, I plan without your partner',
+      });
+      expect(request.fields).toHaveLength(13);
+      expect(parseInputRequest(JSON.parse(JSON.stringify(request)))).toEqual(request);
     });
   });
 });

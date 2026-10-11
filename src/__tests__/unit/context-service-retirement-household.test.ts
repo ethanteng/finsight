@@ -28,7 +28,7 @@ jest.mock('../../retirement-analytics/engine/historical-data-loader', () => ({
 const { completeRetirementAnalysis } = jest.requireActual<typeof import('../../openai/context-service')>(
   '../../openai/context-service'
 );
-const { describeRetirementAssumptions } = jest.requireActual<typeof import('../../openai/retirement-assumptions')>(
+const { describeRetirementAssumptions, retirementPartnerAgeRequest } = jest.requireActual<typeof import('../../openai/retirement-assumptions')>(
   '../../openai/retirement-assumptions'
 );
 const { buildCanonicalFactPack } = jest.requireActual<typeof import('../../openai/canonical-facts')>(
@@ -156,7 +156,7 @@ describe('a partner in the holdings-based projection', () => {
     prisma.retirementAnalysis.create.mockResolvedValue({ id: 'ra-1', computedAt: new Date('2026-10-10T00:00:00.000Z') });
   });
 
-  it('runs both incomes until the younger reaches their planning age, with the survivor years', async () => {
+  it('runs both incomes until the later of their planning ages, with the survivor years', async () => {
     const { completed, input } = await run();
 
     // The partner reaches 95 when the user is 100.
@@ -237,6 +237,13 @@ describe('a partner in the holdings-based projection', () => {
     expect(describeRetirementAssumptions(completed)).toContain(
       'not your partner, since I need their age to plan for them (tell me how old they are and I will include them)'
     );
+    // The answer stands; the form under it asks for the age alone.
+    expect(retirementPartnerAgeRequest(completed)).toMatchObject({
+      calculatorId: 'retirement',
+      question: 'Am I on track for retirement?',
+      fields: [{ id: 'partnerAge', required: true, sentence: 'My partner is {value} years old.' }],
+    });
+    expect(retirementPartnerAgeRequest((await run()).completed)).toBeNull();
   });
 
   it('runs the partner saved in Your numbers, and says when it was saved', async () => {
@@ -255,5 +262,94 @@ describe('a partner in the holdings-based projection', () => {
       label: 'your partner\'s Social Security', annualAmount: 18_000, startAge: 65, inflationAdjusted: true, endAge: 93,
     });
     expect(describeRetirementAssumptions(completed)).toContain('(from Your numbers, saved Sep 14, 2026)');
+  });
+});
+
+describe('the user\'s own planning age in the holdings-based projection', () => {
+  const SINGLE = {
+    currentAge: 60,
+    retirementAge: 65,
+    annualWithdrawalAmount: 80_000,
+    withdrawalStartAge: 65,
+    sources: { currentAge: 'I am 60', retirementAge: 'retire at 65', annualWithdrawalAmount: '$80k a year' },
+  };
+  const savedAt = '2026-09-14T10:00:00.000Z';
+  const savedPlanThrough = (value: number) => ({ statedFigures: { planThroughAge: { value, savedAt, source: 'page' } } });
+
+  beforeEach(() => {
+    analyze.mockClear();
+    engineInputs.length = 0;
+    prisma.retirementAnalysis.findFirst.mockReset();
+    prisma.retirementAnalysis.findFirst.mockResolvedValue(null);
+    prisma.retirementAnalysis.create.mockReset();
+    prisma.retirementAnalysis.create.mockResolvedValue({ id: 'ra-1', computedAt: new Date('2026-10-10T00:00:00.000Z') });
+  });
+
+  it('plans through the age saved in Your numbers, and says when it was saved', async () => {
+    const { completed, input } = await run(SINGLE, savedPlanThrough(92));
+    expect(input.lifeExpectancy).toBe(92);
+    expect(completed.retirementAnalysis?._planThroughAgeOrigin).toEqual({ origin: 'saved', savedAt });
+    expect(describeRetirementAssumptions(completed)).toContain('planning through age 92 (from Your numbers, saved Sep 14, 2026)');
+  });
+
+  it('lets what the user says now, and an earlier run, rank as the rest of the plan does', async () => {
+    const stated = await run(
+      { ...SINGLE, lifeExpectancy: 90, sources: { ...SINGLE.sources, lifeExpectancy: 'plan to 90' } },
+      savedPlanThrough(92)
+    );
+    expect(stated.input.lifeExpectancy).toBe(90);
+    expect(describeRetirementAssumptions(stated.completed)).not.toContain('from Your numbers');
+
+    // Saved outranks what a run last week stored.
+    prisma.retirementAnalysis.findFirst.mockResolvedValue({
+      id: 'ra-old',
+      computedAt: new Date('2026-10-09T00:00:00.000Z'),
+      analysisInput: { currentAge: 60, retirementAge: 65, annualWithdrawalAmount: 80_000, withdrawalStartAge: 65, lifeExpectancy: 100 },
+      portfolioSnapshot: { holdings: [], securities: [] },
+    });
+    const overStored = await run(SINGLE, savedPlanThrough(92));
+    expect(overStored.input.lifeExpectancy).toBe(92);
+  });
+
+  it('leaves out a saved age the withdrawals would already run past', async () => {
+    const { completed, input } = await run(SINGLE, savedPlanThrough(65));
+    expect(input.lifeExpectancy).toBe(95);
+    expect(completed.retirementAnalysis?._planThroughAgeOrigin).toBeUndefined();
+  });
+
+  it('plans the household through the later of the two, from the user\'s saved age', async () => {
+    const { completed, input } = await run(
+      { ...SINGLE, partnerAge: 55, sources: { ...SINGLE.sources, partnerAge: 'my wife is 55' } },
+      savedPlanThrough(90)
+    );
+    // The partner reaches 95 at the user's 100; the user's own 90 is the first death.
+    expect(input.lifeExpectancy).toBe(100);
+    expect(input.survivorSpending).toBeUndefined();
+    expect(completed.retirementAnalysis?._household).toMatchObject({ timeline: { userPlanThroughAge: 90, horizonAge: 100 } });
+    expect(describeRetirementAssumptions(completed)).toContain('you plan through age 90 (from Your numbers, saved Sep 14, 2026)');
+  });
+
+  it('recomputes when only the user\'s own planning age changes under a partner\'s later horizon', async () => {
+    const couple = { ...SINGLE, partnerAge: 55, sources: { ...SINGLE.sources, partnerAge: 'my wife is 55' } };
+    await run(couple, savedPlanThrough(90));
+    const created = (prisma.retirementAnalysis.create.mock.calls[0] as any[])[0].data;
+    expect(created.analysisInput).toMatchObject({ lifeExpectancy: 100, userPlanThroughAge: 90 });
+    prisma.retirementAnalysis.findFirst.mockResolvedValue({
+      ...created,
+      id: 'ra-1',
+      computedAt: new Date('2026-10-10T00:00:00.000Z'),
+    });
+    analyze.mockClear();
+
+    // Same household horizon (100), but the first death moves from 90 to 92.
+    const { completed, input } = await run(couple, savedPlanThrough(92));
+    expect(analyze).toHaveBeenCalled();
+    expect(input).toMatchObject({ lifeExpectancy: 100, userPlanThroughAge: 92 });
+    expect(completed.retirementAnalysis?._household).toMatchObject({
+      timeline: { userPlanThroughAge: 92, horizonAge: 100 },
+    });
+    expect(describeRetirementAssumptions(completed)).toContain(
+      'you plan through age 92 (from Your numbers, saved Sep 14, 2026)'
+    );
   });
 });

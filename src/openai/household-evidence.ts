@@ -11,7 +11,8 @@
 import type { RetirementIncomeStream } from '../retirement-analytics/types';
 import type { CanonicalFactUnit } from './canonical-facts';
 import { incomeOfStream, type HouseholdTimeline, type ResolvedPartner } from '../services/household';
-import { savedOn } from '../services/stated-figures';
+import { savedOn, STATED_FIGURE_DEFINITIONS } from '../services/stated-figures';
+import { buildInputRequest, type InputFieldSpec, type InputRequest, type InputRequestSpec } from './input-request';
 import { describeClaimingAdjustmentBriefly } from '../services/social-security-claiming';
 
 /** A partner a calculator planned for, with the joint timeline it ran on. */
@@ -22,6 +23,40 @@ export const MISSING_PARTNER_AGE_CLAUSE =
   'not your partner, since I need their age to plan for them (tell me how old they are and I will include them)';
 export const MISSING_PARTNER_AGE_SENTENCE =
   'I did not plan for your partner, since I need their age; tell me how old they are and I will include them.';
+
+/**
+ * A partner's age as every retirement form asks for it, in the bounds Your
+ * numbers keeps it in. The sentence is one the planner reads as the
+ * partner's age, like anything else the user types.
+ */
+export const PARTNER_AGE_FIELD: InputFieldSpec = {
+  id: 'partnerAge',
+  label: 'Your partner\'s age',
+  kind: 'age',
+  minimum: STATED_FIGURE_DEFINITIONS.partnerAge.minimum,
+  maximum: STATED_FIGURE_DEFINITIONS.partnerAge.maximum,
+  sentence: 'My partner is {value} years old.',
+  defaultNote: 'If left blank, I plan without your partner',
+};
+
+/** A calculator's form with the partner's age added, for a run still waiting on the user's own figures. */
+export function withPartnerAgeField(spec: InputRequestSpec): InputRequestSpec {
+  return { ...spec, fields: [...spec.fields, PARTNER_AGE_FIELD] };
+}
+
+/**
+ * The form a run that planned without the partner carries: their age alone.
+ * The answer stands without it; the form is how to add them.
+ */
+export function partnerAgeInputRequest(calculatorId: string, question: string): InputRequest {
+  return buildInputRequest({
+    calculatorId,
+    title: 'Include your partner',
+    question,
+    submitLabel: 'Include my partner',
+    fields: [PARTNER_AGE_FIELD],
+  }, [PARTNER_AGE_FIELD.id])!;
+}
 
 function money(value: number): string {
   return `$${Math.round(value).toLocaleString('en-US')}`;

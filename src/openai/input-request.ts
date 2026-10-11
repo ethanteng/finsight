@@ -142,7 +142,8 @@ export function buildInputRequest(
 }
 
 const FIELD_KINDS: readonly InputRequestFieldKind[] = ['age', 'usd', 'usd_per_year', 'percent', 'choice'];
-const MAX_FIELDS = 12;
+// A calculator's twelve fields and a partner's age.
+const MAX_FIELDS = 16;
 const MAX_OPTIONS = 8;
 
 function text(value: unknown, max: number): string | undefined {
