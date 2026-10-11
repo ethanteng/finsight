@@ -35,6 +35,7 @@ export const STATED_FIGURE_KEYS = [
   'partnerPlanThroughAge',
   'survivorAnnualSpending',
   'partnerMarried',
+  'spendingCutPercent',
 ] as const;
 
 export type StatedFigureKey = (typeof STATED_FIGURE_KEYS)[number];
@@ -63,7 +64,8 @@ export type IncomeInflation = (typeof INCOME_INFLATION_OPTIONS)[number];
 
 export interface StatedFigureDefinition {
   label: string;
-  kind: 'age' | 'usd_per_year' | 'choice';
+  /** A percent is a whole number of percentage points: 20 is 20%. */
+  kind: 'age' | 'usd_per_year' | 'percent' | 'choice';
   minimum?: number;
   maximum?: number;
   options?: readonly string[];
@@ -130,6 +132,13 @@ export const STATED_FIGURE_DEFINITIONS: Record<StatedFigureKey, StatedFigureDefi
     kind: 'choice',
     options: MARRIAGE_OPTIONS,
   },
+  // Zero is a statement (no cut is possible), not a blank.
+  spendingCutPercent: {
+    label: 'How much of your spending you could cut in a bad market, in percent',
+    kind: 'percent',
+    minimum: 0,
+    maximum: 75,
+  },
 };
 
 function isKey(value: string): value is StatedFigureKey {
@@ -143,7 +152,7 @@ export function acceptedFigureValue(key: StatedFigureKey, value: unknown): numbe
     return typeof value === 'string' && definition.options?.includes(value) ? value : undefined;
   }
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-  if (definition.kind === 'age' && !Number.isInteger(value)) return undefined;
+  if ((definition.kind === 'age' || definition.kind === 'percent') && !Number.isInteger(value)) return undefined;
   if (definition.minimum !== undefined && value < definition.minimum) return undefined;
   if (definition.maximum !== undefined && value > definition.maximum) return undefined;
   return value;
@@ -178,8 +187,9 @@ export interface StatedFigureUpdate {
 function rangeText(key: StatedFigureKey): string {
   const { kind, minimum, maximum, options } = STATED_FIGURE_DEFINITIONS[key];
   if (kind === 'choice') return `one of ${options?.join(', ')}`;
-  const show = (value: number) => (kind === 'usd_per_year' ? `$${value.toLocaleString('en-US')}` : String(value));
-  const whole = kind === 'age' ? 'a whole number ' : '';
+  const show = (value: number) =>
+    kind === 'usd_per_year' ? `$${value.toLocaleString('en-US')}` : kind === 'percent' ? `${value}%` : String(value);
+  const whole = kind === 'age' || kind === 'percent' ? 'a whole number ' : '';
   return `${whole}from ${show(minimum ?? 0)} to ${show(maximum ?? 0)}`;
 }
 

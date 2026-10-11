@@ -21,6 +21,8 @@ import {
   PortfolioMapping,
   HistoricalSequence,
   PortfolioOutcome,
+  SPENDING_CUT_TRIGGER,
+  SpendingFlexibility,
   WithdrawalPolicy,
 } from '../types';
 import { mappingFromResolvedExposures } from './portfolio-mapper';
@@ -47,6 +49,15 @@ export interface WithdrawalSimulationOptions {
    * withdrawal by then, so it composes with every policy.
    */
   spendingChange?: { startMonth: number; factor: number };
+  /**
+   * Spending cut by `cutShare` for any withdrawal year that starts with the
+   * portfolio more than `SPENDING_CUT_TRIGGER` below its inflation-adjusted
+   * value when withdrawals began. Checked at each withdrawal anniversary after
+   * the first, so the first year is never cut, and composes with the policy
+   * and any spending change. Income is not cut: only what the household
+   * spends.
+   */
+  spendingFlexibility?: SpendingFlexibility;
 }
 
 export interface SimulatedIncomeStream {
@@ -112,6 +123,12 @@ export function simulateWithdrawals(
   }
   const spendingFactorAt = (month: number) =>
     spendingChange && month >= Math.round(spendingChange.startMonth) ? spendingChange.factor : 1;
+  const flexibility = options.spendingFlexibility;
+  if (flexibility && (!Number.isFinite(flexibility.cutShare) || flexibility.cutShare < 0 || flexibility.cutShare >= 1)) {
+    throw new Error('A spending cut must be a share of spending from 0 up to, but not including, 100%');
+  }
+  let cuttingThisYear = false;
+  let monthsSpendingCut = 0;
   const scheduledIncome = incomeStreams
     .filter((stream) => stream.annualAmount > 0)
     .map((stream) => ({
@@ -141,6 +158,15 @@ export function simulateWithdrawals(
   let recoveryMonth: number | null = null;
 
   for (let month = 0; month < months; month++) {
+    // Each withdrawal anniversary decides the coming year from the balance
+    // carried into it -- before this month's return and inflation -- in
+    // today's dollars: cut while it is more than the trigger below where the
+    // portfolio stood when withdrawals began.
+    if (flexibility && month > withdrawalDelayMonths && (month - withdrawalDelayMonths) % 12 === 0) {
+      const carried = usEquity + intlEquity + bonds + tips + cash;
+      const realCarried = cumulativeInflation > 0 ? carried / cumulativeInflation : carried;
+      cuttingThisYear = realCarried < realPortfolioValueAtWithdrawalStart * (1 - SPENDING_CUT_TRIGGER);
+    }
     const usRet = sequence.assetBasketReturns.usEquity[month] ?? 0;
     const intlRet = sequence.assetBasketReturns.internationalEquity[month] ?? 0;
     const bondRet = sequence.assetBasketReturns.nominalBonds[month] ?? 0;
@@ -205,8 +231,10 @@ export function simulateWithdrawals(
         incomeThisMonth += stream.indexed ? stream.monthlyAmount * cumulativeInflation : stream.monthlyAmount;
       }
     }
+    const cut = flexibility && cuttingThisYear ? 1 - flexibility.cutShare : 1;
+    if (withdrawing && cut < 1) monthsSpendingCut += 1;
     const withdrawalThisMonth = withdrawing
-      ? Math.max(0, monthlyWithdrawal * spendingFactorAt(month) - incomeThisMonth)
+      ? Math.max(0, monthlyWithdrawal * spendingFactorAt(month) * cut - incomeThisMonth)
       : 0;
     if (withdrawing && month < withdrawalDelayMonths + 12 && cumulativeInflation > 0) {
       realFirstYearPortfolioWithdrawal += withdrawalThisMonth / cumulativeInflation;
@@ -252,6 +280,7 @@ export function simulateWithdrawals(
         maximumDrawdown: maxDrawdown,
         timeToRecovery: recoveryMonth != null ? recoveryMonth - (drawdownStartMonth ?? 0) : null,
         realReturn: calculateRealReturn(portfolioValues, sequence.inflationRates),
+        ...(flexibility && { monthsSpendingCut }),
       };
     }
 
@@ -297,6 +326,7 @@ export function simulateWithdrawals(
     maximumDrawdown: maxDrawdown,
     timeToRecovery: recoveryMonth != null ? recoveryMonth - (drawdownStartMonth ?? 0) : null,
     realReturn: calculateRealReturn(portfolioValues, sequence.inflationRates),
+    ...(flexibility && { monthsSpendingCut }),
   };
 }
 

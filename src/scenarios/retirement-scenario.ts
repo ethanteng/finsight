@@ -475,6 +475,7 @@ function inputKey(input: RetirementAnalysisInput, policy: WithdrawalPolicy): str
     survivorSpending: input.survivorSpending
       ? [input.survivorSpending.fromAge, input.survivorSpending.annualAmount]
       : null,
+    spendingCut: input.spendingFlexibility?.cutShare ?? null,
     policy,
   });
 }
@@ -665,6 +666,8 @@ export async function runRetirementScenario(
     annualContributionAmount: stored.annualContributionAmount ?? 0,
     incomeStreams: stored.incomeStreams ?? [],
     ...(stored.survivorSpending && { survivorSpending: stored.survivorSpending }),
+    // The user's own cut in a bad market; a what-if never runs the comparison.
+    ...(stored.spendingFlexibility && { spendingFlexibility: stored.spendingFlexibility }),
     // Variants must exclude exactly what the baseline excluded, or a scenario
     // comparison would attribute a coverage difference to the change modeled.
     unmodeledInvestments: snapshot.investments?.unmodeledInvestments ?? null,

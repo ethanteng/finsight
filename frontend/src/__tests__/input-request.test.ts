@@ -32,6 +32,22 @@ describe('reading what was typed', () => {
     expect(readField(age, '  ')).toEqual({ status: 'empty' });
   });
 
+  it('keeps a percent whole when the field asks for percentage points', () => {
+    const cut: DisplayInputRequestField = {
+      id: 'spendingCutPercent',
+      label: 'Cut',
+      kind: 'percent',
+      integer: true,
+      required: false,
+      minimum: 0,
+      maximum: 75,
+      sentence: '{value}',
+    };
+    expect(readField(cut, '20')).toEqual({ status: 'ok', value: 20 });
+    expect(readField(cut, '20%')).toEqual({ status: 'ok', value: 20 });
+    expect(readField(cut, '20.5')).toEqual({ status: 'invalid', message: 'Enter a whole percent.' });
+  });
+
   it('accepts only the choices offered', () => {
     expect(readField(mix, 'growth')).toEqual({ status: 'ok', value: 'growth' });
     expect(readField(mix, 'aggressive')).toMatchObject({ status: 'invalid' });

@@ -22,9 +22,9 @@ import {
   loadHistoricalReturns,
 } from '../../retirement-analytics/engine/historical-data-loader';
 import { computeHistoricalWithdrawalRates } from '../../retirement-analytics/engine/withdrawal-rate-solver';
-import { analyzeRetirementPortfolio, buildRetirementTimeline } from '../../retirement-analytics';
+import { analyzeRetirementPortfolio, buildRetirementTimeline, summarizeSpendingCuts } from '../../retirement-analytics';
 import { calculateDataQuality } from '../../retirement-analytics/interpretation/uncertainty-quantifier';
-import type { HistoricalSequence, PortfolioMapping } from '../../retirement-analytics/types';
+import type { HistoricalSequence, PortfolioMapping, PortfolioOutcome } from '../../retirement-analytics/types';
 import type { Holding, Security } from '../../services/financial-data-service';
 
 function holding(securityId: string, ticker: string, value = 100): Holding {
@@ -1202,5 +1202,97 @@ describe('retirement correctness contracts', () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+});
+
+describe('spending cut in a bad market', () => {
+  const equityOnly = { ...balancedMapping, usEquityWeight: 1, internationalEquityWeight: 0, nominalBondsWeight: 0 };
+
+  it('cuts each year that starts more than 20% below the starting value, and never the first', () => {
+    // $120 a year from $1,000 on flat returns: $880 after one year, $760
+    // after two -- below $800 -- so years three to five are cut by a quarter.
+    const flexible = simulateWithdrawals(balancedMapping, 1_000, flatSequence(60), 120, {
+      spendingFlexibility: { cutShare: 0.25 },
+    });
+    expect(flexible.monthsSpendingCut).toBe(36);
+    expect(flexible.finalValue).toBeCloseTo(1_000 - 120 - 120 - 90 * 3);
+
+    const fixed = simulateWithdrawals(balancedMapping, 1_000, flatSequence(60), 120);
+    expect(fixed.finalValue).toBeCloseTo(400);
+    expect(fixed.monthsSpendingCut).toBeUndefined();
+
+    // A crash in the first month still leaves the first year whole.
+    const crash = flatSequence(12);
+    crash.assetBasketReturns.usEquity[0] = -0.5;
+    const firstYear = simulateWithdrawals(equityOnly, 1_000, crash, 120, { spendingFlexibility: { cutShare: 0.25 } });
+    expect(firstYear.monthsSpendingCut).toBe(0);
+  });
+
+  it('goes back to full spending once the portfolio recovers', () => {
+    const sequence = flatSequence(36);
+    sequence.assetBasketReturns.usEquity[0] = -0.3;
+    sequence.assetBasketReturns.usEquity[13] = 0.5;
+    const outcome = simulateWithdrawals(equityOnly, 1_000, sequence, 12, { spendingFlexibility: { cutShare: 0.5 } });
+    // $688 at the first anniversary: year two is cut. The rally lifts it back
+    // above $800 by the second, so year three is not.
+    expect(outcome.monthsSpendingCut).toBe(12);
+    expect(outcome.finalValue).toBeCloseTo(((1_000 * 0.7 - 12) - 0.5) * 1.5 - 0.5 * 11 - 12);
+  });
+
+  it('decides from the balance carried into the year, not the anniversary month\'s return', () => {
+    // $688 is carried into year two, below $800, so the year is cut even
+    // though the anniversary month itself rallies 50%.
+    const sequence = flatSequence(24);
+    sequence.assetBasketReturns.usEquity[0] = -0.3;
+    sequence.assetBasketReturns.usEquity[12] = 0.5;
+    const outcome = simulateWithdrawals(equityOnly, 1_000, sequence, 12, { spendingFlexibility: { cutShare: 0.5 } });
+    expect(outcome.monthsSpendingCut).toBe(12);
+  });
+
+  it('measures the fall in today\'s dollars', () => {
+    // Nothing spent and no returns, but 2% inflation a month leaves $1,000
+    // worth about $788 of today's money after a year.
+    const sequence = flatSequence(24);
+    sequence.inflationRates = Array.from({ length: 24 }, () => 0.02);
+    const outcome = simulateWithdrawals(balancedMapping, 1_000, sequence, 0, { spendingFlexibility: { cutShare: 0.2 } });
+    expect(outcome.monthsSpendingCut).toBe(12);
+  });
+
+  it('cuts spending, not the income that pays part of it', () => {
+    // $120 of spending, $60 of it paid by income: a 50% cut leaves nothing to draw.
+    const outcome = simulateWithdrawals(balancedMapping, 1_000, flatSequence(36), 240, {
+      spendingFlexibility: { cutShare: 0.5 },
+      incomeStreams: [{ annualAmount: 120, startMonth: 24 }],
+    });
+    // $760 after year one; years two and three are cut to $120, and from
+    // month 24 income covers all of it.
+    expect(outcome.monthsSpendingCut).toBe(24);
+    expect(outcome.finalValue).toBeCloseTo(1_000 - 240 - 120);
+  });
+
+  it('rejects a cut that is not a share of spending', () => {
+    for (const cutShare of [-0.1, 1, Number.NaN]) {
+      expect(() => simulateWithdrawals(balancedMapping, 1_000, flatSequence(12), 120, {
+        spendingFlexibility: { cutShare },
+      })).toThrow(/spending cut/i);
+    }
+  });
+
+  it('summarizes how often the cut lasted and how long it was in force', () => {
+    const outcome = (survived: boolean, monthsSpendingCut: number) =>
+      ({ withdrawalSustainability: survived, monthsSpendingCut } as PortfolioOutcome);
+    expect(summarizeSpendingCuts(
+      [outcome(true, 0), outcome(true, 24), outcome(true, 48), outcome(false, 72), outcome(true, 0)],
+      { cutShare: 0.2 }
+    )).toEqual({
+      cutShare: 0.2,
+      triggerDrawdown: 0.2,
+      survivalRate: 0.8,
+      sequencesTested: 5,
+      sequencesSurvived: 4,
+      sequencesWithCuts: 3,
+      medianYearsCut: 4,
+      mostYearsCut: 6,
+    });
   });
 });

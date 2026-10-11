@@ -6,6 +6,7 @@
 
 import { INCOME_INFLATION_OPTIONS, type IncomeInflation } from '../services/stated-figures';
 import type { StatedPartner } from '../services/household';
+import type { StatedSpendingCut } from '../services/spending-flexibility';
 
 export interface RetirementInputTurn {
   question: string;
@@ -42,6 +43,14 @@ export interface ExtractedRetirementInputs {
   survivorAnnualSpending?: number;
   /** Whether the user and their partner are married, when the user says or makes it plain. */
   partnerMarried?: boolean;
+  /**
+   * How much of their retirement spending the user could cut in a bad market,
+   * in whichever form they said it: percentage points, dollars a year less,
+   * or the spending a year they could not go below.
+   */
+  spendingCutPercent?: number;
+  spendingCutAnnual?: number;
+  essentialAnnualSpending?: number;
   /** The words each value came from, for the answer to cite and Show the Math to display. */
   sources: Partial<Record<ExtractedField | 'pensionInflation' | 'partnerPensionInflation' | 'partnerMarried', string>>;
 }
@@ -65,7 +74,10 @@ type ExtractedField =
   | 'partnerPensionAnnual'
   | 'partnerPensionStartAge'
   | 'partnerPlanThroughAge'
-  | 'survivorAnnualSpending';
+  | 'survivorAnnualSpending'
+  | 'spendingCutPercent'
+  | 'spendingCutAnnual'
+  | 'essentialAnnualSpending';
 
 const FIELDS: ExtractedField[] = [
   'currentAge',
@@ -87,6 +99,9 @@ const FIELDS: ExtractedField[] = [
   'partnerPensionStartAge',
   'partnerPlanThroughAge',
   'survivorAnnualSpending',
+  'spendingCutPercent',
+  'spendingCutAnnual',
+  'essentialAnnualSpending',
 ];
 
 /**
@@ -123,6 +138,11 @@ const RANGES: Record<ExtractedField, { min: number; max: number; integer: boolea
   partnerPensionStartAge: { min: 30, max: 95, integer: true },
   partnerPlanThroughAge: { min: 60, max: 110, integer: true },
   survivorAnnualSpending: { min: 1_000, max: 10_000_000, integer: false },
+  // Zero is a statement ("we couldn't cut anything"). The calculators drop a
+  // cut beyond what a plan can be built on.
+  spendingCutPercent: { min: 0, max: 100, integer: false },
+  spendingCutAnnual: { min: 0, max: 100_000_000, integer: false },
+  essentialAnnualSpending: { min: 0, max: 100_000_000, integer: false },
 };
 
 /** Drop anything outside the range a real plan occupies; keep the rest. */
@@ -163,6 +183,18 @@ export function validateExtractedInputs(raw: unknown): ExtractedRetirementInputs
     result.withdrawalStartAge = result.retirementAge;
   }
   return result;
+}
+
+/** What the user said about cutting spending in a bad market, or undefined when nothing. */
+export function statedSpendingCutOf(inputs: ExtractedRetirementInputs | undefined): StatedSpendingCut | undefined {
+  if (!inputs) return undefined;
+  const cut: StatedSpendingCut = {
+    percent: inputs.spendingCutPercent,
+    annualAmount: inputs.spendingCutAnnual,
+    essentialAnnual: inputs.essentialAnnualSpending,
+  };
+  const said = Object.fromEntries(Object.entries(cut).filter(([, value]) => value !== undefined)) as StatedSpendingCut;
+  return Object.keys(said).length > 0 ? said : undefined;
 }
 
 /** What the user said about a partner in this decision, or undefined when nothing. */

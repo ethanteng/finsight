@@ -18,6 +18,12 @@ export interface DisplayInputRequestField {
   required: boolean;
   minimum?: number;
   maximum?: number;
+  /**
+   * When set, the value must be a whole number. Ages always are; a percent
+   * field opts in when Your numbers (or a form) stores whole percentage
+   * points rather than a rate that can be fractional.
+   */
+  integer?: boolean;
   options?: Array<{ value: string; label: string }>;
   value?: number | string;
   valueNote?: string;
@@ -112,7 +118,15 @@ export function readField(field: DisplayInputRequestField, raw: string): FieldRe
     return { status: 'invalid', message: field.kind === 'age' ? 'Enter an age in whole years.' : 'Enter a number.' };
   }
   const value = Number(text) * scale;
-  if (field.kind === 'age' && !Number.isInteger(value)) return { status: 'invalid', message: 'Enter an age in whole years.' };
+  if (field.kind === 'age' && !Number.isInteger(value)) {
+    return { status: 'invalid', message: 'Enter an age in whole years.' };
+  }
+  if (field.integer && !Number.isInteger(value)) {
+    return {
+      status: 'invalid',
+      message: field.kind === 'percent' ? 'Enter a whole percent.' : 'Enter a whole number.',
+    };
+  }
   if ((field.minimum !== undefined && value < field.minimum) || (field.maximum !== undefined && value > field.maximum)) {
     return { status: 'invalid', message: rangeMessage(field) };
   }

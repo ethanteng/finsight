@@ -7,9 +7,10 @@ import type { PlaidLiabilityDetails } from '../services/plaid-liabilities';
 import type { UnmodeledInvestmentValue } from '../services/investment-coverage';
 import type { PersonalContextValues } from '../profile/personal-context';
 import type { StatedFigures } from '../services/stated-figures';
-import type { RetirementIncomeStream } from '../retirement-analytics/types';
+import type { RetirementIncomeStream, SpendingFlexibilityOutcome } from '../retirement-analytics/types';
 import type { LinkedContributions, RetirementContributionOrigin } from './retirement-contributions';
 import type { HouseholdSocialSecurity, HouseholdTimeline, ResolvedPartner, StatedPartner } from '../services/household';
+import type { SpendingFlexibilityResolution, StatedSpendingCut } from '../services/spending-flexibility';
 
 /**
  * The partner a retirement projection counted, with what Social Security pays
@@ -257,10 +258,20 @@ export interface FinancialContextSnapshot {
    * same way, with Your numbers behind it (`services/household.ts`).
    */
   statedPartner?: StatedPartner;
+  /**
+   * How much of their spending the user said they could cut in a bad market,
+   * read once from the planner's retirement inputs for every retirement
+   * calculator.
+   */
+  statedSpendingCut?: StatedSpendingCut;
   homeValueSummary?: string;
   /** Structured RentCast value data used for fact provenance and uncertainty bounds. */
   homeValueData?: HomeData;
   retirementAnalysis?: {
+    /** What the user's cut in a bad market did; absent when the run applied none. */
+    spendingFlexibility?: SpendingFlexibilityOutcome;
+    /** The same plan with the comparison cut, when the user has not said how much they could cut. */
+    spendingFlexibilityComparison?: SpendingFlexibilityOutcome;
     summary: {
       characteristics: {
         growthPotential: 'high' | 'moderate' | 'low';
@@ -383,6 +394,8 @@ export interface FinancialContextSnapshot {
       annualContributionAmount?: number;
       /** What one survivor spends from the first death, when the user said. */
       survivorSpending?: { fromAge: number; annualAmount: number };
+      /** The user's own cut in a bad market, which the run applied; never the comparison. */
+      spendingFlexibility?: { cutShare: number };
     };
     _evidence?: {
       recordId: string;
@@ -402,6 +415,12 @@ export interface FinancialContextSnapshot {
     _contributionOrigin?: RetirementContributionOrigin;
     /** The partner the plan counts, and its timeline. See `services/household.ts`. */
     _household?: RetirementHousehold;
+    /**
+     * How the run treated spending flexibility: the user's cut, a stated
+     * inability to cut, or the comparison beside fixed spending. Absent on
+     * runs recorded before spending flexibility.
+     */
+    _spendingFlexibility?: SpendingFlexibilityResolution;
     /** Set when the user's own planning age came from Your numbers. */
     _planThroughAgeOrigin?: { origin: 'saved'; savedAt: string };
     _inputSources?: {

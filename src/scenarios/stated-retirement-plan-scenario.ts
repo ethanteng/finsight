@@ -84,7 +84,18 @@ import {
   withPartnerAgeField,
   type PlannedHousehold,
 } from '../openai/household-evidence';
-import type { RetirementIncomeStream } from '../retirement-analytics/types';
+import type { RetirementIncomeStream, SpendingFlexibilityOutcome } from '../retirement-analytics/types';
+import {
+  resolveSpendingFlexibility,
+  savableSpendingCut,
+  spendingFlexibilityInput,
+  type SpendingFlexibilityResolution,
+} from '../services/spending-flexibility';
+import {
+  describeSpendingCut,
+  describeSpendingFlexibilityResults,
+  spendingFlexibilityFactRows,
+} from '../openai/spending-flexibility-evidence';
 
 export const STATED_RETIREMENT_PLAN_CALCULATOR_ID = 'stated_retirement_plan' as const;
 export const STATED_RETIREMENT_PLAN_VERSION = 1 as const;
@@ -259,6 +270,17 @@ export interface StatedRetirementPlanResult {
   };
   /** Set when a partner's incomes are known but not their age, so they were left out. */
   missingPartnerAge?: true;
+  /**
+   * Spending flexibility: how the run treated a cut in a bad market (the
+   * user's, a stated inability to cut, or the comparison), and what the cut
+   * did. Absent on runs recorded before spending flexibility, and in `rates`
+   * mode, which has no spending to cut.
+   */
+  spendingFlexibility?: {
+    resolution: SpendingFlexibilityResolution;
+    outcome?: SpendingFlexibilityOutcome;
+    comparison?: SpendingFlexibilityOutcome;
+  };
 }
 
 export interface CompletedStatedRetirementPlanExecution {
@@ -473,6 +495,8 @@ interface ResolvedVariant {
   missingPartnerAge?: true;
   /** When the user claims Social Security and whether their own benefit is known, for a spousal benefit. */
   userSocialSecurity: { claimAge: number; known: boolean };
+  /** How much the user could cut in a bad market, or the comparison; absent without a spending level. */
+  spendingFlexibility?: SpendingFlexibilityResolution;
 }
 
 /**
@@ -763,6 +787,14 @@ function resolveVariant(
     currentAge: currentAge!,
     ...(snapshot.userProfileValues?.householdStatus && { householdStatus: snapshot.userProfileValues.householdStatus }),
   });
+  // How much the user could cut in a bad market, the same in every case; the
+  // comparison runs only when nobody has said. Nothing to cut without a
+  // spending level.
+  const spendingFlexibility = resolveSpendingFlexibility({
+    stated: snapshot.statedSpendingCut,
+    statedFigures: snapshot.statedFigures,
+    annualSpending,
+  });
   // A spousal benefit needs to know when the user claims and whether their
   // own benefit is known (a stated zero is), even with none of their own.
   const userSocialSecurity = {
@@ -801,6 +833,7 @@ function resolveVariant(
     ...(household && { household }),
     ...(partner && 'missingAge' in partner && { missingPartnerAge: true as const }),
     userSocialSecurity,
+    ...(spendingFlexibility && { spendingFlexibility }),
   };
 }
 
@@ -876,6 +909,7 @@ function variantLabel(own: ResolvedVariant, peer: ResolvedVariant | undefined): 
 function runInputs(variant: ResolvedVariant): Record<string, unknown> {
   return {
     ...variant.request,
+    spendingCut: variant.spendingFlexibility?.kind === 'cut' ? variant.spendingFlexibility.cutShare : null,
     ...(variant.household && {
       partner: variant.household.plan,
       married: variant.household.married?.value ?? null,
@@ -995,6 +1029,13 @@ function toResult(
       },
     }),
     ...(variant.missingPartnerAge && { missingPartnerAge: true as const }),
+    ...(evaluated && variant.spendingFlexibility && {
+      spendingFlexibility: {
+        resolution: variant.spendingFlexibility,
+        ...(run.spendingFlexibility && { outcome: run.spendingFlexibility }),
+        ...(run.spendingFlexibilityComparison && { comparison: run.spendingFlexibilityComparison }),
+      },
+    }),
     ...(includeAlternatives && run.alternatives.length > 0 && {
       alternatives: run.alternatives.map((alternative) => ({
         id: alternative.id,
@@ -1061,7 +1102,14 @@ export async function runStatedRetirementPlan(
   let comparisonUnavailableReason: string | undefined;
   for (const [index, variant] of variants.entries()) {
     try {
-      const run = await runQuickPlan(variant.request as RetirementQuickPlanRequest, quickPlanHousehold(variant));
+      // The comparison cut runs beside the main case only.
+      const flexibility = spendingFlexibilityInput(variant.spendingFlexibility);
+      const run = await runQuickPlan(variant.request as RetirementQuickPlanRequest, quickPlanHousehold(variant), {
+        ...(flexibility.spendingFlexibility && { spendingFlexibility: flexibility.spendingFlexibility }),
+        ...(index === 0 && flexibility.spendingFlexibilityComparison && {
+          spendingFlexibilityComparison: flexibility.spendingFlexibilityComparison,
+        }),
+      });
       const peer = variants[index === 0 ? 1 : 0];
       scenarios.push(toResult(variant, variantLabel(variant, peer), run, index === 0));
     } catch (error) {
@@ -1178,6 +1226,12 @@ export function statedRetirementPlanCanonicalFacts(execution: StatedRetirementPl
         ...householdTimelineFactRows(scenario.household, scenario.household.survivorSpending),
       ];
       for (const row of rows) add('scenario_input', row.suffix, row.label, row.value, row.unit);
+    }
+    // The user's cut in a bad market and what it did, or the comparison's.
+    if (scenario.spendingFlexibility) {
+      for (const row of spendingFlexibilityFactRows(scenario.spendingFlexibility)) {
+        add(row.input ? 'scenario_input' : 'scenario_calculation', row.suffix, row.label, row.value, row.unit);
+      }
     }
     const mix = `${scenario.allocation.label} preset`;
     add('scenario_input', 'us_stock_share', `${mix} share in US stocks`, scenario.allocation.usEquityPercent, 'percent');
@@ -1386,6 +1440,17 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
   const mixDefault = assumptionOf(primary, 'allocation')?.origin === 'default'
     ? ` You did not name a mix, so I used the ${primary.allocation.label} preset.`
     : '';
+  // The cut the plan ran, then what it did, or what a 20% cut would change.
+  const flexibility = primary.spendingFlexibility;
+  const cutClause = describeSpendingCut(flexibility?.resolution);
+  const spendingCut = (cutClause ? ` It plans on ${cutClause}.` : '') + (flexibility && primary.outcome
+    ? describeSpendingFlexibilityResults({
+      resolution: flexibility.resolution,
+      ...(flexibility.outcome && { outcome: flexibility.outcome }),
+      ...(flexibility.comparison && { comparison: flexibility.comparison }),
+      survivalRate: primary.outcome.survivalRate,
+    })
+    : '');
   const assets = assumptionOf(primary, 'investableAssets');
   const unsupported = execution.standInFor === 'unsupported_holdings';
   const notItemized = unsupported ? '' : ', so they cannot be modeled directly';
@@ -1443,7 +1508,7 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
   return `Plan assumptions: ${standIn}, against every overlapping ` +
     `${primary.history.horizonYears}-year stretch of US market returns and inflation that began between ` +
     `${readableMonth(primary.history.firstStartMonth)} and ${readableMonth(primary.history.lastStartMonth)}.` +
-    `${comparison}${retirementAgeNotice}${spendingNotice}${socialSecurity}${claimingNotice}${pension}${bridge}${saving}${horizon}${household}${mixDefault}` +
+    `${comparison}${retirementAgeNotice}${spendingNotice}${socialSecurity}${claimingNotice}${pension}${bridge}${saving}${horizon}${household}${mixDefault}${spendingCut}` +
     `${assetsNotice}${ageNotice}${savedNotice}${comparisonNotice} ` +
     'Fund fees, taxes and account types are not modeled. Change any of these and I will re-run it.';
 }
@@ -1629,6 +1694,9 @@ export function statedRetirementPlanSavableFigures(execution: StatedRetirementPl
       assumption.key === 'socialSecurityAmountAge' && assumption.origin === 'user'
     )),
     ...(primary.household ? partnerSavableFigures(primary.household) : []),
+    ...(savableSpendingCut(primary.spendingFlexibility?.resolution) !== undefined
+      ? [{ key: 'spendingCutPercent' as const, value: savableSpendingCut(primary.spendingFlexibility?.resolution)! }]
+      : []),
   ];
 }
 

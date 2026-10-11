@@ -13,6 +13,7 @@ import {
 import {
   QuickPlanValidationError,
   quickPlanIncomeStreams,
+  type QuickPlanFlexibility,
   type QuickPlanHousehold,
   type RetirementQuickPlanRequest,
   type RetirementQuickPlanResult,
@@ -664,6 +665,114 @@ describe('retirement plan from stated figures', () => {
     expect(byEnding('_alternative_spend_10_less_annual_spending')).toMatchObject({ value: 63_000 });
     expect(facts.some((fact) => fact.label.startsWith('Retiring at 62 instead, everything else as in your plan'))).toBe(true);
     expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+  });
+
+  describe('spending flexibility', () => {
+    /** The fake engine, reporting what any cut it is handed did. */
+    function flexibleRunner(base = fakeRunner()) {
+      return jest.fn(async (request: RetirementQuickPlanRequest, _household?: QuickPlanHousehold, flexibility?: QuickPlanFlexibility) => {
+        const result = await base(request);
+        const outcome = (cutShare: number, survivalRate: number) => ({
+          cutShare,
+          triggerDrawdown: 0.2,
+          survivalRate,
+          sequencesTested: 600,
+          sequencesSurvived: Math.round(600 * survivalRate),
+          sequencesWithCuts: 150,
+          medianYearsCut: 2.5,
+          mostYearsCut: 8,
+        });
+        return {
+          ...result,
+          ...(flexibility?.spendingFlexibility && { spendingFlexibility: outcome(flexibility.spendingFlexibility.cutShare, 0.95) }),
+          ...(flexibility?.spendingFlexibilityComparison && {
+            spendingFlexibilityComparison: outcome(flexibility.spendingFlexibilityComparison.cutShare, 0.97),
+          }),
+        };
+      });
+    }
+
+    it('keeps fixed spending when nobody has said, and reports what a 20% cut would change', async () => {
+      const runner = flexibleRunner();
+      const execution = await runStatedRetirementPlan(NO_HOLDINGS, plan(LEAD, { retirementAge: 62 }), runner as QuickPlanRunner) as CompletedStatedRetirementPlanExecution;
+      // The comparison runs beside the main case only.
+      expect(runner.mock.calls[0][2]).toEqual({ spendingFlexibilityComparison: { cutShare: 0.2 } });
+      expect(runner.mock.calls[1][2]).toEqual({});
+
+      const disclosure = describeStatedRetirementPlanExecution(execution)!;
+      expect(disclosure).toContain(
+        'If you cut spending 20% ($14,000 a year) in any year that started with your portfolio more than 20% below its ' +
+        'inflation-adjusted value when withdrawals began, and spent in full again once it recovered, the plan would last ' +
+        'in 97% of historical sequences instead of 90%, with spending cut in 25% of the 600 historical sequences, for a ' +
+        'median of 2.5 years and at most 8 years.'
+      );
+      expect(disclosure).not.toContain('It plans on cutting');
+
+      const facts = statedRetirementPlanCanonicalFacts(execution);
+      const byEnding = (suffix: string) => facts.find((fact) => fact.id.endsWith(suffix));
+      expect(byEnding('_flexible_comparison_survival_rate')).toMatchObject({ value: 97, unit: 'percent' });
+      expect(byEnding('_flexible_comparison_cut_annual')).toMatchObject({ value: 14_000, unit: 'usd' });
+      expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+      expect(statedRetirementPlanSavableFigures(execution).some((figure) => figure.key === 'spendingCutPercent')).toBe(false);
+    });
+
+    it('plans on the cut the user states, in every case, and offers to keep it', async () => {
+      const runner = flexibleRunner();
+      const execution = await runStatedRetirementPlan(
+        { ...NO_HOLDINGS, statedSpendingCut: { essentialAnnual: 56_000 } },
+        plan(LEAD, { retirementAge: 62 }),
+        runner as QuickPlanRunner
+      ) as CompletedStatedRetirementPlanExecution;
+      expect(runner.mock.calls[0][2]).toEqual({ spendingFlexibility: { cutShare: 0.2 } });
+      expect(runner.mock.calls[1][2]).toEqual({ spendingFlexibility: { cutShare: 0.2 } });
+
+      const disclosure = describeStatedRetirementPlanExecution(execution)!;
+      expect(disclosure).toContain(
+        'It plans on cutting spending 20% ($14,000 a year) in any year that starts with your portfolio more than 20% ' +
+        'below its inflation-adjusted value when withdrawals began, and spending in full again once it recovers ' +
+        '(everything above the spending you said you could not go below).'
+      );
+      expect(disclosure).toContain('With your 20% cut, spending was cut in 25% of the 600 historical sequences');
+      expect(disclosure).not.toContain('If you cut spending');
+
+      const facts = statedRetirementPlanCanonicalFacts(execution);
+      expect(facts.find((fact) => fact.id.endsWith('_spending_cut_percent'))).toMatchObject({
+        value: 20,
+        provenance: { kind: 'scenario_input' },
+      });
+      expect(facts.find((fact) => fact.id.endsWith('_spending_cut_sequences_cut_percent'))).toMatchObject({
+        value: 25,
+        provenance: { kind: 'scenario_calculation' },
+      });
+      expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+
+      const offer = buildSaveOffer('stated_retirement_plan', statedRetirementPlanSavableFigures(execution), {});
+      expect(offer?.items).toContainEqual(
+        { key: 'spendingCutPercent', label: 'You could cut spending in a bad market by', value: 20, display: '20%' }
+      );
+    });
+
+    it('cuts nothing and compares nothing in rates mode, which has no spending to cut', async () => {
+      const runner = flexibleRunner();
+      const { annualSpending, ...withoutSpending } = LEAD;
+      expect(annualSpending).toBeGreaterThan(0);
+      await runStatedRetirementPlan(NO_HOLDINGS, plan(withoutSpending), runner as QuickPlanRunner);
+      expect(runner.mock.calls[0][2]).toEqual({});
+    });
+
+    it('runs the real engine with a cut: a cut never lasts in fewer histories than fixed spending', async () => {
+      const execution = await runStatedRetirementPlan(
+        NO_HOLDINGS,
+        plan({ ...LEAD, investableAssets: 400_000, annualContributions: 0 })
+      ) as CompletedStatedRetirementPlanExecution;
+      const [scenario] = execution.scenarios;
+      const comparison = scenario.spendingFlexibility?.comparison;
+      expect(comparison).toBeDefined();
+      expect(comparison!.sequencesTested).toBe(scenario.history.sequencesTested);
+      expect(comparison!.survivalRate).toBeGreaterThanOrEqual(scenario.outcome!.survivalRate);
+      expect(comparison!.sequencesWithCuts).toBeGreaterThan(0);
+      expect(comparison!.mostYearsCut).toBeGreaterThanOrEqual(comparison!.medianYearsCut);
+    }, 120_000);
   });
 
   it('runs the real historical engine on the preset mix', async () => {

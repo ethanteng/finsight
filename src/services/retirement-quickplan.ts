@@ -22,6 +22,8 @@ import {
   analyzeRetirementPortfolio,
   type RetirementAnalysisOutput,
   type RetirementIncomeStream,
+  type SpendingFlexibility,
+  type SpendingFlexibilityOutcome,
 } from '../retirement-analytics';
 import type { Holding, Security } from './financial-data-service';
 import {
@@ -298,6 +300,21 @@ export interface RetirementQuickPlanResult {
     socialSecurity: HouseholdSocialSecurity;
     survivorSpending?: { fromAge: number; annualAmount: number };
   };
+  /** What the user's cut in a bad market did to the plan as entered, when one was run. */
+  spendingFlexibility?: SpendingFlexibilityOutcome;
+  /** The plan as entered with the comparison cut, beside its fixed spending. */
+  spendingFlexibilityComparison?: SpendingFlexibilityOutcome;
+}
+
+/**
+ * Spending cut in a bad market (`services/spending-flexibility.ts`): the
+ * user's own, which every case runs, or a comparison run beside the plan as
+ * entered. Ask Linc's calculators pass one; the public calculator never does.
+ * A `rates` run has no spending to cut and ignores it.
+ */
+export interface QuickPlanFlexibility {
+  spendingFlexibility?: SpendingFlexibility;
+  spendingFlexibilityComparison?: SpendingFlexibility;
 }
 
 /**
@@ -320,8 +337,7 @@ export interface QuickPlanHousehold {
 
 /** Runs a quick plan. Ask Linc's calculators take one so their tests can stand in for the engine. */
 export type QuickPlanRunner = (
-  request: RetirementQuickPlanRequest,
-  household?: QuickPlanHousehold
+  ...args: [request: RetirementQuickPlanRequest, household?: QuickPlanHousehold, flexibility?: QuickPlanFlexibility]
 ) => Promise<RetirementQuickPlanResult>;
 
 export class QuickPlanValidationError extends Error {
@@ -757,7 +773,8 @@ export function quickPlanIncomeStreams(inputs: RetirementQuickPlanResult['inputs
  */
 async function computeRetirementQuickPlan(
   resolved: NormalizedQuickPlan,
-  household?: QuickPlanHousehold
+  household?: QuickPlanHousehold,
+  flexibility?: QuickPlanFlexibility
 ): Promise<RetirementQuickPlanResult> {
   const { inputs, assumed, mode, missing } = resolved;
   const startedAt = Date.now();
@@ -791,7 +808,11 @@ async function computeRetirementQuickPlan(
     ? survivorSpendingFor(household.partner, timeline)
     : undefined;
 
-  const analyze = (retirementAge: number, annualSpending: number) =>
+  // The user's cut runs in every case; the comparison only beside the plan as
+  // entered. A `rates` run has no spending level to cut.
+  const statedCut = mode === 'plan' ? flexibility?.spendingFlexibility : undefined;
+  const comparisonCut = mode === 'plan' && !statedCut ? flexibility?.spendingFlexibilityComparison : undefined;
+  const analyze = (retirementAge: number, annualSpending: number, withComparison = false) =>
     analyzeRetirementPortfolio({
       holdings,
       securities,
@@ -802,6 +823,8 @@ async function computeRetirementQuickPlan(
       annualWithdrawalAmount: annualSpending,
       annualContributionAmount: inputs.annualContributions,
       incomeStreams,
+      ...(statedCut && { spendingFlexibility: statedCut }),
+      ...(withComparison && comparisonCut && { spendingFlexibilityComparison: comparisonCut }),
       // Spending less is spending less in both chapters.
       ...(survivorSpending && {
         survivorSpending: {
@@ -811,7 +834,7 @@ async function computeRetirementQuickPlan(
       }),
     });
 
-  const primaryAnalysis = await analyze(inputs.retirementAge, inputs.annualSpending);
+  const primaryAnalysis = await analyze(inputs.retirementAge, inputs.annualSpending, true);
 
   const variantPlans: Array<{
     id: string;
@@ -930,6 +953,10 @@ async function computeRetirementQuickPlan(
     sustainableSpendingRates,
     assumptions: primaryAnalysis.dataQuality.assumptions,
     limitations: buildLimitations(inputs, allocation, history),
+    ...(primaryAnalysis.spendingFlexibility && { spendingFlexibility: primaryAnalysis.spendingFlexibility }),
+    ...(primaryAnalysis.spendingFlexibilityComparison && {
+      spendingFlexibilityComparison: primaryAnalysis.spendingFlexibilityComparison,
+    }),
     ...(timeline && householdRun && {
       household: {
         timeline,
@@ -959,7 +986,8 @@ export function clearQuickPlanCache(): void {
 
 export async function runRetirementQuickPlan(
   request: RetirementQuickPlanRequest | unknown,
-  household?: QuickPlanHousehold
+  household?: QuickPlanHousehold,
+  flexibility?: QuickPlanFlexibility
 ): Promise<RetirementQuickPlanResult> {
   const resolved = resolveQuickPlanRequest(request);
   const { inputs } = resolved;
@@ -985,12 +1013,14 @@ export async function runRetirementQuickPlan(
     household
       ? [household.partner, household.origins?.socialSecurityAnnual ?? null, household.married?.value ?? null, household.userSocialSecurity ?? null]
       : null,
+    flexibility?.spendingFlexibility?.cutShare ?? null,
+    flexibility?.spendingFlexibilityComparison?.cutShare ?? null,
   ]);
 
   const hit = planCache.get(key);
   if (hit) return { ...hit, cached: true };
 
-  const result = await computeRetirementQuickPlan(resolved, household);
+  const result = await computeRetirementQuickPlan(resolved, household, flexibility);
   if (planCache.size >= MAX_CACHED_PLANS) {
     const oldest = planCache.keys().next();
     if (!oldest.done) planCache.delete(oldest.value);
