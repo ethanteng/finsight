@@ -25,7 +25,13 @@ import {
   snapToHorizonBucket,
 } from './engine/stress-tester';
 import { computeHistoricalWithdrawalRates } from './engine/withdrawal-rate-solver';
-import { simulateWithdrawals } from './engine/withdrawal-simulator';
+import {
+  simulateWithdrawals,
+  type SimulatedHealthcare,
+  type SimulatedPerson,
+  type SimulatedTaxes,
+} from './engine/withdrawal-simulator';
+import { requiredDistributionAge } from './engine/taxes';
 import { analyzeOutcomes } from './engine/outcome-analyzer';
 import { assessPortfolioCharacteristics } from './engine/characteristics-assessor';
 import { formatAnalysisOutput } from './interpretation/analysis-formatter';
@@ -213,6 +219,7 @@ export async function analyzeRetirementPortfolio(
     startMonth: monthsFromNow(stream.startAge),
     ...(stream.endAge !== undefined && { endMonth: monthsFromNow(stream.endAge) }),
     indexed: stream.inflationAdjusted !== false,
+    taxedAs: stream.taxedAs ?? (/social security|spousal|survivor/i.test(stream.label ?? '') ? 'social_security' as const : 'ordinary' as const),
   }));
 
   // Spending after the first death, as a share of what the couple spends, so
@@ -231,6 +238,50 @@ export async function analyzeRetirementPortfolio(
   // Model the full path from today through life expectancy, including explicit
   // pre-withdrawal contributions when the scenario supplies them.
   const timeline = buildRetirementTimeline(input);
+
+  // Taxes and premiums: who is in the plan, how the money is held, and what
+  // coverage costs from the first withdrawal on.
+  const people: SimulatedPerson[] = [
+    {
+      age: input.currentAge,
+      ...(input.people?.userPlanThroughAge !== undefined && input.people.userPlanThroughAge < input.lifeExpectancy && {
+        endMonth: monthsFromNow(input.people.userPlanThroughAge),
+      }),
+    },
+    ...(input.people?.partner ? [{
+      age: input.people.partner.age,
+      ...(input.people.partner.planEndsAtUserAge < input.lifeExpectancy && {
+        endMonth: monthsFromNow(input.people.partner.planEndsAtUserAge),
+      }),
+    }] : []),
+  ];
+  const asOfYear = typeof asOfDate === 'number' ? asOfDate : Number(String(asOfDate).slice(0, 4));
+  const simulatedTaxes: SimulatedTaxes | undefined = input.taxes && {
+    ...input.taxes,
+    requiredDistributionAge: requiredDistributionAge((Number.isFinite(asOfYear) ? asOfYear : new Date().getUTCFullYear()) - input.currentAge),
+  };
+  const simulatedHealthcare: SimulatedHealthcare | undefined = input.healthcare && {
+    coverage: input.healthcare.coverage,
+    ...(input.healthcare.annualPremium !== undefined && { annualPremium: input.healthcare.annualPremium }),
+    startMonth: timeline.withdrawalDelayMonths,
+  };
+  if (simulatedTaxes) {
+    const { taxable, pretax, roth } = simulatedTaxes.accounts;
+    const share = (value: number) => `${Math.round(value * 100)}%`;
+    assumptions.push(
+      `Income tax on each year's draws and income at 2026 federal rates held level in today's dollars ` +
+      `(${simulatedTaxes.filing === 'joint' ? 'married filing jointly' : simulatedTaxes.filing === 'separate_singles' ? 'two single returns' : 'single'}` +
+      `${simulatedTaxes.stateRate > 0 ? `, plus ${(simulatedTaxes.stateRate * 100).toFixed(2)}% state tax` : ''}); ` +
+      `accounts ${share(taxable)} taxable, ${share(pretax)} pre-tax and ${share(roth)} Roth, drawn in that order, with ` +
+      `required minimum distributions from ${simulatedTaxes.requiredDistributionAge}`
+    );
+  }
+  if (simulatedHealthcare) {
+    assumptions.push(
+      `Health premiums on top of spending from the first withdrawal: ${simulatedHealthcare.coverage.replace('_', ' ')} coverage ` +
+      'before 65, then Medicare Part B and Part D base premiums'
+    );
+  }
   const { yearsToWithdrawalStart, withdrawalYears, totalAnalysisYears, withdrawalDelayMonths } = timeline;
   if (yearsToWithdrawalStart > 0) {
     assumptions.push(
@@ -336,6 +387,9 @@ export async function analyzeRetirementPortfolio(
         annualContributionAmount,
         incomeStreams,
         ...(annualFeeRate > 0 && { annualFeeRate }),
+        ...(simulatedTaxes && { taxes: simulatedTaxes }),
+        ...(simulatedHealthcare && { healthcare: simulatedHealthcare }),
+        ...((simulatedTaxes || simulatedHealthcare) && { people }),
         ...(spendingChange && { spendingChange }),
         ...(flexibility && { spendingFlexibility: flexibility }),
       }
@@ -444,11 +498,32 @@ export async function analyzeRetirementPortfolio(
   return {
     ...analysis,
     feesDeducted: { annualRate: annualFeeRate, coverage: portfolioMetrics.expenseRatioCoverage },
+    ...((simulatedTaxes || simulatedHealthcare) && { firstYearCosts: medianFirstYearCosts(outcomes) }),
     ...(treasuryEvidenceDegraded && { evidenceDegraded: true }),
     ...(spendingFlexibility && { spendingFlexibility: summarizeSpendingCuts(outcomes, spendingFlexibility) }),
     ...(flexibilityComparison && comparisonOutcomes && {
       spendingFlexibilityComparison: summarizeSpendingCuts(comparisonOutcomes, flexibilityComparison),
     }),
+  };
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+}
+
+/** The first withdrawal year's tax and premiums, each the median across sequences. */
+export function medianFirstYearCosts(
+  outcomes: readonly PortfolioOutcome[]
+): NonNullable<RetirementAnalysisOutput['firstYearCosts']> {
+  const costs = outcomes.flatMap((outcome) => (outcome.firstYearCosts ? [outcome.firstYearCosts] : []));
+  return {
+    federalTax: median(costs.map((cost) => cost.federalTax)),
+    stateTax: median(costs.map((cost) => cost.stateTax)),
+    healthcarePremiums: median(costs.map((cost) => cost.healthcarePremiums)),
+    premiumTaxCredit: median(costs.map((cost) => cost.premiumTaxCredit)),
   };
 }
 

@@ -128,6 +128,39 @@ export interface RetirementIncomeStream {
   endAge?: number;
   /** Whether it keeps pace with inflation; defaults to true. See the type comment. */
   inflationAdjusted?: boolean;
+  /**
+   * How it is taxed when the plan counts taxes: Social Security (spousal and
+   * survivor benefits included) by its own formula, anything else as ordinary
+   * income. Read from the label when omitted.
+   */
+  taxedAs?: 'social_security' | 'ordinary';
+}
+
+/** How the plan's money is taxed; see `engine/taxes` and `engine/retirement-cash-plan`. */
+export interface RetirementTaxes {
+  /** Shares of the simulated portfolio by tax treatment, summing to 1. */
+  accounts: { taxable: number; pretax: number; roth: number };
+  /** Cost basis as a share of the taxable account's value. */
+  taxableBasisShare: number;
+  /** How the household files while both are alive: an unmarried couple files two single returns. */
+  filing: 'single' | 'joint' | 'separate_singles';
+  /** State income tax on withdrawals, pensions and gains; 0 when none is counted. */
+  stateRate: number;
+}
+
+/** Health coverage before Medicare, and Medicare's premiums from 65; see `engine/healthcare`. */
+export interface RetirementHealthcare {
+  coverage: 'marketplace' | 'cobra' | 'employer_retiree' | 'spouse_plan';
+  /** A yearly premium per person before 65 the user stated, in today's dollars. */
+  annualPremium?: number;
+}
+
+/** Who the plan covers beyond the user, for filing status, ages and premiums. */
+export interface RetirementPeople {
+  /** The user's age when their own plan ends, when someone else's runs longer. */
+  userPlanThroughAge?: number;
+  /** The partner: their age today, and the user's age when the partner's plan ends. */
+  partner?: { age: number; planEndsAtUserAge: number };
 }
 
 // ============================================================================
@@ -201,6 +234,13 @@ export interface RetirementAnalysisInput {
    * rather than restricting every window to the shortest series.
    */
   shortSeriesPolicy?: ShortSeriesPolicy;
+
+  /** Income tax on the plan's draws and income; the plan is untaxed without it. */
+  taxes?: RetirementTaxes;
+  /** Health premiums on top of spending, from when withdrawals begin. */
+  healthcare?: RetirementHealthcare;
+  /** The partner and the user's own planning age, for taxes and premiums. */
+  people?: RetirementPeople;
 
   // Optional overrides
   inflationAssumption?: number; // override FRED data
@@ -491,6 +531,11 @@ export interface PortfolioOutcome {
   realReturn: number; // inflation-adjusted annualized return
   /** Withdrawal months spent at the cut amount; only set when a spending cut was simulated. */
   monthsSpendingCut?: number;
+  /**
+   * The first withdrawal year's income tax and health premiums, in today's
+   * dollars, when the run planned them.
+   */
+  firstYearCosts?: { federalTax: number; stateTax: number; healthcarePremiums: number; premiumTaxCredit: number };
 }
 
 // ============================================================================
@@ -662,6 +707,11 @@ export interface RetirementAnalysisOutput {
    * before fees were deducted (version 12 and earlier).
    */
   feesDeducted?: { annualRate: number; coverage: number };
+  /**
+   * The first withdrawal year's income tax and health premiums, medians across
+   * the tested sequences in today's dollars, when the plan counted them.
+   */
+  firstYearCosts?: { federalTax: number; stateTax: number; healthcarePremiums: number; premiumTaxCredit: number };
   summary: {
     characteristics: PortfolioCharacteristics;
     tradeoffs: PortfolioTradeoffs;
