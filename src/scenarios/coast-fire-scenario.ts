@@ -77,10 +77,9 @@ import {
   type ClaimingAdjustment,
 } from '../services/social-security-claiming';
 import {
-  applySurvivorRule,
+  householdIncomes,
   householdTimeline,
   partnerAgeMissing,
-  partnerIncomes,
   partnerSavableFigures,
   resolvePartner,
   survivorSpendingFor,
@@ -89,12 +88,14 @@ import {
 import {
   describeHouseholdTimeline,
   householdIncomeFactRows,
+  householdSocialSecurityFactRows,
   householdTimelineFactRows,
   incomeEndClause,
   describePartnerIncome,
+  describeSpousalIncome,
   MISSING_PARTNER_AGE_SENTENCE,
   partnerAgeAt,
-  partnerAgeInputRequest,
+  householdInputRequest,
   withPartnerAgeField,
   type PlannedHousehold,
 } from '../openai/household-evidence';
@@ -576,6 +577,8 @@ interface ResolvedCoastFireVariant {
   /** A partner to plan for as well, on this case's ages. */
   household?: PlannedHousehold;
   missingPartnerAge?: true;
+  /** When the user claims Social Security and whether their own benefit is known, for a spousal benefit. */
+  userSocialSecurity: { claimAge: number; known: boolean };
   /** The age the incomes are valued through: the household's horizon with a partner. */
   planThroughAge: number;
   /** The user's own planning age, when they said it or saved it; otherwise the convention. */
@@ -807,8 +810,7 @@ function resolveVariant(
   // convention. Always recorded as an assumption (including the default) so a
   // comparison that only moves the horizon cannot label the baseline as
   // "Planning through 0". With a partner, until the later of the two planning
-  // ages, with their incomes beside the user's and the survivor rule applied
-  // to both.
+  // ages.
   const savedHorizon = saved('planThroughAge');
   const userPlanThroughAge = take(
     'lifeExpectancy',
@@ -821,27 +823,50 @@ function resolveVariant(
   const namedPlanThroughAge = assumptions.find((assumption) =>
     assumption.key === 'lifeExpectancy' && assumption.origin !== 'default'
   )?.value;
+  // A spousal benefit needs to know when the user claims and whether their
+  // own benefit is known (a stated zero is), even with none of their own.
+  const userSocialSecurity = {
+    claimAge: socialSecurityStartAge ??
+      (overrides.socialSecurityStartAge !== undefined && overrides.sources.socialSecurityStartAge
+        ? overrides.socialSecurityStartAge
+        : saved('socialSecurityStartAge')?.value) ??
+      DEFAULT_SOCIAL_SECURITY_START_AGE,
+    known: assumptions.find((assumption) => assumption.key === 'socialSecurityAnnual')?.origin !== 'default',
+  };
   const partner = resolvePartner({
     stated: snapshot.statedPartner,
     statedFigures: snapshot.statedFigures,
     retirementAge: retirementAge!,
     currentAge: currentAge!,
+    ...(snapshot.userProfileValues?.householdStatus && { householdStatus: snapshot.userProfileValues.householdStatus }),
   });
-  const household: PlannedHousehold | undefined = partner && !('missingAge' in partner)
-    ? {
-      ...partner,
-      timeline: householdTimeline({ currentAge: currentAge!, userPlanThroughAge, partner: partner.plan }),
-    }
+  const resolvedPartner = partner && !('missingAge' in partner) ? partner : undefined;
+  const timeline = resolvedPartner
+    ? householdTimeline({ currentAge: currentAge!, userPlanThroughAge, partner: resolvedPartner.plan })
     : undefined;
-  const incomes: CoastFireIncome[] = household
-    ? applySurvivorRule(
-      [
-        ...ownIncomes.map((income) => ({ ...income, owner: 'user' as const })),
-        ...partnerIncomes(household.plan, household.timeline),
-      ],
-      household.timeline
-    )
-    : ownIncomes;
+  // With a partner, their incomes join the user's, each stopping with its
+  // holder, with whatever spousal and survivor benefits a marriage adds.
+  const couple = resolvedPartner && timeline
+    ? householdIncomes({
+      user: {
+        socialSecurity: {
+          ...(ownIncomes[0]?.kind === 'social_security' && {
+            benefit: { annualAmount: ownIncomes[0].annualAmount, startAge: ownIncomes[0].startAge },
+          }),
+          ...userSocialSecurity,
+        },
+        ...(ownIncomes.find((income) => income.kind === 'pension') && {
+          pension: ownIncomes.find((income) => income.kind === 'pension')!,
+        }),
+      },
+      household: { ...resolvedPartner, timeline },
+      currentAge: currentAge!,
+    })
+    : undefined;
+  const household: PlannedHousehold | undefined = resolvedPartner && timeline && couple
+    ? { ...resolvedPartner, timeline, socialSecurity: couple.socialSecurity }
+    : undefined;
+  const incomes: CoastFireIncome[] = couple?.incomes ?? ownIncomes;
   const survivorSpending = household ? survivorSpendingFor(household.plan, household.timeline) : undefined;
 
   return {
@@ -863,6 +888,7 @@ function resolveVariant(
     ...(claiming && { claiming }),
     ...(household && { household }),
     ...(partner && 'missingAge' in partner && { missingPartnerAge: true as const }),
+    userSocialSecurity,
     planThroughAge: household?.timeline.horizonAge ?? userPlanThroughAge,
     ...(namedPlanThroughAge !== undefined && { userPlanThroughAge: namedPlanThroughAge }),
     ...(survivorSpending && { survivorSpending }),
@@ -1053,7 +1079,12 @@ async function presetHistoricalTest(
       allocation: variant.allocation.id,
       // The planning age the straight line valued incomes through.
       ...(variant.userPlanThroughAge !== undefined && { lifeExpectancy: variant.userPlanThroughAge }),
-    }, variant.household && { partner: variant.household.plan });
+    }, variant.household && {
+      partner: variant.household.plan,
+      origins: variant.household.origins,
+      ...(variant.household.married && { married: variant.household.married }),
+      userSocialSecurity: variant.userSocialSecurity,
+    });
     const evaluated = run.primary;
     if (!evaluated) return undefined;
     const mix = QUICKPLAN_ALLOCATIONS[run.inputs.allocation];
@@ -1314,16 +1345,25 @@ export function coastFireScenarioCanonicalFacts(execution: CoastFireScenarioExec
       );
     }
     for (const income of m.incomes ?? []) {
-      // Counted at its own amount unless it is fixed or stops before the plan ends.
+      // Counted at its own amount unless it is fixed, stops before the plan
+      // ends, or is a survivor benefit spread over all of retirement.
       const ends = income.endAge !== undefined;
-      if ((income.inflationAdjusted && !ends) || !(income.levelAmount > 0)) continue;
+      if ((income.inflationAdjusted && !ends && income.kind !== 'survivor') || !(income.levelAmount > 0)) continue;
       const partner = income.owner === 'partner';
-      const name = income.kind === 'pension' ? 'pension' : income.inflationAdjusted ? 'Social Security' : 'income';
-      const whose = partner ? 'The partner\'s ' : '';
+      // A survivor benefit paid alone until the survivor's own starts is its own segment.
+      const bridging = income.kind === 'survivor' && ends;
+      const name = income.kind === 'pension'
+        ? 'pension'
+        : income.kind === 'spousal'
+          ? 'spousal benefit'
+          : income.kind === 'survivor'
+            ? bridging ? 'survivor benefit, before their own Social Security starts' : 'survivor benefit, above their own Social Security'
+            : income.inflationAdjusted ? 'Social Security' : 'income';
+      const whose = partner ? 'The partner\'s ' : income.kind === 'spousal' || income.kind === 'survivor' ? 'The user\'s ' : '';
       const what = income.inflationAdjusted ? `${whose}${name}` : `${whose}${partner ? 'fixed' : 'Fixed'} ${name}`;
       add(
         'scenario_calculation',
-        `${partner ? 'partner_' : ''}${income.kind}_counted_value`,
+        `${partner ? 'partner_' : ''}${income.kind}${bridging ? '_before_own' : ''}_counted_value`,
         `${what} counted as, in today's dollars a year: its level worth over retirement through age ${m.planThroughAge}` +
           (income.inflationAdjusted ? '' : ` if prices rise ${rate(m.inflationPercent ?? 0)} a year`) +
           (ends ? `, paid until the user's age ${income.endAge}` : ''),
@@ -1346,6 +1386,7 @@ export function coastFireScenarioCanonicalFacts(execution: CoastFireScenarioExec
       const streams = (m.incomes ?? []).map((income) => toStream(income));
       const rows = [
         ...householdIncomeFactRows(streams, scenario.household),
+        ...householdSocialSecurityFactRows(scenario.household),
         ...householdTimelineFactRows(scenario.household, m.spendingChange),
       ];
       for (const row of rows) add('scenario_input', row.suffix, row.label, row.value, row.unit);
@@ -1507,8 +1548,11 @@ function describeHistoricalTest(scenario: CoastFireScenarioResult): string {
   if (!test) return '';
   const m = scenario.metrics;
   const household = scenario.household;
-  const incomes = (m.incomes ?? []).map((income) => {
-    const name = income.kind === 'social_security' ? 'Social Security' : 'pension';
+  // A survivor benefit paid in two parts is one income.
+  const listed = (m.incomes ?? []).filter((income, index, all) =>
+    all.findIndex((other) => other.owner === income.owner && other.kind === income.kind) === index);
+  const incomes = listed.map((income) => {
+    const name = incomeName(income.kind);
     if (household && income.owner === 'partner') return `your partner's ${name} from ${partnerAgeAt(income.startAge, household)}`;
     if (household) return `your ${name} from ${income.startAge}`;
     return `${income.kind === 'social_security' ? 'Social Security' : 'the pension'} from ${income.startAge}`;
@@ -1557,6 +1601,12 @@ function describeIncomes(scenario: CoastFireScenarioResult): string {
     const stopsEarly = term.inflationAdjusted && term.endAge !== undefined && term.levelAmount > 0
       ? ` Since it stops then, I counted it as ${money(term.levelAmount)} a year: its average worth through age ${m.planThroughAge}.`
       : '';
+    // The survivor benefit is part of the couple's timeline, below.
+    if (term.kind === 'survivor') continue;
+    if (household && term.kind === 'spousal') {
+      sentences.push(`${capitalize(describeSpousalIncome(stream, household))}.${stopsEarly}`);
+      continue;
+    }
     if (household && term.owner === 'partner') {
       const clause = describePartnerIncome(stream, household);
       const fixed = !term.inflationAdjusted && term.levelAmount > 0
@@ -1586,19 +1636,37 @@ function describeIncomes(scenario: CoastFireScenarioResult): string {
         `prices rise, so I counted it as ${money(term.levelAmount)} a year in today's dollars: its average worth through age ` +
         `${m.planThroughAge} if prices rise ${rate(m.inflationPercent ?? 0)} a year.${startAssumed}${inflationAssumed}`);
   }
+  // What every survivor benefit, paid only from the first death, was counted as.
+  const survivorLevel = terms
+    .filter((term) => term.kind === 'survivor')
+    .reduce((sum, term) => sum + term.levelAmount, 0);
+  if (household && survivorLevel > 0) {
+    sentences.push(`Since the survivor benefit is paid only after the first death, I counted it as ${money(survivorLevel)} ` +
+      `a year: its average worth over retirement through age ${m.planThroughAge}.`);
+  }
   const gaps = terms
     .filter((term) => term.gapYears > 0)
     .map((term) => {
       const name = term.kind === 'social_security' ? 'Social Security' : 'the pension';
       const whose = !household ? name : term.owner === 'partner'
-        ? `your partner's ${term.kind === 'social_security' ? 'Social Security' : 'pension'}`
-        : `your ${term.kind === 'social_security' ? 'Social Security' : 'pension'}`;
+        ? `your partner's ${incomeName(term.kind)}`
+        : `your ${incomeName(term.kind)}`;
       return `${whose}'s share for the ${term.gapYears === 1 ? 'year' : `${term.gapYears} years`} before it starts`;
     });
   if ((m.bridgeReserve ?? 0) > 0 && gaps.length > 0) {
     sentences.push(`The target includes ${money(m.bridgeReserve!)} set aside at ${m.retirementAge} to pay ${joinList(gaps)}.`);
   }
   return ` ${sentences.join(' ')}`;
+}
+
+/** An income's name in a sentence, after "your" or "your partner's". */
+function incomeName(kind: CoastFireIncome['kind']): string {
+  switch (kind) {
+    case 'pension': return 'pension';
+    case 'spousal': return 'spousal benefit';
+    case 'survivor': return 'survivor benefit';
+    default: return 'Social Security';
+  }
 }
 
 /**
@@ -1848,11 +1916,15 @@ const COAST_FIRE_INPUT_REQUEST: InputRequestSpec = {
 
 /** The form for a Coast FIRE run waiting on figures, or null for one that ran or failed otherwise. */
 export function coastFireInputRequest(execution: CoastFireScenarioExecution): InputRequest | null {
-  // A number worked out without the partner asks for their age alone.
+  // A number worked out without the partner asks for their age alone; one
+  // that could not count spousal or survivor benefits asks whether they are married.
   if (execution.status === 'completed') {
-    return execution.scenarios[0]?.missingPartnerAge
-      ? partnerAgeInputRequest(COAST_FIRE_CALCULATOR_ID, COAST_FIRE_INPUT_REQUEST.question)
-      : null;
+    const primary = execution.scenarios[0];
+    return householdInputRequest(
+      primary?.missingPartnerAge ? { missingAge: true } : primary?.household,
+      COAST_FIRE_CALCULATOR_ID,
+      COAST_FIRE_INPUT_REQUEST.question
+    );
   }
   if (!execution.missingFields?.length) return null;
   // Without an age there is no telling whether the conventional retirement

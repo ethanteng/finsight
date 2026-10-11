@@ -100,12 +100,22 @@ function householdRunner(base = fakeRunner()) {
       partner: household.partner,
     });
     const survivorSpending = survivorSpendingFor(household.partner, timeline);
+    const { streams, socialSecurity } = householdIncomeStreams(quickPlanIncomeStreams(result.inputs), {
+      plan: household.partner,
+      ...(household.origins && { origins: household.origins }),
+      ...(household.married && { married: household.married }),
+      timeline,
+    }, {
+      currentAge: request.currentAge,
+      ...(household.userSocialSecurity && { userSocialSecurity: household.userSocialSecurity }),
+    });
     return {
       ...result,
       history: { ...result.history, horizonYears: timeline.horizonAge - request.currentAge },
       household: {
         timeline,
-        incomeStreams: householdIncomeStreams(quickPlanIncomeStreams(result.inputs), household.partner, timeline),
+        incomeStreams: streams,
+        socialSecurity,
         ...(survivorSpending && { survivorSpending }),
       },
     };
@@ -670,7 +680,7 @@ describe('retirement plan from stated figures', () => {
 
   it('plans for a partner too: their benefit, the joint horizon, and the survivor years', async () => {
     const runner = householdRunner();
-    const snapshot = { ...NO_HOLDINGS, statedPartner: { age: 42, socialSecurityAnnual: 24_000 } };
+    const snapshot = { ...NO_HOLDINGS, statedPartner: { age: 42, socialSecurityAnnual: 24_000, married: true } };
     const execution = await runStatedRetirementPlan(snapshot, plan(LEAD), runner as QuickPlanRunner) as CompletedStatedRetirementPlanExecution;
 
     expect(runner.mock.calls[0][1]).toEqual({
@@ -678,15 +688,21 @@ describe('retirement plan from stated figures', () => {
         age: 42,
         planThroughAge: 95,
         socialSecurity: { annualAmount: 24_000, startAge: 67, quote: { amount: 24_000, age: 67 } },
+        socialSecurityClaimAge: 67,
       },
+      origins: { age: 'stated', socialSecurityAnnual: 'stated', socialSecurityStartAge: 'default', planThroughAge: 'default' },
+      married: { value: true, origin: 'stated' },
+      userSocialSecurity: { claimAge: 67, known: true },
     });
     const [scenario] = execution.scenarios;
     expect(scenario.inputs.lifeExpectancy).toBe(95);
     expect(scenario.history.horizonYears).toBe(53);
     expect(scenario.household?.incomeStreams).toEqual([
-      // The larger benefit is the user's, so the survivor keeps it.
-      { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
-      { label: 'your partner\'s Social Security', annualAmount: 24_000, startAge: 70, inflationAdjusted: true, endAge: 95 },
+      // The user reaches 95 first; their own stops then.
+      { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true, endAge: 95 },
+      { label: 'your partner\'s Social Security', annualAmount: 24_000, startAge: 70, inflationAdjusted: true },
+      // Married, the partner is then paid the user's $30,000: $6,000 above their own.
+      { label: 'your partner\'s survivor benefit on your record', annualAmount: 6_000, startAge: 95, inflationAdjusted: true },
     ]);
 
     const disclosure = describeStatedRetirementPlanExecution(execution)!;
@@ -696,22 +712,25 @@ describe('retirement plan from stated figures', () => {
       'partner\'s Social Security\'s share for the 10 years before it starts at their 67 (your 70).'
     );
     expect(disclosure).toContain(
-      'Your partner\'s Social Security of $24,000 a year in today\'s dollars from their 67 (your 70), an age I assumed, ' +
-      'until the first of you reaches their planning age, when the survivor keeps the larger benefit.'
+      'Your partner\'s Social Security of $24,000 a year in today\'s dollars from their 67 (your 70), an age I assumed.'
     );
     expect(disclosure).toContain(
       'Planning for you and your partner, 42 today; the plan runs until your partner reaches 95, an age I assumed, when you would be 98.'
     );
     expect(disclosure).toContain(
-      'From when you reach 95, the survivor keeps the larger Social Security benefit, and spending stays $70,000 a year ' +
-      'unless you tell me what one of you would spend alone.'
+      'From when you reach 95, your partner\'s Social Security becomes $30,000 a year, the survivor benefit on your record, ' +
+      'and spending stays $70,000 a year unless you tell me what one of you would spend alone.'
     );
+    expect(disclosure).not.toContain('don\'t know whether you\'re married');
 
     const facts = statedRetirementPlanCanonicalFacts(execution);
     const byEnding = (suffix: string) => facts.find((fact) => fact.id.endsWith(suffix));
     expect(byEnding('_partner_social_security_annual')).toMatchObject({ value: 24_000, unit: 'usd' });
     expect(byEnding('_partner_social_security_start_age_partner')).toMatchObject({ value: 67, unit: 'age' });
-    expect(byEnding('_partner_social_security_end_age')).toMatchObject({ value: 95, unit: 'age' });
+    expect(byEnding('_social_security_end_age')).toMatchObject({ value: 95, unit: 'age' });
+    expect(byEnding('_partner_social_security_end_age')).toBeUndefined();
+    expect(byEnding('_partner_survivor_benefit_annual')).toMatchObject({ value: 30_000, unit: 'usd' });
+    expect(byEnding('_partner_survivor_benefit_start_age')).toMatchObject({ value: 95, unit: 'age' });
     expect(byEnding('_plan_end_age')).toMatchObject({ value: 98, unit: 'age' });
     expect(byEnding('_first_death_age')).toMatchObject({ value: 95, unit: 'age' });
     expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
@@ -720,7 +739,9 @@ describe('retirement plan from stated figures', () => {
     expect(offer?.items.filter((item) => item.key.startsWith('partner'))).toEqual([
       { key: 'partnerAge', label: 'Your partner\'s age', value: 42, display: '42' },
       { key: 'partnerSocialSecurityAnnual', label: 'Your partner\'s Social Security', value: 24_000, display: '$24,000 a year' },
+      { key: 'partnerMarried', label: 'Married', value: 'married', display: 'Yes' },
     ]);
+    expect(statedRetirementPlanInputRequest(execution)).toBeNull();
   });
 
   it('spends what the user said one survivor would, from the first death', async () => {
@@ -743,7 +764,8 @@ describe('retirement plan from stated figures', () => {
     ) as CompletedStatedRetirementPlanExecution;
     expect(younger.scenarios[0].household?.survivorSpending).toEqual({ fromAge: 95, annualAmount: 50_000 });
     expect(describeStatedRetirementPlanExecution(younger)).toContain(
-      'From when you reach 95, spending becomes $50,000 a year, what you said one of you would spend alone.'
+      'From when you reach 95, each Social Security benefit stops with the person it belongs to, ' +
+      'and spending becomes $50,000 a year, what you said one of you would spend alone.'
     );
   });
 
@@ -753,9 +775,41 @@ describe('retirement plan from stated figures', () => {
       plan(LEAD),
       householdRunner() as QuickPlanRunner
     );
-    expect(describeStatedRetirementPlanExecution(execution)).toContain(
-      'From when you reach 95, spending stays $70,000 a year unless you tell me what one of you would spend alone.'
+    const disclosure = describeStatedRetirementPlanExecution(execution);
+    expect(disclosure).toContain(
+      'From when you reach 95, each Social Security benefit stops with the person it belongs to, ' +
+      'and spending stays $70,000 a year unless you tell me what one of you would spend alone.'
     );
+    // Married, the partner would be paid a survivor benefit; nobody said, so the answer asks.
+    expect(disclosure).toContain(
+      'No spousal or survivor Social Security benefits, since I don\'t know whether you\'re married (tell me if you are and I will count them).'
+    );
+    expect(statedRetirementPlanInputRequest(execution)).toMatchObject({
+      title: 'Spousal and survivor benefits',
+      fields: [{ id: 'partnerMarried', required: true, sentence: 'My partner and I are {value}.' }],
+    });
+  });
+
+  it('pays a partner with no benefit of their own a spousal benefit on the user\'s record when married', async () => {
+    const execution = await runStatedRetirementPlan(
+      { ...NO_HOLDINGS, statedPartner: { age: 42, married: true } },
+      plan(LEAD),
+      householdRunner() as QuickPlanRunner
+    ) as CompletedStatedRetirementPlanExecution;
+    const [scenario] = execution.scenarios;
+    expect(scenario.household?.incomeStreams).toContainEqual(
+      // Half the user's $30,000, from when both have claimed: the partner's 67, the user's 70.
+      { label: 'your partner\'s spousal benefit on your record', annualAmount: 15_000, startAge: 70, inflationAdjusted: true, endAge: 95 }
+    );
+    const disclosure = describeStatedRetirementPlanExecution(execution)!;
+    expect(disclosure).toContain(
+      'Your partner\'s spousal benefit of $15,000 a year in today\'s dollars on your record from their 67 (your 70), ' +
+      'until the first of you reaches their planning age (the least they would be paid, since I don\'t know their own benefit).'
+    );
+    const facts = statedRetirementPlanCanonicalFacts(execution);
+    expect(facts.find((fact) => fact.id.endsWith('_partner_spousal_annual'))).toMatchObject({ value: 15_000, unit: 'usd' });
+    expect(facts.find((fact) => fact.id.endsWith('_partner_spousal_start_age'))).toMatchObject({ value: 70, unit: 'age' });
+    expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
   });
 
   it('leaves a partner\'s incomes out until it knows their age, and says so', async () => {

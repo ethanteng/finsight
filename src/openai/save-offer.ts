@@ -62,6 +62,7 @@ const LABELS: Record<SaveOfferKey, string> = {
   partnerRetirementIncomeInflation: 'Your partner\'s pension rises with inflation',
   partnerPlanThroughAge: 'Plan through your partner\'s age',
   survivorAnnualSpending: 'What one of you would spend alone',
+  partnerMarried: 'Married',
   investedBalance: 'Invested today',
 };
 
@@ -71,6 +72,8 @@ const CHOICE_LABELS: Record<string, string> = {
   growth: 'Growth',
   fixed: 'No, a fixed amount',
   rises_with_inflation: 'Yes',
+  married: 'Yes',
+  not_married: 'No',
 };
 
 const AGE_KEYS: ReadonlySet<SaveOfferKey> = new Set([

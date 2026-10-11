@@ -155,12 +155,13 @@ describe('Your numbers', () => {
     render(<YourNumbersPageClient />);
 
     fireEvent.change(await screen.findByLabelText('Your partner\'s age'), { target: { value: '58' } });
+    fireEvent.change(screen.getByLabelText('Are you married?'), { target: { value: 'married' } });
     fireEvent.change(screen.getByLabelText('Their Social Security a year'), { target: { value: '24,000' } });
     fireEvent.change(screen.getByLabelText('What one of you would spend a year alone'), { target: { value: '60,000' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save partner' }));
 
     await waitFor(() => expect(saved).toHaveBeenCalledWith({
-      figures: { partnerAge: 58, partnerSocialSecurityAnnual: 24_000, survivorAnnualSpending: 60_000 },
+      figures: { partnerAge: 58, partnerMarried: 'married', partnerSocialSecurityAnnual: 24_000, survivorAnnualSpending: 60_000 },
       source: 'page',
     }));
   });

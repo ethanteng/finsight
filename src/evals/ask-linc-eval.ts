@@ -4,7 +4,7 @@ import type { FinancialContextSnapshot } from '../openai/types';
 import { normalizeContextPacks, questionNeedsFromPacks } from '../openai/context-packs';
 import type { ContextPlan } from '../openai/context-planner';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
-import { householdTimeline } from '../services/household';
+import { householdIncomeStreams, householdTimeline } from '../services/household';
 
 export type AskLincEvalCategory =
   | 'numerical_accuracy'
@@ -330,31 +330,36 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
   });
   const contributionFacts = contribution.showTheMathData!.evidenceManifest.facts;
 
-  // A couple: the partner's benefit on both ages, the plan run until the
-  // younger reaches their planning age, and the smaller benefit stopping at
-  // the first death -- disclosed, and citeable.
+  // A married couple: the partner's benefit on both ages, the plan run until
+  // the younger reaches their planning age, and from the first death the
+  // survivor paid the larger benefit on the other's record -- disclosed, and
+  // citeable.
   const partnerPlan = {
     age: 42,
     planThroughAge: 95,
     socialSecurity: { annualAmount: 20_000, startAge: 67, quote: { amount: 20_000, age: 67 } },
   };
+  const coupleHousehold = {
+    plan: partnerPlan,
+    origins: { age: 'stated', socialSecurityAnnual: 'stated', socialSecurityStartAge: 'default', planThroughAge: 'default' } as const,
+    married: { value: true, origin: 'stated' } as const,
+    timeline: householdTimeline({ currentAge: 45, userPlanThroughAge: 95, partner: partnerPlan }),
+  };
+  const coupleIncome = householdIncomeStreams(
+    [{ label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true }],
+    coupleHousehold,
+    { currentAge: 45 }
+  );
   const coupleSnapshot = retirementSnapshot();
   coupleSnapshot.retirementAnalysis = {
     ...coupleSnapshot.retirementAnalysis!,
     _storedInputParams: {
       ...coupleSnapshot.retirementAnalysis!._storedInputParams,
       lifeExpectancy: 98,
-      incomeStreams: [
-        { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
-        { label: 'your partner\'s Social Security', annualAmount: 20_000, startAge: 70, inflationAdjusted: true, endAge: 95 },
-      ],
+      incomeStreams: coupleIncome.streams,
     },
     _incomeOrigins: { socialSecurity: { amount: 'stated', startAge: 'stated' } },
-    _household: {
-      plan: partnerPlan,
-      origins: { age: 'stated', socialSecurityAnnual: 'stated', socialSecurityStartAge: 'default', planThroughAge: 'default' },
-      timeline: householdTimeline({ currentAge: 45, userPlanThroughAge: 95, partner: partnerPlan }),
-    },
+    _household: { ...coupleHousehold, socialSecurity: coupleIncome.socialSecurity },
   };
   const couple = await runAskLincAnalysis({
     question: 'Are we on track to retire, counting my wife\'s Social Security?',
@@ -722,15 +727,18 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
       id: 'partner-incomes-and-horizon-reach-the-projection',
       category: 'retirement',
       passed: couple.structuredResponse.summary.includes(
-        'your partner\'s Social Security of $20,000 a year in today\'s dollars from their 67 (your 70), an age I assumed, ' +
-        'until the first of you reaches their planning age, when the survivor keeps the larger benefit'
+        'your partner\'s Social Security of $20,000 a year in today\'s dollars from their 67 (your 70), an age I assumed'
       ) &&
         couple.structuredResponse.summary.includes('the plan runs until your partner reaches 95, an age I assumed, when you would be 98') &&
+        couple.structuredResponse.summary.includes(
+          'from when you reach 95, your partner\'s Social Security becomes $30,000 a year, the survivor benefit on your record'
+        ) &&
         keyNumberValue(couple, 'partner_social_security') === 20_000 &&
         coupleFacts.some(fact => fact.id === 'retirement_plan_end_age' && fact.value === 98) &&
-        coupleFacts.some(fact => fact.id === 'retirement_partner_social_security_end_age' && fact.value === 95) &&
+        coupleFacts.some(fact => fact.id === 'retirement_social_security_end_age' && fact.value === 95) &&
+        coupleFacts.some(fact => fact.id === 'retirement_partner_survivor_benefit_annual' && fact.value === 30_000) &&
         couple.showTheMathData!.evidenceManifest.validation.deterministic.valid,
-      detail: 'A partner\'s benefit is disclosed at both ages with the joint horizon and the survivor rule, and the answer can cite it.',
+      detail: 'A married partner\'s benefit is disclosed at both ages with the joint horizon and the survivor benefit, and the answer can cite it.',
     },
     {
       id: 'partner-age-form-under-a-holdings-answer',

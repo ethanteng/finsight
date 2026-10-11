@@ -1,22 +1,23 @@
 # A partner in the plan
 
-Every retirement calculator used to plan for one person: one age, one horizon, one Social Security benefit. A couple's plan differs in three ways that change the answer, and `src/services/household.ts` decides each of them once for all three calculators:
+Every retirement calculator used to plan for one person: one age, one horizon, one Social Security benefit. A couple's plan differs in four ways that change the answer, and `src/services/household.ts` decides each of them once for all three calculators:
 
 - **Their incomes.** The partner's Social Security, moved by the same claiming rules as the user's, and their pension, each starting at the partner's own age.
 - **The joint horizon.** Each partner plans through their own age. The plan runs until the later of the two, so with a younger partner it runs past the user's own planning age.
-- **The survivor years.** When the first of them reaches their planning age, the smaller Social Security benefit stops and the survivor keeps the larger, as Social Security's survivor rule pays. A pension stops with the person it belongs to. Spending stays what the couple spent unless the user says what one of them would spend alone.
+- **The survivor years.** When the first of them reaches their planning age, their own Social Security and pension stop. Spending stays what the couple spent unless the user says what one of them would spend alone.
+- **What Social Security pays a married couple.** The lower earner can be paid a spousal benefit on the other's record, and the survivor a survivor benefit on the record of the first to die. Neither is paid to a couple who are not married, so neither is counted until Linc knows they are (see "Spousal and survivor benefits" below).
 
 Savings, contributions and spending are the household's as the user states them. Nothing splits them between the two.
 
 ## Where the partner comes from
 
-The context planner extracts the partner once, in its retirement inputs (`partnerAge`, `partnerSocialSecurityAnnual`, `partnerSocialSecurityStartAge`, `partnerSocialSecurityAmountAge`, `partnerPensionAnnual`, `partnerPensionStartAge`, `partnerPensionInflation`, `partnerPlanThroughAge`, `survivorAnnualSpending`). Every partner age is the partner's own. The calculators' own override fields never carry a partner's figure. `snapshot.statedPartner` carries the extraction to all three calculators, and `retirementInputsForBaseline` never withholds it for a what-if on the user's plan.
+The context planner extracts the partner once, in its retirement inputs (`partnerAge`, `partnerSocialSecurityAnnual`, `partnerSocialSecurityStartAge`, `partnerSocialSecurityAmountAge`, `partnerPensionAnnual`, `partnerPensionStartAge`, `partnerPensionInflation`, `partnerPlanThroughAge`, `survivorAnnualSpending`, `partnerMarried`). Every partner age is the partner's own. The calculators' own override fields never carry a partner's figure. `snapshot.statedPartner` carries the extraction to all three calculators, and `retirementInputsForBaseline` never withholds it for a what-if on the user's plan.
 
 Each figure resolves the way the user's own do: the current decision, then Your numbers, then a named default, and a term is only defaulted for an income the partner has.
 
 | Term | Default | Why |
 | --- | --- | --- |
-| Partner's Social Security start age | 67, their age | Full retirement age for anyone born after 1959 |
+| Partner's Social Security start age | 67, their age | Full retirement age for anyone born after 1959. Resolved even with no benefit of their own, for when a spousal benefit would start |
 | Partner's pension start age | The household's retirement: the user's retirement age, at the partner's age then | Most pensions start when work stops |
 | Partner's pension inflation | Fixed | Overstating future income is the costlier mistake |
 | Each partner's planning age | 95 | The same convention as the user's |
@@ -32,34 +33,49 @@ The engines run on the user's age, so everything is converted to it: a partner t
 
 - **Horizon.** The later of the two planning ages, on the user's age.
 - **First death.** The earlier of the two. When both reach their planning age in the same year, nothing changes before the plan ends.
-- **Survivor rule** (`applySurvivorRule`). At the first death the smaller of the two Social Security benefits stops. A pension stops when its holder reaches their planning age. An income that would stop before it starts is never paid, and is left out.
+- **The first death** (`householdIncomes`). Each one's own Social Security stops when they reach their planning age, and so does a pension. A married couple's spousal benefit stops then too, and the survivor's benefit begins. An income that would stop before it starts is never paid, and is left out.
 - **Survivor spending.** When the user says what one of them would spend alone, the engine spends that from the first death (`RetirementAnalysisInput.survivorSpending`). The simulator scales whatever the withdrawal policy has made the couple's spending by then by the same ratio, so it composes with every policy.
+
+## Spousal and survivor benefits
+
+Social Security pays a married couple more than two single people (`householdSocialSecurity`), and only a married couple: an unmarried partner has no claim on the other's record.
+
+**Whether they are married** (`resolveMarriage`) comes from what the user says in the decision (the planner's `partnerMarried`: yes when they say they are married or call their partner their husband, wife or spouse; no when they say they are not, including a boyfriend, girlfriend or fiancé; otherwise unspecified, because "partner" alone does not say), then Your numbers (`partnerMarried`), then the household status Linc remembers (`married` is married, `partnered` is not). When none says and being married would pay more, every calculator counts neither benefit, says so in the answer, and carries a one-field form asking (`partnerMarriageInputRequest`). Marriage is never assumed.
+
+Each benefit is worked out from a **full-retirement-age benefit** (the primary insurance amount), not the amount a claiming age made of it: a benefit claimed at another age is divided by its claiming factor on its holder's own birth year (`primaryInsuranceAmount`).
+
+- **Spousal benefit.** The lower earner is paid half the other's full benefit, less their own full benefit. It starts once both have claimed (applying for one benefit is applying for both) and never before 62. Started before the lower earner's full retirement age it is reduced 25/36 of 1% a month for the first 36 months and 5/12 of 1% beyond; it earns nothing for waiting past it (`spousalFactor`). It stops at the first death. When nobody has said what the lower earner's own benefit is, it is counted as none and the spousal benefit is disclosed as the least they would be paid: with any benefit of their own, they would be paid at least as much.
+- **Survivor benefit.** From the first death the survivor is paid what the deceased was paid, or would have been: their full benefit if they died before claiming, with any delayed credits earned by then. Taken before the survivor's own full retirement age for survivors (`survivorFullRetirementAgeMonths`, a table two years behind the retirement one), it is reduced in proportion, to 71.5% at 60 (`survivorFactor`); it cannot start before 60. If the deceased claimed early, it is worked out from their full benefit, then capped at the larger of what they were paid and 82.5% of their full benefit. The survivor is paid the larger of this and their own benefit, so the engine counts the part above their own, and the whole survivor benefit until their own starts if it starts later.
+
+The survivor is assumed to claim the survivor benefit as soon as they can. The summary of what was counted rides beside the incomes as `socialSecurity` (`HouseholdSocialSecurity`): each one's full benefit, the spousal and survivor benefits, and whether the marriage was unknown.
 
 ## Each calculator
 
 - **Holdings-based projection** (`src/openai/context-service.ts`). The run's `lifeExpectancy` is the household horizon. The user's own planning age is stored beside it as `userPlanThroughAge`, and that is what a later run reads back, or the horizon would grow with every run. A cached run is reused only when its incomes, horizon and survivor spending match. The resolved partner and timeline ride on the analysis as `_household`.
-  - **What-ifs** (`src/scenarios/retirement-scenario.ts`). A claiming-age what-if re-applies the survivor rule, because claiming later can make the user's benefit the larger one. A planning-age what-if moves the user's own age, and the horizon follows from it. A partner's pension that only ever started at the household's retirement moves with a what-if's retirement age.
-- **Stated plan and the quick plan** (`src/scenarios/stated-retirement-plan-scenario.ts`, `src/services/retirement-quickplan.ts`). `runRetirementQuickPlan` takes an optional household. The public calculator plans for one person and never sends one. With a household, the run spends to the joint horizon on every income, with the survivor rule and survivor spending. Its "spend 10% less" lever lowers the survivor's spending by the same share, and a `rates` run, which has no spending level, counts none. The result's `household` carries the timeline and every income it counted.
+  - **What-ifs** (`src/scenarios/retirement-scenario.ts`). Every what-if works the couple's Social Security out afresh from the user's own streams (`rebuildHouseholdStreams`): claiming later changes when a spousal benefit starts and what a survivor is paid, and a planning-age what-if moves the first death. A partner's pension that only ever started at the household's retirement moves with a what-if's retirement age.
+- **Stated plan and the quick plan** (`src/scenarios/stated-retirement-plan-scenario.ts`, `src/services/retirement-quickplan.ts`). `runRetirementQuickPlan` takes an optional household: the partner, where their figures came from, the marriage, and when the user claims. The public calculator plans for one person and never sends one. With a household, the run spends to the joint horizon on every income, spousal and survivor benefits included, with survivor spending. Its "spend 10% less" lever lowers the survivor's spending by the same share, and a `rates` run, which has no spending level, counts none. The result's `household` carries the timeline, every income it counted, and what Social Security pays the couple.
 - **Coast FIRE** (`src/scenarios/coast-fire-scenario.ts`, `coast-fire-income.ts`). The partner's incomes join the user's in the straight line, valued through the joint horizon:
   - an income that stops before the plan ends is counted at the level amount with the same value as the years it pays;
+  - a survivor benefit is counted at the level amount with its value over the whole retirement, not as a late income with a reserve to bridge to it: it replaces a benefit that stops;
   - a survivor's lower spending is counted as the level spending with the same value over retirement, and the answer names both figures;
   - the market-history test runs the quick plan with the household.
 
 ## In the answer
 
-Each partner income is named at both ages ("from their 67 (your 70)"), with when it stops, any claiming rule, and which terms were assumed or saved. The disclosure also gives the timeline: the partner's age, who reaches their planning age first, and what changes then. The wording is shared (`src/openai/household-evidence.ts`), so a couple's plan reads the same whichever calculator answered.
+Each partner income is named at both ages ("from their 67 (your 70)"), with when it stops, any claiming rule, and which terms were assumed or saved. A spousal benefit is named with whose record it is on, when it starts, whether it was reduced, and whether it is only the least they would be paid. The disclosure also gives the timeline: the partner's age, how Linc knows they are married when that came from Your numbers or memory, who reaches their planning age first, and what changes then: the survivor's Social Security becoming the survivor benefit (with any reduction or early-claim cap), or, for a couple not known to be married, each benefit stopping with its holder. The wording is shared (`src/openai/household-evidence.ts`), so a couple's plan reads the same whichever calculator answered.
 
-The fact pack publishes each of the partner's incomes, with its start age at both ages, and the end age of any income that stops. It also publishes the partner's age and planning age, the user's age when the plan ends, the user's age at the first death, and the survivor's spending. Every age a value is on is named in its label. Holdings facts are prefixed `retirement_`, and each scenario's facts carry the scenario's prefix.
+The fact pack publishes each of the partner's incomes, with its start age at both ages, and the end age of any income that stops. For a married couple it also publishes each one's full-retirement-age benefit, the spousal benefit and the user's age it starts at, and the survivor benefit and the user's age it starts at (`householdSocialSecurityFactRows`). It also publishes the partner's age and planning age, the user's age when the plan ends, the user's age at the first death, and the survivor's spending. Every age a value is on is named in its label. Holdings facts are prefixed `retirement_`, and each scenario's facts carry the scenario's prefix.
 
 ## Your numbers
 
-The page has a "Your partner" section: `partnerAge`, `partnerSocialSecurityAnnual`, `partnerSocialSecurityStartAge`, `partnerRetirementIncome`, `partnerRetirementIncomeStartAge`, `partnerRetirementIncomeInflation`, `partnerPlanThroughAge` and `survivorAnnualSpending`. A saved partner's age is not advanced with time, like the user's remembered age, so the gap between them stays as it was saved.
+The page has a "Your partner" section: `partnerAge`, `partnerMarried` (`married` or `not_married`), `partnerSocialSecurityAnnual`, `partnerSocialSecurityStartAge`, `partnerRetirementIncome`, `partnerRetirementIncomeStartAge`, `partnerRetirementIncomeInflation`, `partnerPlanThroughAge` and `survivorAnnualSpending`. A saved partner's age is not advanced with time, like the user's remembered age, so the gap between them stays as it was saved.
 
-"Use these next time?" offers the partner's figures the user stated in this decision, from the stated plan or Coast FIRE (`partnerSavableFigures`). A benefit moved to another claiming age is offered as paid there, with that age.
+"Use these next time?" offers the partner's figures the user stated in this decision, from the stated plan or Coast FIRE (`partnerSavableFigures`), and whether they are married when the user said. A benefit moved to another claiming age is offered as paid there, with that age.
 
 ## Not yet
 
-- **Spousal benefits.** A partner with a small benefit of their own can be paid up to half of the other's at full retirement age. Not modeled yet.
 - **A pension's survivor share.** A joint-and-survivor pension keeps paying part of itself to the survivor. A pension stops with its holder here.
 - **What-ifs on the partner.** "What if my partner claims at 70?" has no override field of its own yet. The partner's figures are the plan's, the same in every case.
-- **A survivor benefit claimed early.** A survivor who claims a survivor benefit before their own full retirement age is paid less. The rule here keeps the larger benefit as it was.
+- **When a survivor claims.** The survivor benefit starts as soon as it can. Waiting to the survivor's full retirement age, or taking one benefit early and switching to the other later, is not compared.
+- **Divorced and caregiving spouses.** A divorced spouse married ten years can claim on an ex-spouse's record, and a survivor caring for a young child can claim before 60. Neither is modeled.
+- **Exact birth dates.** Full retirement age is read from the birth year an age implies, as the claiming rules are.

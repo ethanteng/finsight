@@ -16,7 +16,15 @@ const saved = (value: number | string) => ({ value, savedAt: SAVED_AT, source: '
 
 describe('income for the holdings-based projection', () => {
   it('counts nothing when nobody said or saved any', () => {
-    expect(resolveRetirementIncome({ retirementAge: 65, currentAge: 50 })).toEqual({ streams: [], origins: {} });
+    expect(resolveRetirementIncome({ retirementAge: 65, currentAge: 50 })).toEqual({
+      streams: [],
+      origins: {},
+      // A spousal benefit still needs a claim age; nobody said what their own is.
+      socialSecurityClaim: { claimAge: 67, known: false },
+    });
+    // A stated zero is a known benefit of none.
+    expect(resolveRetirementIncome({ stated: { socialSecurityAnnual: 0, socialSecurityStartAge: 64 }, retirementAge: 65, currentAge: 50 }).socialSecurityClaim)
+      .toEqual({ claimAge: 64, known: true });
   });
 
   it('takes Your numbers, defaulting only the terms of an income the user has', () => {

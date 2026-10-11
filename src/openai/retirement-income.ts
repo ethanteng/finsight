@@ -10,7 +10,7 @@
  */
 
 import type { RetirementIncomeStream } from '../retirement-analytics/types';
-import { PARTNER_PENSION_LABEL, PENSION_LABEL, SOCIAL_SECURITY_LABEL } from '../services/household';
+import { PENSION_LABEL, SOCIAL_SECURITY_LABEL } from '../services/household';
 import {
   benefitAtClaimingAge,
   socialSecurityQuoteAge,
@@ -65,6 +65,12 @@ export interface StatedRetirementIncome {
 export interface ResolvedRetirementIncome {
   streams: RetirementIncomeStream[];
   origins: RetirementIncomeOrigins;
+  /**
+   * When the user claims Social Security, their own benefit or a spousal one,
+   * and whether anyone said what their own is (a stated zero included): a
+   * spousal benefit needs both even with no benefit of their own.
+   */
+  socialSecurityClaim: { claimAge: number; known: boolean };
 }
 
 function isIncomeInflation(value: unknown): value is IncomeInflation {
@@ -150,7 +156,15 @@ export function resolveRetirementIncome(args: {
   }
 
   if (savedDates.length > 0) origins.savedAt = savedDates.sort()[savedDates.length - 1];
-  return { streams, origins };
+  const ownBenefit = streams.find((stream) => stream.label === SOCIAL_SECURITY_LABEL);
+  const socialSecurityClaim = {
+    claimAge: ownBenefit?.startAge ??
+      stated.socialSecurityStartAge ??
+      savedNumber(statedFigures, 'socialSecurityStartAge')?.value ??
+      DEFAULT_PROJECTION_SOCIAL_SECURITY_START_AGE,
+    known: socialSecurityAnnual !== undefined,
+  };
+  return { streams, origins, socialSecurityClaim };
 }
 
 /**
@@ -160,14 +174,11 @@ export function resolveRetirementIncome(args: {
 export function incomeForRetirementAge(
   streams: readonly RetirementIncomeStream[],
   origins: RetirementIncomeOrigins | undefined,
-  retirementAge: number | null,
-  /** Whether the partner's pension start was only ever the household's retirement. */
-  partnerPensionStartsAtRetirement = false
+  retirementAge: number | null
 ): RetirementIncomeStream[] {
   if (retirementAge === null) return [...streams];
   return streams.map((stream) =>
-    (stream.label === PENSION_LABEL && origins?.pension?.startAge === 'default') ||
-    (stream.label === PARTNER_PENSION_LABEL && partnerPensionStartsAtRetirement)
+    stream.label === PENSION_LABEL && origins?.pension?.startAge === 'default'
       ? { ...stream, startAge: retirementAge }
       : stream
   );

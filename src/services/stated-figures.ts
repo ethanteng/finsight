@@ -34,6 +34,7 @@ export const STATED_FIGURE_KEYS = [
   'partnerRetirementIncomeInflation',
   'partnerPlanThroughAge',
   'survivorAnnualSpending',
+  'partnerMarried',
 ] as const;
 
 export type StatedFigureKey = (typeof STATED_FIGURE_KEYS)[number];
@@ -56,6 +57,8 @@ export const ALLOCATION_PRESETS = ['conservative', 'balanced', 'growth'] as cons
  * in today's dollars and indexed, the way Social Security is.
  */
 export const INCOME_INFLATION_OPTIONS = ['fixed', 'rises_with_inflation'] as const;
+/** Whether the user and their partner are married: spousal and survivor benefits depend on it. */
+export const MARRIAGE_OPTIONS = ['married', 'not_married'] as const;
 export type IncomeInflation = (typeof INCOME_INFLATION_OPTIONS)[number];
 
 export interface StatedFigureDefinition {
@@ -121,6 +124,11 @@ export const STATED_FIGURE_DEFINITIONS: Record<StatedFigureKey, StatedFigureDefi
     kind: 'usd_per_year',
     minimum: 1_000,
     maximum: 10_000_000,
+  },
+  partnerMarried: {
+    label: 'Whether you and your partner are married',
+    kind: 'choice',
+    options: MARRIAGE_OPTIONS,
   },
 };
 

@@ -18,7 +18,7 @@ import {
   EARLIEST_CLAIMING_AGE,
   type ClaimingAdjustment,
 } from '../services/social-security-claiming';
-import { householdTimeline, survivorSpendingFor, withSurvivorRule } from '../services/household';
+import { householdTimeline, rebuildHouseholdStreams, survivorSpendingFor } from '../services/household';
 
 export const RETIREMENT_SCENARIO_VERSION = 2 as const;
 export const RETIREMENT_CALCULATOR_ID = 'retirement' as const;
@@ -403,15 +403,11 @@ function resolveVariant(
     input.annualContributionAmount = 0;
   }
   // A pension whose start was only ever "when you retire" moves with a
-  // what-if that retires at another age; everything else the user stated
-  // about their income stays as it is.
-  if (input.incomeStreams?.length && input.retirementAge !== baseInput.retirementAge) {
-    input.incomeStreams = incomeForRetirementAge(
-      input.incomeStreams,
-      incomeOrigins,
-      input.retirementAge,
-      partner?.origins.pensionStartAge === 'default'
-    );
+  // what-if that retires at another age, the partner's included; everything
+  // else the user stated about their income stays as it is.
+  const retirementMoved = input.retirementAge !== baseInput.retirementAge && input.retirementAge !== null;
+  if (input.incomeStreams?.length && retirementMoved) {
+    input.incomeStreams = incomeForRetirementAge(input.incomeStreams, incomeOrigins, input.retirementAge);
   }
   if (partner && userPlanThroughAge !== undefined) {
     // The household horizon can clear validation while the user's own planning
@@ -419,11 +415,22 @@ function resolveVariant(
     if (userPlanThroughAge <= input.withdrawalStartAge) {
       return { unavailableReason: 'Life expectancy must be later than the withdrawal start age.' };
     }
-    const timeline = householdTimeline({ currentAge: input.currentAge, userPlanThroughAge, partner: partner.plan });
+    const plan = retirementMoved && partner.plan.pension && partner.origins.pensionStartAge === 'default'
+      ? {
+        ...partner.plan,
+        pension: {
+          ...partner.plan.pension,
+          startAge: Math.max(partner.plan.age, input.retirementAge! - partner.timeline.ageGap),
+        },
+      }
+      : partner.plan;
+    const timeline = householdTimeline({ currentAge: input.currentAge, userPlanThroughAge, partner: plan });
     input.lifeExpectancy = timeline.horizonAge;
-    // A benefit claimed at another age can change which of the two is smaller.
-    if (input.incomeStreams?.length) input.incomeStreams = withSurvivorRule(input.incomeStreams, timeline);
-    const survivorSpending = survivorSpendingFor(partner.plan, timeline);
+    // A benefit claimed at another age, or a later first death, changes the
+    // spousal start and the survivor benefit, so the couple's Social Security
+    // is worked out afresh from the user's own streams.
+    input.incomeStreams = rebuildHouseholdStreams(input.incomeStreams ?? [], { ...partner, plan, timeline }, input.currentAge);
+    const survivorSpending = survivorSpendingFor(plan, timeline);
     if (survivorSpending) input.survivorSpending = survivorSpending;
     else delete input.survivorSpending;
   }

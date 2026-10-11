@@ -10,13 +10,63 @@
 
 import type { RetirementIncomeStream } from '../retirement-analytics/types';
 import type { CanonicalFactUnit } from './canonical-facts';
-import { incomeOfStream, type HouseholdTimeline, type ResolvedPartner } from '../services/household';
+import {
+  incomeOfStream,
+  type HouseholdSocialSecurity,
+  type HouseholdTimeline,
+  type ResolvedPartner,
+} from '../services/household';
 import { savedOn, STATED_FIGURE_DEFINITIONS } from '../services/stated-figures';
 import { buildInputRequest, type InputFieldSpec, type InputRequest, type InputRequestSpec } from './input-request';
 import { describeClaimingAdjustmentBriefly } from '../services/social-security-claiming';
 
-/** A partner a calculator planned for, with the joint timeline it ran on. */
-export type PlannedHousehold = ResolvedPartner & { timeline: HouseholdTimeline };
+/**
+ * A partner a calculator planned for, with the joint timeline it ran on and
+ * what Social Security pays the couple (absent on runs recorded before
+ * spousal benefits).
+ */
+export type PlannedHousehold = ResolvedPartner & { timeline: HouseholdTimeline; socialSecurity?: HouseholdSocialSecurity };
+
+/** Said when a partner is planned for but nobody has said whether they are married, and it matters. */
+export const MARRIAGE_UNKNOWN_CLAUSE =
+  'no spousal or survivor Social Security benefits, since I don\'t know whether you\'re married (tell me if you are and I will count them)';
+
+/** A couple's marriage as every retirement form asks for it. */
+export const PARTNER_MARRIED_FIELD: InputFieldSpec = {
+  id: 'partnerMarried',
+  label: 'Are you and your partner married?',
+  kind: 'choice',
+  options: [
+    { value: 'married', label: 'married' },
+    { value: 'not_married', label: 'not married' },
+  ],
+  sentence: 'My partner and I are {value}.',
+};
+
+/**
+ * The form a run that could not count spousal or survivor benefits carries,
+ * because nobody said whether the couple is married.
+ */
+export function partnerMarriageInputRequest(calculatorId: string, question: string): InputRequest {
+  return buildInputRequest({
+    calculatorId,
+    title: 'Spousal and survivor benefits',
+    question,
+    submitLabel: 'Update my plan',
+    fields: [PARTNER_MARRIED_FIELD],
+  }, [PARTNER_MARRIED_FIELD.id])!;
+}
+
+/** The form for whatever the couple is missing, the partner's age first; null when nothing is. */
+export function householdInputRequest(
+  household: { missingAge: true } | PlannedHousehold | undefined,
+  calculatorId: string,
+  question: string
+): InputRequest | null {
+  if (!household) return null;
+  if ('missingAge' in household) return partnerAgeInputRequest(calculatorId, question);
+  return household.socialSecurity?.marriageUnknown ? partnerMarriageInputRequest(calculatorId, question) : null;
+}
 
 /** Said when there is a partner to plan for but not their age: in a list, and as a sentence. */
 export const MISSING_PARTNER_AGE_CLAUSE =
@@ -74,10 +124,31 @@ export function incomeEndClause(
 ): string {
   if (stream.endAge === undefined || !household) return '';
   const { owner, kind } = incomeOfStream(stream as RetirementIncomeStream);
-  if (kind === 'social_security') {
-    return ', until the first of you reaches their planning age, when the survivor keeps the larger benefit';
-  }
+  if (kind === 'spousal') return ', until the first of you reaches their planning age';
+  if (kind === 'survivor') return owner === 'partner' ? ', until their own benefit starts' : ', until your own benefit starts';
   return owner === 'partner' ? ', until your partner reaches their planning age' : ', until you reach your planning age';
+}
+
+/**
+ * A spousal benefit, as a clause, whoever it belongs to: on whose record,
+ * from when, whether it was reduced for starting early, and whether it is
+ * only the least they would be paid.
+ */
+export function describeSpousalIncome(stream: RetirementIncomeStream, household: PlannedHousehold): string {
+  const { owner } = incomeOfStream(stream);
+  const spousal = household.socialSecurity?.spousal;
+  const partner = owner === 'partner';
+  const reduced = spousal && spousal.annualAmount < spousal.fullAmount
+    ? ', reduced for starting before full retirement age'
+    : '';
+  const floor = spousal?.floor
+    ? partner
+      ? ' (the least they would be paid, since I don\'t know their own benefit)'
+      : ' (the least you would be paid, since I don\'t know your own benefit)'
+    : '';
+  const from = partner ? partnerAgeAt(stream.startAge, household) : String(stream.startAge);
+  return `${partner ? 'your partner\'s spousal benefit' : 'your spousal benefit'} of ${money(stream.annualAmount)} a year ` +
+    `in today's dollars on ${partner ? 'your' : 'your partner\'s'} record from ${from}${reduced}${incomeEndClause(stream, household)}${floor}`;
 }
 
 function savedNote(household: PlannedHousehold): string {
@@ -91,6 +162,7 @@ function savedNote(household: PlannedHousehold): string {
  */
 export function describePartnerIncome(stream: RetirementIncomeStream, household: PlannedHousehold): string {
   const { kind } = incomeOfStream(stream);
+  if (kind === 'spousal') return describeSpousalIncome(stream, household);
   const origin = household.origins;
   const from = partnerAgeAt(stream.startAge, household);
   if (kind === 'social_security') {
@@ -130,45 +202,84 @@ export function describeHouseholdTimeline(
     /** What the survivor spends from the first death, when the run counted it. */
     survivor?: { fromAge: number; annualAmount: number };
   },
-  countedIncomes?: ReadonlyArray<{ kind: 'social_security' | 'pension'; endAge?: number }>
+  countedIncomes?: ReadonlyArray<{ kind: string; endAge?: number }>
 ): string[] {
   const { plan, origins, timeline } = household;
+  const socialSecurity = household.socialSecurity;
   const source = (field: keyof typeof origins) =>
     origins[field] === 'saved'
       ? savedNote(household)
       : origins[field] === 'default' ? ', an age I assumed' : '';
+  const marriage = household.married?.value
+    ? household.married.origin === 'saved' && household.married.savedAt
+      ? ` (married, from Your numbers, saved ${savedOn(household.married.savedAt)})`
+      : household.married.origin === 'remembered' ? ' (married, as you told me before)' : ''
+    : '';
   const partnerEndsAt = `${plan.planThroughAge}${source('planThroughAge')}`;
   const horizon = timeline.horizonAge > timeline.userPlanThroughAge
     ? `the plan runs until your partner reaches ${partnerEndsAt}, when you would be ${timeline.horizonAge}`
     : timeline.horizonAge > timeline.partnerPlanThroughAge
       ? `the plan runs until you reach ${timeline.horizonAge}; your partner plans through ${partnerEndsAt}`
       : `you both reach your planning ages together, at your ${timeline.horizonAge}`;
-  const parts = [`planning for you and your partner, ${plan.age} today${source('age')}; ${horizon}`];
+  const parts = [`planning for you and your partner${marriage}, ${plan.age} today${source('age')}; ${horizon}`];
   if (timeline.firstDeath.atUserAge < timeline.horizonAge) {
-    const first = timeline.firstDeath.who === 'user'
+    const deceased = timeline.firstDeath.who;
+    const first = deceased === 'user'
       ? `you reach ${timeline.firstDeath.atUserAge}`
       : `your partner reaches ${plan.planThroughAge} (your ${timeline.firstDeath.atUserAge})`;
+    const incomes = countedIncomes ?? [
+      ...(plan.socialSecurity ? [{ kind: 'social_security' }] : []),
+      ...(plan.pension ? [{ kind: 'pension' }] : []),
+    ];
+    const hasSocialSecurity = incomes.some((income) => income.kind === 'social_security');
+    const pensionStops = incomes.some((income) => income.kind === 'pension' && (countedIncomes ? income.endAge !== undefined : true));
+    const rules: string[] = [];
+    const survivor = socialSecurity?.survivor;
+    if (survivor) {
+      const theSurvivor = survivor.owner === 'partner' ? 'your partner\'s' : 'your';
+      const record = survivor.owner === 'partner' ? 'your' : 'your partner\'s';
+      const deceasedName = survivor.owner === 'partner' ? 'you' : 'your partner';
+      const later = survivor.startAge > timeline.firstDeath.atUserAge
+        ? ` from ${survivor.owner === 'partner' ? partnerAgeAt(survivor.startAge, household) : survivor.startAge}`
+        : '';
+      const notes = [
+        survivor.reducedTo !== undefined ? 'reduced for taking it before full retirement age' : null,
+        survivor.limited
+          ? `no more than ${deceasedName === 'you' ? 'you were' : 'your partner was'} paid or 82.5% of ${deceasedName === 'you' ? 'your' : 'their'} full benefit, since ${deceasedName} claimed early`
+          : null,
+      ].filter((note): note is string => Boolean(note));
+      const noted = notes.length > 0 ? ` (${notes.join('; ')})` : '';
+      const ownLater = survivor.ownStartAge !== undefined
+        ? survivor.owner === 'partner' ? partnerAgeAt(survivor.ownStartAge, household) : String(survivor.ownStartAge)
+        : undefined;
+      rules.push(survivor.annualAmount > survivor.ownAmount
+        ? `${theSurvivor} Social Security becomes ${money(survivor.annualAmount)} a year${later}, the survivor benefit on ${record} record${noted}`
+        : ownLater
+          ? `${survivor.owner === 'partner' ? 'your partner is' : 'you are'} paid the survivor benefit on ${record} record, ` +
+            `${money(survivor.annualAmount)} a year${later}${noted}, until ${survivor.owner === 'partner' ? 'their' : 'your'} own larger benefit starts at ${ownLater}`
+          : `${survivor.owner === 'partner' ? 'your partner keeps their' : 'you keep your'} own Social Security, which is more than the survivor benefit on ${record} record`);
+      if (socialSecurity?.spousal) rules.push('the spousal benefit stops');
+      if (pensionStops) rules.push('a pension stops with the person it belongs to');
+    } else if (!socialSecurity && incomes.filter((income) => income.kind === 'social_security').length >= 2) {
+      // Recorded before spousal benefits, under the rule that kept the larger benefit.
+      rules.push('the survivor keeps the larger Social Security benefit');
+      if (pensionStops) rules.push('a pension stops with the person it belongs to');
+    } else if (hasSocialSecurity || pensionStops) {
+      const what = [hasSocialSecurity ? 'Social Security benefit' : null, pensionStops ? 'pension' : null]
+        .filter(Boolean).join(' and ');
+      rules.push(`each ${what} stops with the person it belongs to`);
+    }
     const after = spending.survivor
       ? `spending becomes ${money(spending.survivor.annualAmount)} a year, what you said one of you would spend alone${source('survivorAnnualSpending')}`
       : spending.annual !== undefined
         ? `spending stays ${money(spending.annual)} a year unless you tell me what one of you would spend alone`
         : '';
-    const incomes = countedIncomes ?? [
-      ...(plan.socialSecurity ? [{ kind: 'social_security' as const }] : []),
-      ...(plan.pension ? [{ kind: 'pension' as const }] : []),
-    ];
-    const socialSecurityCount = incomes.filter((income) => income.kind === 'social_security').length;
-    const incomeRules = [
-      socialSecurityCount >= 2 ? 'the survivor keeps the larger Social Security benefit' : null,
-      incomes.some((income) => income.kind === 'pension' && (countedIncomes ? income.endAge !== undefined : true))
-        ? 'a pension stops with the person it belongs to'
-        : null,
-    ].filter((clause): clause is string => Boolean(clause));
-    // "the survivor keeps ... and a pension stops ..., and spending stays ...",
-    // or the spending alone when no income rule applies.
-    const changes = [incomeRules.join(' and '), after].filter(Boolean).join(', and ');
+    // "the survivor ... and a pension stops ..., and spending stays ...", or
+    // the spending alone when no income rule applies.
+    const changes = [rules.join(' and '), after].filter(Boolean).join(', and ');
     if (changes) parts.push(`from when ${first}, ${changes}`);
   }
+  if (socialSecurity?.marriageUnknown) parts.push(MARRIAGE_UNKNOWN_CLAUSE);
   return parts;
 }
 
@@ -191,6 +302,8 @@ export function householdIncomeFactRows(
   const rows: HouseholdFactRow[] = [];
   for (const stream of streams) {
     const { owner, kind } = incomeOfStream(stream);
+    // Spousal and survivor benefits are the household's Social Security facts.
+    if (kind === 'spousal' || kind === 'survivor') continue;
     const name = kind === 'pension' ? 'pension' : 'social_security';
     const key = `${owner === 'partner' ? 'partner_' : ''}${name}`;
     const income = kind === 'pension' ? 'pension or other income' : 'Social Security';
@@ -229,9 +342,7 @@ export function householdIncomeFactRows(
       rows.push({
         suffix: `${key}_end_age`,
         label: `The user's age when ${owner === 'partner' ? 'the partner\'s' : 'the user\'s'} ${income} stops, ` +
-          (kind === 'social_security'
-            ? 'at the first death, when the survivor keeps the larger benefit'
-            : 'when its holder reaches their planning age'),
+          'when its holder reaches their planning age',
         value: stream.endAge,
         unit: 'age',
       });
@@ -270,6 +381,63 @@ export function householdTimelineFactRows(
       label: 'Annual spending after the first death, what the user said one survivor would spend, in today\'s dollars',
       value: survivorSpending.annualAmount,
       unit: 'usd',
+    });
+  }
+  return rows;
+}
+
+/**
+ * What Social Security pays the couple beyond each one's own benefit, as
+ * facts: each one's full-retirement-age benefit, the spousal benefit and the
+ * survivor benefit, with the user's age each starts at.
+ */
+export function householdSocialSecurityFactRows(household: PlannedHousehold): HouseholdFactRow[] {
+  const socialSecurity = household.socialSecurity;
+  if (!socialSecurity?.married?.value) return [];
+  const rows: HouseholdFactRow[] = [];
+  const whose = (owner: 'user' | 'partner') => (owner === 'partner' ? 'The user\'s partner\'s' : 'The user\'s');
+  const record = (owner: 'user' | 'partner') => (owner === 'partner' ? 'the user\'s' : 'the partner\'s');
+  const prefix = (owner: 'user' | 'partner') => (owner === 'partner' ? 'partner_' : '');
+  for (const owner of ['user', 'partner'] as const) {
+    const pia = socialSecurity[owner].pia;
+    if (pia > 0) {
+      rows.push({
+        suffix: `${prefix(owner)}full_retirement_benefit`,
+        label: `${whose(owner)} Social Security a year at full retirement age, in today's dollars`,
+        value: Number(pia.toFixed(2)),
+        unit: 'usd',
+      });
+    }
+  }
+  const spousal = socialSecurity.spousal;
+  if (spousal) {
+    rows.push({
+      suffix: `${prefix(spousal.owner)}spousal_annual`,
+      label: `${whose(spousal.owner)} spousal benefit a year on ${record(spousal.owner)} record, in today's dollars` +
+        (spousal.annualAmount < spousal.fullAmount ? ', reduced for starting before full retirement age' : ''),
+      value: Number(spousal.annualAmount.toFixed(2)),
+      unit: 'usd',
+    });
+    rows.push({
+      suffix: `${prefix(spousal.owner)}spousal_start_age`,
+      label: `The user's age when ${spousal.owner === 'partner' ? 'the partner\'s' : 'the user\'s'} spousal benefit starts`,
+      value: spousal.startAge,
+      unit: 'age',
+    });
+  }
+  const survivor = socialSecurity.survivor;
+  if (survivor) {
+    rows.push({
+      suffix: `${prefix(survivor.owner)}survivor_benefit_annual`,
+      label: `The survivor benefit a year ${survivor.owner === 'partner' ? 'the user\'s partner' : 'the user'} would be paid on ${record(survivor.owner)} record after the first death, in today's dollars`,
+      value: Number(survivor.annualAmount.toFixed(2)),
+      unit: 'usd',
+    });
+    rows.push({
+      suffix: `${prefix(survivor.owner)}survivor_benefit_start_age`,
+      label: `The user's age when ${survivor.owner === 'partner' ? 'the partner\'s' : 'the user\'s'} survivor benefit starts`,
+      value: survivor.startAge,
+      unit: 'age',
     });
   }
   return rows;

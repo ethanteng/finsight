@@ -47,7 +47,7 @@ import { validateCanonicalFactPack } from './canonical-facts';
 import { describeMissingInputs } from './missing-inputs';
 import {
   describeRetirementAssumptions,
-  retirementPartnerAgeRequest,
+  retirementHouseholdRequest,
 } from './retirement-assumptions';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
@@ -865,7 +865,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // form for them. Its disclosure above still asks in words, for any client
   // that does not render the form.
   const inputRequest = scenarioCalculatorRegistry.inputRequest(scenarioExecutions) ??
-    (plannedQuestionNeeds.needsRetirement ? retirementPartnerAgeRequest(snapshot) : null);
+    (plannedQuestionNeeds.needsRetirement ? retirementHouseholdRequest(snapshot) : null);
   if (inputRequest) {
     structuredResponse = { ...structuredResponse, input_request: inputRequest };
   }

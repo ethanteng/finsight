@@ -712,6 +712,7 @@ export async function completeRetirementAnalysis(
         ? monthlySpending * 12
         : null,
       userProfile: snapshot.userProfile || '',
+      householdStatus: snapshot.userProfileValues?.householdStatus,
       statedFigures: snapshot.statedFigures,
       holdings,
       securities,
@@ -764,6 +765,8 @@ async function fetchOrCreateRetirementAnalysis(args: {
   plannedRetirementInputs?: ExtractedRetirementInputs;
   useExistingRetirementBaseline?: boolean;
   userProfile: string;
+  /** The household status Linc remembers, for whether a couple is married. */
+  householdStatus?: string;
   holdings: any[];
   securities: any[];
   unmodeledInvestments?: UnmodeledInvestmentValue | null;
@@ -782,6 +785,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
     plannedRetirementInputs,
     useExistingRetirementBaseline = false,
     userProfile,
+    householdStatus,
     holdings,
     securities,
     unmodeledInvestments,
@@ -1054,28 +1058,33 @@ async function fetchOrCreateRetirementAnalysis(args: {
   incomeOrigins = income.origins;
 
   // A partner: their incomes on the user's ages, the plan run until the
-  // later of their planning ages, and the survivor keeping the larger Social
-  // Security benefit. Without their age their incomes cannot be timed, and
-  // the answer asks for it.
+  // later of their planning ages, and, married, the spousal and survivor
+  // benefits Social Security pays. Without their age their incomes cannot be
+  // timed, and the answer asks for it.
   const resolvedPartner = resolvePartner({
     stated: statedPartnerOf(extracted),
     statedFigures,
     retirementAge: retirementAge ?? currentAge,
     currentAge,
+    ...(householdStatus && { householdStatus }),
   });
   const partner = resolvedPartner && !('missingAge' in resolvedPartner) ? resolvedPartner : undefined;
   const timeline = partner
     ? householdTimeline({ currentAge, userPlanThroughAge: lifeExpectancy, partner: partner.plan })
     : undefined;
-  const projectionIncome = partner && timeline
-    ? householdIncomeStreams(income.streams, partner.plan, timeline)
-    : income.streams;
+  const householdRun = partner && timeline
+    ? householdIncomeStreams(income.streams, { ...partner, timeline }, {
+      currentAge,
+      userSocialSecurity: income.socialSecurityClaim,
+    })
+    : undefined;
+  const projectionIncome = householdRun?.streams ?? income.streams;
   const planHorizon = timeline?.horizonAge ?? lifeExpectancy;
   const survivorSpending = partner && timeline ? survivorSpendingFor(partner.plan, timeline) : undefined;
   household = resolvedPartner
     ? 'missingAge' in resolvedPartner
       ? { missingAge: true }
-      : { ...resolvedPartner, timeline: timeline! }
+      : { ...resolvedPartner, timeline: timeline!, ...(householdRun && { socialSecurity: householdRun.socialSecurity }) }
     : undefined;
 
   const storedIncome = Array.isArray(storedAnalysisInput.incomeStreams) ? storedAnalysisInput.incomeStreams : [];

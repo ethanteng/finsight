@@ -14,9 +14,8 @@
  * - Claiming after FRA adds delayed retirement credits of 8% a year (2/3 of 1%
  *   a month), up to 70; nothing more is earned after that.
  *
- * Only the worker's own retirement benefit: spousal benefits follow other
- * rules and are not modeled. A couple's survivor keeps the larger of their two
- * benefits (`household.ts`).
+ * Spousal and survivor benefits follow rules of their own, also here, and
+ * `household.ts` applies them to a married couple.
  */
 
 import type { SavableFigure } from '../openai/save-offer';
@@ -31,6 +30,63 @@ export function fullRetirementAgeMonths(birthYear: number): number {
   if (birthYear <= 1954) return 66 * 12;
   if (birthYear <= 1959) return 66 * 12 + (birthYear - 1954) * 2;
   return 67 * 12;
+}
+
+/**
+ * Full retirement age for a survivor's benefit, in months. It follows its own
+ * table, two years behind the retirement one: 66 for 1945-1956, rising two
+ * months a year to 67 for 1962 and later.
+ */
+export function survivorFullRetirementAgeMonths(birthYear: number): number {
+  if (birthYear <= 1939) return 65 * 12;
+  if (birthYear <= 1944) return 65 * 12 + (birthYear - 1939) * 2;
+  if (birthYear <= 1956) return 66 * 12;
+  if (birthYear <= 1961) return 66 * 12 + (birthYear - 1956) * 2;
+  return 67 * 12;
+}
+
+/** The birth year a current age implies, as every rule here reads it. */
+export function birthYearOf(currentAge: number, asOfYear?: number): number {
+  return (asOfYear ?? new Date().getUTCFullYear()) - currentAge;
+}
+
+/**
+ * The full-retirement-age benefit (the primary insurance amount) behind a
+ * benefit claimed at an age: what spousal and survivor benefits are worked
+ * out from, rather than the amount a claiming age made of it.
+ */
+export function primaryInsuranceAmount(args: {
+  amount: number;
+  claimAge: number;
+  currentAge: number;
+  asOfYear?: number;
+}): number {
+  if (!(args.amount > 0)) return 0;
+  const fra = fullRetirementAgeMonths(birthYearOf(args.currentAge, args.asOfYear));
+  return args.amount / claimingFactor(args.claimAge * 12, fra);
+}
+
+/**
+ * A spousal benefit started before full retirement age is reduced 25/36 of 1%
+ * a month for the first 36 months and 5/12 of 1% a month beyond that; one
+ * started later earns nothing for the wait.
+ */
+export function spousalFactor(startMonths: number, fraMonths: number): number {
+  const early = Math.max(0, fraMonths - Math.max(EARLIEST_CLAIMING_AGE * 12, startMonths));
+  return 1 - (Math.min(early, 36) * 25) / 3600 - (Math.max(0, early - 36) * 5) / 1200;
+}
+
+/** The earliest a survivor's benefit can start, other than for someone caring for a child. */
+export const EARLIEST_SURVIVOR_AGE = 60;
+
+/**
+ * A survivor's benefit started before the survivor's full retirement age is
+ * reduced in proportion to the months early, to 71.5% at 60.
+ */
+export function survivorFactor(startMonths: number, survivorFraMonths: number): number {
+  const start = Math.max(EARLIEST_SURVIVOR_AGE * 12, startMonths);
+  if (start >= survivorFraMonths) return 1;
+  return 1 - (0.285 * (survivorFraMonths - start)) / (survivorFraMonths - EARLIEST_SURVIVOR_AGE * 12);
 }
 
 /**

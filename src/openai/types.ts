@@ -9,10 +9,16 @@ import type { PersonalContextValues } from '../profile/personal-context';
 import type { StatedFigures } from '../services/stated-figures';
 import type { RetirementIncomeStream } from '../retirement-analytics/types';
 import type { LinkedContributions, RetirementContributionOrigin } from './retirement-contributions';
-import type { HouseholdTimeline, ResolvedPartner, StatedPartner } from '../services/household';
+import type { HouseholdSocialSecurity, HouseholdTimeline, ResolvedPartner, StatedPartner } from '../services/household';
 
-/** The partner a retirement projection counted, or that it could not without their age. */
-export type RetirementHousehold = { missingAge: true } | (ResolvedPartner & { timeline: HouseholdTimeline });
+/**
+ * The partner a retirement projection counted, with what Social Security pays
+ * the couple (absent on runs recorded before spousal benefits), or that it
+ * could not count them without their age.
+ */
+export type RetirementHousehold =
+  | { missingAge: true }
+  | (ResolvedPartner & { timeline: HouseholdTimeline; socialSecurity?: HouseholdSocialSecurity });
 import type { RetirementIncomeOrigins } from './retirement-income';
 import type { CashFlowForecastContext } from './cash-flow-forecast-context';
 

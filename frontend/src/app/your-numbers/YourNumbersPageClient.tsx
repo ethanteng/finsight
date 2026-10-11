@@ -70,12 +70,24 @@ const PLAN_FIELDS: Array<Field & { id: StatedFigureKey }> = [
 
 /**
  * A spouse or partner, for plans that should run for two. Linc counts their
- * incomes from their own ages, runs the plan until the later of your planning
- * ages, and at the first death keeps the larger Social Security benefit for
- * the survivor (see `src/services/household.ts`).
+ * incomes from their own ages and runs the plan until the later of your
+ * planning ages. Married, it also counts Social Security's spousal benefit
+ * and, at the first death, its survivor benefit (see `src/services/household.ts`).
  */
 const PARTNER_FIELDS: Array<Field & { id: StatedFigureKey }> = [
   { id: 'partnerAge', label: 'Your partner\'s age', kind: 'age', required: false, minimum: 18, maximum: 90, sentence: '{value}', hint: 'Leave blank if you plan alone.' },
+  {
+    id: 'partnerMarried',
+    label: 'Are you married?',
+    kind: 'choice',
+    required: false,
+    options: [
+      { value: 'married', label: 'Yes, we are married' },
+      { value: 'not_married', label: 'No, we are not married' },
+    ],
+    sentence: '{value}',
+    hint: 'Social Security pays spousal and survivor benefits only to a married couple. Linc counts neither until it knows.',
+  },
   { id: 'partnerSocialSecurityAnnual', label: 'Their Social Security a year', kind: 'usd_per_year', required: false, minimum: 0, maximum: 250_000, sentence: '{value}' },
   { id: 'partnerSocialSecurityStartAge', label: 'Their age when they claim it', kind: 'age', required: false, minimum: 50, maximum: 80, sentence: '{value}', hint: 'Linc assumes 67.' },
   { id: 'partnerRetirementIncome', label: 'Their pension or other income a year', kind: 'usd_per_year', required: false, minimum: 0, maximum: 10_000_000, sentence: '{value}' },

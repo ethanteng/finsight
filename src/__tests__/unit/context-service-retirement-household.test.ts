@@ -28,7 +28,7 @@ jest.mock('../../retirement-analytics/engine/historical-data-loader', () => ({
 const { completeRetirementAnalysis } = jest.requireActual<typeof import('../../openai/context-service')>(
   '../../openai/context-service'
 );
-const { describeRetirementAssumptions, retirementPartnerAgeRequest } = jest.requireActual<typeof import('../../openai/retirement-assumptions')>(
+const { describeRetirementAssumptions, retirementHouseholdRequest } = jest.requireActual<typeof import('../../openai/retirement-assumptions')>(
   '../../openai/retirement-assumptions'
 );
 const { buildCanonicalFactPack } = jest.requireActual<typeof import('../../openai/canonical-facts')>(
@@ -119,6 +119,7 @@ const PLAN = {
   partnerSocialSecurityAnnual: 20_000,
   partnerPensionAnnual: 12_000,
   survivorAnnualSpending: 60_000,
+  partnerMarried: true,
   sources: {
     currentAge: 'I am 60',
     retirementAge: 'retire at 65',
@@ -128,6 +129,7 @@ const PLAN = {
     partnerSocialSecurityAnnual: 'she gets $20k',
     partnerPensionAnnual: 'her $12k pension',
     survivorAnnualSpending: '$60k alone',
+    partnerMarried: 'my wife',
   },
 };
 
@@ -162,9 +164,12 @@ describe('a partner in the holdings-based projection', () => {
     // The partner reaches 95 when the user is 100.
     expect(input.lifeExpectancy).toBe(100);
     expect(input.incomeStreams).toEqual([
-      { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
-      // Their 67 is the user's 72; the smaller benefit stops when the user reaches 95.
-      { label: 'your partner\'s Social Security', annualAmount: 20_000, startAge: 72, inflationAdjusted: true, endAge: 95 },
+      // The user's own stops when they reach 95.
+      { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true, endAge: 95 },
+      // Their 67 is the user's 72.
+      { label: 'your partner\'s Social Security', annualAmount: 20_000, startAge: 72, inflationAdjusted: true },
+      // Married, the partner is then paid the user's $30,000: $10,000 above their own.
+      { label: 'your partner\'s survivor benefit on your record', annualAmount: 10_000, startAge: 95, inflationAdjusted: true },
       // From the household's retirement: the user's 65 is the partner's 60.
       { label: 'your partner\'s pension or other income', annualAmount: 12_000, startAge: 65, inflationAdjusted: false },
     ]);
@@ -185,16 +190,19 @@ describe('a partner in the holdings-based projection', () => {
     });
 
     const disclosure = describeRetirementAssumptions(completed)!;
+    expect(disclosure).toContain('your Social Security $30,000 a year in today\'s dollars from 67, an age I assumed, until you reach your planning age');
     expect(disclosure).toContain(
-      'your partner\'s Social Security of $20,000 a year in today\'s dollars from their 67 (your 72), an age I assumed, ' +
-      'until the first of you reaches their planning age, when the survivor keeps the larger benefit'
+      'your partner\'s Social Security of $20,000 a year in today\'s dollars from their 67 (your 72), an age I assumed;'
     );
     expect(disclosure).toContain(
       'your partner\'s pension of $12,000 a year from their 60 (your 65), a fixed amount that buys less each year prices rise ' +
       '(I assumed that it starts when you retire and that it does not rise with inflation)'
     );
     expect(disclosure).toContain('planning for you and your partner, 55 today; the plan runs until your partner reaches 95, an age I assumed, when you would be 100');
-    expect(disclosure).toContain('and spending becomes $60,000 a year, what you said one of you would spend alone');
+    expect(disclosure).toContain(
+      'from when you reach 95, your partner\'s Social Security becomes $30,000 a year, the survivor benefit on your record, ' +
+      'and spending becomes $60,000 a year, what you said one of you would spend alone'
+    );
 
     const pack = buildCanonicalFactPack(
       { ...completed, accounts: [], metadata: { lastUpdated: new Date(), dataSources: {}, errors: [] } } as any,
@@ -206,7 +214,14 @@ describe('a partner in the holdings-based projection', () => {
     expect(fact('retirement_partner_social_security_annual')).toMatchObject({ value: 20_000 });
     expect(fact('retirement_partner_social_security_start_age_partner')).toMatchObject({ value: 67 });
     expect(fact('retirement_partner_social_security_start_age')).toMatchObject({ value: 72 });
-    expect(fact('retirement_partner_social_security_end_age')).toMatchObject({ value: 95 });
+    expect(fact('retirement_social_security_end_age')).toMatchObject({ value: 95 });
+    expect(fact('retirement_partner_social_security_end_age')).toBeUndefined();
+    expect(fact('retirement_full_retirement_benefit')).toMatchObject({ value: 30_000 });
+    expect(fact('retirement_partner_full_retirement_benefit')).toMatchObject({ value: 20_000 });
+    expect(fact('retirement_partner_survivor_benefit_annual')).toMatchObject({ value: 30_000 });
+    expect(fact('retirement_partner_survivor_benefit_start_age')).toMatchObject({ value: 95 });
+    // Half the user's $30,000 is less than the partner's own: no spousal benefit.
+    expect(fact('retirement_partner_spousal_annual')).toBeUndefined();
     expect(fact('retirement_plan_end_age')).toMatchObject({ value: 100 });
     expect(fact('retirement_first_death_age')).toMatchObject({ value: 95 });
     expect(fact('retirement_survivor_spending')).toMatchObject({ value: 60_000 });
@@ -238,12 +253,40 @@ describe('a partner in the holdings-based projection', () => {
       'not your partner, since I need their age to plan for them (tell me how old they are and I will include them)'
     );
     // The answer stands; the form under it asks for the age alone.
-    expect(retirementPartnerAgeRequest(completed)).toMatchObject({
+    expect(retirementHouseholdRequest(completed)).toMatchObject({
       calculatorId: 'retirement',
       question: 'Am I on track for retirement?',
       fields: [{ id: 'partnerAge', required: true, sentence: 'My partner is {value} years old.' }],
     });
-    expect(retirementPartnerAgeRequest((await run()).completed)).toBeNull();
+    expect(retirementHouseholdRequest((await run()).completed)).toBeNull();
+  });
+
+  it('counts no spousal or survivor benefit while the marriage is unknown, and asks', async () => {
+    const { completed, input } = await run(without('partnerMarried'));
+    expect(input.incomeStreams).toEqual([
+      { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true, endAge: 95 },
+      { label: 'your partner\'s Social Security', annualAmount: 20_000, startAge: 72, inflationAdjusted: true },
+      { label: 'your partner\'s pension or other income', annualAmount: 12_000, startAge: 65, inflationAdjusted: false },
+    ]);
+    const disclosure = describeRetirementAssumptions(completed)!;
+    expect(disclosure).toContain('from when you reach 95, each Social Security benefit stops with the person it belongs to');
+    expect(disclosure).toContain(
+      'no spousal or survivor Social Security benefits, since I don\'t know whether you\'re married (tell me if you are and I will count them)'
+    );
+    expect(retirementHouseholdRequest(completed)).toMatchObject({
+      calculatorId: 'retirement',
+      title: 'Spousal and survivor benefits',
+      fields: [{ id: 'partnerMarried', required: true, sentence: 'My partner and I are {value}.' }],
+    });
+  });
+
+  it('knows the couple is married from the household status Linc remembers', async () => {
+    const { completed, input } = await run(without('partnerMarried'), { userProfileValues: { householdStatus: 'married' } });
+    expect(input.incomeStreams).toContainEqual(
+      { label: 'your partner\'s survivor benefit on your record', annualAmount: 10_000, startAge: 95, inflationAdjusted: true }
+    );
+    expect(describeRetirementAssumptions(completed)).toContain('planning for you and your partner (married, as you told me before), 55 today');
+    expect(retirementHouseholdRequest(completed)).toBeNull();
   });
 
   it('runs the partner saved in Your numbers, and says when it was saved', async () => {

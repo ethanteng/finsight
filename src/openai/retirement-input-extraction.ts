@@ -40,8 +40,10 @@ export interface ExtractedRetirementInputs {
   partnerPlanThroughAge?: number;
   /** What one survivor would spend a year, in today's dollars. */
   survivorAnnualSpending?: number;
+  /** Whether the user and their partner are married, when the user says or makes it plain. */
+  partnerMarried?: boolean;
   /** The words each value came from, for the answer to cite and Show the Math to display. */
-  sources: Partial<Record<ExtractedField | 'pensionInflation' | 'partnerPensionInflation', string>>;
+  sources: Partial<Record<ExtractedField | 'pensionInflation' | 'partnerPensionInflation' | 'partnerMarried', string>>;
 }
 
 type ExtractedField =
@@ -148,6 +150,14 @@ export function validateExtractedInputs(raw: unknown): ExtractedRetirementInputs
     }
   }
 
+  // Married or not, only when the user said; unspecified is unknown.
+  const married = record.partnerMarried;
+  if (married === 'yes' || married === 'no') {
+    result.partnerMarried = married === 'yes';
+    const source = rawSources.partnerMarried;
+    if (typeof source === 'string' && source.trim()) result.sources.partnerMarried = source.trim();
+  }
+
   // Withdrawals start at retirement unless the conversation said otherwise.
   if (result.withdrawalStartAge == null && result.retirementAge != null) {
     result.withdrawalStartAge = result.retirementAge;
@@ -168,6 +178,7 @@ export function statedPartnerOf(inputs: ExtractedRetirementInputs | undefined): 
     pensionInflation: inputs.partnerPensionInflation,
     planThroughAge: inputs.partnerPlanThroughAge,
     survivorAnnualSpending: inputs.survivorAnnualSpending,
+    married: inputs.partnerMarried,
   };
   const said = Object.fromEntries(Object.entries(partner).filter(([, value]) => value !== undefined)) as StatedPartner;
   return Object.keys(said).length > 0 ? said : undefined;

@@ -22,11 +22,15 @@
  *   assumption. The market-history test beside the number uses each historical
  *   sequence's actual inflation instead.
  *
- * A couple adds two more, valued the same way (`services/household.ts`): an
- * income that stops before the plan ends -- the smaller Social Security
- * benefit at the first death, a pension with its holder -- is counted as the
- * level amount with the same value as the years it is paid, and a survivor's
- * lower spending as the level spending with the same value over retirement.
+ * A couple adds more, valued the same way (`services/household.ts`): an
+ * income that stops before the plan ends -- a Social Security benefit or a
+ * pension with its holder, a spousal benefit at the first death -- is counted
+ * as the level amount with the same value as the years it is paid, and a
+ * survivor's lower spending as the level spending with the same value over
+ * retirement. A survivor benefit, paid only from the first death, is counted
+ * as the level amount with its value over the whole retirement rather than as
+ * an income to bridge to: it replaces a benefit that stops, not one that has
+ * yet to start.
  */
 
 import {
@@ -38,7 +42,8 @@ import {
 /** Only used to value a fixed pension, and named in the answer whenever it is. */
 export const DEFAULT_COAST_FIRE_INFLATION_PERCENT = 2.5;
 
-export type CoastFireIncomeKind = 'social_security' | 'pension';
+/** A spousal or survivor benefit is Social Security on the other's record, valued the same way. */
+export type CoastFireIncomeKind = 'social_security' | 'pension' | 'spousal' | 'survivor';
 
 export interface CoastFireIncome {
   /** Whose income it is; the user's when absent. Ages are always the user's. */
@@ -107,24 +112,29 @@ export function calculateCoastFireWithIncome(
   const inflation = (options.inflationPercent ?? DEFAULT_COAST_FIRE_INFLATION_PERCENT) / 100;
   const discount = (yearsAfterRetirement: number) => (1 + realReturn) ** yearsAfterRetirement;
 
+  // A survivor benefit is spread over the whole retirement; every other
+  // income over the years from its own start.
+  const spreadOverRetirement = (income: CoastFireIncome) => income.kind === 'survivor';
   const terms: CoastFireIncomeTerm[] = incomes
     .filter((income) => income.annualAmount > 0)
     .map((income) => {
       const firstAge = Math.max(income.startAge, retirementAge);
       const lastAge = Math.min(income.endAge ?? planThroughAge, planThroughAge);
+      const spread = spreadOverRetirement(income);
       let levelAmount = 0;
       if (firstAge < lastAge) {
-        if (income.inflationAdjusted && lastAge === planThroughAge) {
+        if (income.inflationAdjusted && lastAge === planThroughAge && !spread) {
           levelAmount = income.annualAmount;
         } else {
           // The dollars, in today's dollars each year they are paid, valued
           // at retirement; then the level amount with that same value from
-          // its start to the end of the plan.
+          // its start (or retirement, for a survivor benefit) to the end of
+          // the plan.
           let value = 0;
           let annuity = 0;
-          for (let age = firstAge; age < planThroughAge; age++) {
+          for (let age = spread ? retirementAge : firstAge; age < planThroughAge; age++) {
             const weight = 1 / discount(age - retirementAge);
-            if (age < lastAge) {
+            if (age >= firstAge && age < lastAge) {
               const real = income.inflationAdjusted
                 ? income.annualAmount
                 : income.annualAmount / (1 + inflation) ** (age - inputs.currentAge);
@@ -138,13 +148,14 @@ export function calculateCoastFireWithIncome(
       return {
         ...income,
         levelAmount,
-        // An income paid only after the plan ends leaves no gap to bridge.
-        gapYears: levelAmount > 0 ? Math.max(0, income.startAge - retirementAge) : 0,
+        // An income paid only after the plan ends leaves no gap to bridge,
+        // and a survivor benefit is already spread over all of retirement.
+        gapYears: levelAmount > 0 && !spread ? Math.max(0, income.startAge - retirementAge) : 0,
       };
     });
 
   const incomeAt = (age: number) => terms
-    .filter((term) => term.startAge <= age)
+    .filter((term) => term.startAge <= age || spreadOverRetirement(term))
     .reduce((sum, term) => sum + term.levelAmount, 0);
   const steadyIncome = terms.reduce((sum, term) => sum + term.levelAmount, 0);
 
@@ -169,7 +180,9 @@ export function calculateCoastFireWithIncome(
   // the steady state, valued at retirement.
   const lastStart = Math.min(
     planThroughAge,
-    terms.reduce((latest, term) => Math.max(latest, term.startAge), retirementAge)
+    terms
+      .filter((term) => !spreadOverRetirement(term))
+      .reduce((latest, term) => Math.max(latest, term.startAge), retirementAge)
   );
   let bridgeReserve = 0;
   for (let age = retirementAge; age < lastStart; age++) {
