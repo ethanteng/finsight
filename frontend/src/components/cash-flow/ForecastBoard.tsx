@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { Fragment, createContext, useContext, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowDownLeft, ArrowLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, CalendarClock, ChevronRight, CreditCard, Waves,
@@ -8,13 +8,23 @@ import {
 import type {
   CashFlowAdjustment,
   CashFlowItemTransaction,
+  CashFlowItemTransactions,
   CashFlowRecurringItem,
   CashFlowReport,
-  CashFlowTypicalPayee,
+  CashFlowTypicalCategory,
   ForecastAdjustmentKind,
 } from '../../types/cash-flow';
 import { sendCashFlowRequest } from '../../lib/cash-flow-api';
-import { CADENCE_LABELS, accountNamesById, formatCalendarDate, formatMoney, roundToTotal } from '../../lib/cash-flow-format';
+import {
+  CADENCE_LABELS,
+  SPREAD_CHOICES,
+  accountNamesById,
+  formatCalendarDate,
+  formatMoney,
+  roundToTotal,
+  spreadLabel,
+} from '../../lib/cash-flow-format';
+import TransactionList, { CategoryButton, type TransactionChoices } from './TransactionList';
 
 type Flow = 'income' | 'spending';
 
@@ -26,7 +36,15 @@ interface AdjustmentRequest {
   kind: ForecastAdjustmentKind;
   flow: Flow;
   key: string;
+  /** For spread_payee: how many months each amount is spread over. */
+  spreadMonths?: number;
 }
+
+/** What every list of transactions on the board needs to load more and save a category. */
+const BoardContext = createContext<{ apiUrl: string; onChanged: () => Promise<void> | void }>({
+  apiUrl: '',
+  onChanged: () => undefined,
+});
 
 /**
  * Moves an item between the columns. Its accessible name says which item, and
@@ -55,11 +73,23 @@ function MoveButton({ label, item, toward, disabled, onClick }: {
   );
 }
 
-/** An item's transactions: the latest at a glance, and every listed one on request. */
-function Transactions({ items, count }: { items: readonly CashFlowItemTransaction[]; count: number }) {
+/** The transactions an item lists, and what each one may add below its line. */
+interface TransactionsSpec extends CashFlowItemTransactions {
+  /** Which way the amounts move money; for a transfer, `income` is money in. */
+  flow: Flow;
+  /** Show each one's payee: one payee's transactions need none. */
+  withLabels?: boolean;
+  renderExtra?: (transaction: CashFlowItemTransaction) => React.ReactNode;
+  renderChoices?: (transaction: CashFlowItemTransaction) => TransactionChoices | null;
+}
+
+/** An item's transactions: the latest at a glance, and the list on request. */
+function Transactions({ spec }: { spec: TransactionsSpec }) {
   const [open, setOpen] = useState(false);
-  const latest = items[0];
+  const { apiUrl, onChanged } = useContext(BoardContext);
+  const latest = spec.transactions[0];
   if (!latest) return null;
+  const count = spec.transactionCount;
   return (
     <div className="mt-1">
       <button
@@ -72,58 +102,140 @@ function Transactions({ items, count }: { items: readonly CashFlowItemTransactio
         {count === 1 ? '1 transaction' : `${count} transactions`} · latest {formatCalendarDate(latest.date)}: {formatMoney(latest.amount, true)}
       </button>
       {open && (
-        <ul className="mt-1.5 space-y-1 border-l-2 border-[#102319]/10 pl-3">
-          {items.map(item => (
-            <li key={item.id} className="flex items-baseline justify-between gap-3 text-xs">
-              <span className="min-w-0 text-[#5e6b63]">
-                {formatCalendarDate(item.date)}
-                {item.category ? ` · ${item.category}` : ''}
-              </span>
-              <span className="shrink-0 font-semibold tabular-nums text-[#102319]">{formatMoney(item.amount, true)}</span>
-            </li>
-          ))}
-          {count > items.length && <li className="text-xs text-[#66736b]">Showing the latest {items.length} of {count}.</li>}
-        </ul>
+        <TransactionList
+          transactions={spec.transactions}
+          count={count}
+          transactionsRef={spec.transactionsRef}
+          flow={spec.flow}
+          apiUrl={apiUrl}
+          withLabels={Boolean(spec.withLabels)}
+          onChanged={onChanged}
+          renderExtra={spec.renderExtra}
+          renderChoices={spec.renderChoices}
+        />
       )}
     </div>
   );
 }
 
-function ItemRow({ name, detail, category, marker, amount, action, transactions, transactionCount }: {
+/** Puts " · " between the parts of a row's detail that are there. */
+function joined(parts: readonly React.ReactNode[]): React.ReactNode[] {
+  return parts.filter(Boolean).map((part, index) => <Fragment key={index}>{index > 0 && ' · '}{part}</Fragment>);
+}
+
+function ItemRow({ name, detail, category, marker, amount, action, extra, transactions }: {
   name: string;
   detail?: string;
-  /** Where the transactions are categorized; omitted when they are not. */
-  category?: string | null;
+  /** Where the transactions are categorized, or a button that changes it; omitted when they are not. */
+  category?: React.ReactNode;
   /** Says the user moved it, e.g. "kept by you". */
   marker?: string;
   amount?: string;
   action?: React.ReactNode;
-  transactions?: readonly CashFlowItemTransaction[];
-  transactionCount?: number;
+  /** What shows below the row's line, before its transactions. */
+  extra?: React.ReactNode;
+  transactions?: TransactionsSpec;
 }) {
-  const describe = [detail, category].filter(Boolean).join(' · ');
+  const describe = joined([detail, category, marker && <span className="font-semibold text-[#28704d]">{marker}</span>]);
   return (
     <li className="py-2.5 text-sm">
-      <div className="flex items-center justify-between gap-3">
-        <span className="min-w-0">
+      {/* The figures and button move below a name that would otherwise be squeezed to a few letters. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+        <span className="min-w-0 flex-1 basis-36">
           <span className="line-clamp-2 break-words font-semibold text-[#102319]">{name}</span>
-          {(describe || marker) && (
-            <span className="text-xs text-[#66736b]">
-              {describe}
-              {describe && marker ? ' · ' : ''}
-              {marker && <span className="font-semibold text-[#28704d]">{marker}</span>}
-            </span>
-          )}
+          {describe.length > 0 && <span className="text-xs text-[#66736b]">{describe}</span>}
         </span>
         <span className="flex shrink-0 items-center gap-3">
           {amount && <span className="font-bold tabular-nums text-[#102319]">{amount}</span>}
           {action}
         </span>
       </div>
-      {transactions && transactions.length > 0 && (
-        <Transactions items={transactions} count={transactionCount ?? transactions.length} />
-      )}
+      {extra}
+      {/* An older report may list no transactions for an item. */}
+      {(transactions?.transactions?.length ?? 0) > 0 && <Transactions spec={transactions!} />}
     </li>
+  );
+}
+
+/**
+ * What can be said about one transaction's payee from the transactions behind
+ * a typical rate or a one-off: how often its amounts come, so a rare one is
+ * spread over its own months, and leaving everything from it out.
+ */
+function PayeeChoices({ transaction, spread, basisDays, busy, onSpread, onLeaveOut }: {
+  transaction: CashFlowItemTransaction;
+  /** The choice that spreads its payee, if one does. */
+  spread: CashFlowAdjustment | undefined;
+  basisDays: number;
+  busy: boolean;
+  /** Spread the payee over these months, or count it over the basis again with null. */
+  onSpread: (months: number | null) => void;
+  /** Leave the payee out; omitted where that is not offered. */
+  onLeaveOut?: () => void;
+}) {
+  const payee = transaction.label;
+  const committed = spread?.spreadMonths ?? null;
+  // Keep the user's pick while the save is in flight; the controlled value would
+  // otherwise snap back to "Often" until the reloaded report carries the choice.
+  const [draft, setDraft] = useState<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (!busy) setDraft(undefined);
+  }, [busy, committed]);
+  const months = draft !== undefined ? draft : committed;
+  return (
+    <div className="mt-1.5 space-y-2 rounded-lg bg-[#f3f2e9] p-2.5 text-xs">
+      <label className="block">
+        <span className="font-semibold text-[#102319]">How often amounts from {payee} come</span>
+        <select
+          value={months ?? ''}
+          disabled={busy}
+          onChange={event => {
+            const next = event.target.value ? Number(event.target.value) : null;
+            setDraft(next);
+            onSpread(next);
+          }}
+          className="mt-1 block w-full rounded-lg border border-[#102319]/15 bg-white px-2 py-1.5 text-xs text-[#102319] disabled:opacity-50"
+        >
+          <option value="">Often (your last {basisDays} days)</option>
+          {SPREAD_CHOICES.map(choice => <option key={choice.months} value={choice.months}>{choice.label}</option>)}
+        </select>
+      </label>
+      <p className="leading-5 text-[#66736b]">
+        {months !== null
+          ? `Each amount from ${payee} counts spread over the ${months} months after it, for as long as it’s that recent.`
+          : 'For something that comes less often, like a yearly premium, pick how often: each amount is then spread over its own months instead.'}
+      </p>
+      {onLeaveOut && (
+        <button
+          type="button"
+          onClick={onLeaveOut}
+          disabled={busy}
+          className="inline-flex items-center gap-1 rounded-full border border-[#102319]/15 bg-white px-2.5 py-1 font-bold text-[#102319] hover:border-[#102319]/35 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Leave out everything from {payee}
+          <ArrowRight size={12} className="hidden lg:inline" aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Opens a row's choices below it. */
+function ChoicesToggle({ label, children }: { label: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="text-xs">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={label}
+        onClick={() => setOpen(shown => !shown)}
+        className="font-semibold text-[#49725a] underline underline-offset-2 hover:text-[#102319]"
+      >
+        {open ? 'Hide choices' : 'Choices'}
+      </button>
+      {open && children}
+    </div>
   );
 }
 
@@ -277,11 +389,11 @@ function Half({ kind, title, monthly, note, children }: {
 const HALF_NOTES: Record<Flow, { repeating: string; spread: (days: number) => string }> = {
   income: {
     repeating: 'Paychecks and other income that arrive on a schedule. Each is projected on its own dates.',
-    spread: days => `Income with no fixed schedule. Your last ${days} days, spread evenly across every day ahead.`,
+    spread: days => `Income with no fixed schedule. Your last ${days} days, spread evenly across every day ahead. Anything you say comes less often is spread over its own months.`,
   },
   spending: {
     repeating: 'Bills and subscriptions that come on a schedule. Each is projected on its own dates.',
-    spread: days => `Spending with no fixed schedule, like groceries, shopping and gas. Your last ${days} days, spread evenly across every day ahead.`,
+    spread: days => `Spending with no fixed schedule, like groceries, shopping and gas. Your last ${days} days, spread evenly across every day ahead. Anything you say comes less often, like a yearly premium, is spread over its own months.`,
   },
 };
 
@@ -319,6 +431,12 @@ function describeAdjustment(adjustment: CashFlowAdjustment): string {
       return 'Kept in the forecast after it stopped';
     case 'exclude_transfer':
       return adjustment.flow === 'income' ? 'Transfer in left out of your cash position' : 'Transfer out left out of your cash position';
+    case 'exclude_category':
+      return `Category left out of typical ${adjustment.flow}`;
+    case 'spread_payee':
+      return adjustment.spreadMonths === null
+        ? `Spread over its own months in typical ${adjustment.flow}`
+        : `Comes ${spreadLabel(adjustment.spreadMonths).toLowerCase()}: each amount spread over ${adjustment.spreadMonths} months`;
   }
 }
 
@@ -338,7 +456,7 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
   const { baseline } = report;
   // Defaults keep a newer page from crashing if the report is from an older API.
   const adjustments = report.adjustments ?? [];
-  const typicalPayees = report.typicalPayees ?? [];
+  const typicalCategories = report.typicalCategories ?? [];
   const basisDays = baseline.typicalBasisDays;
 
   // A monthly override from Finances replaces what that side learns from
@@ -348,6 +466,7 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
   // between cash and cards; nothing else reads what an overridden side learns.
   const cancelledByOverride = (adjustment: CashFlowAdjustment) => !learned(adjustment.flow)
     && (adjustment.kind === 'include_one_off' || adjustment.kind === 'continue_stream'
+      || adjustment.kind === 'exclude_category' || adjustment.kind === 'spread_payee'
       || (adjustment.kind === 'exclude_payee' && adjustment.flow === 'income'));
   const overrideNote = (adjustment: CashFlowAdjustment) =>
     cancelledByOverride(adjustment) ? ` · no effect while your monthly ${adjustment.flow} from Finances is set` : '';
@@ -378,10 +497,48 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
   const kept = (item: CashFlowRecurringItem) => adjustments.find(adjustment => (item.continuedBy
     ? adjustment.id === item.continuedBy
     : adjustment.kind === 'continue_stream' && adjustment.flow === item.flow && adjustment.key === item.payeeKey));
-  // Only a change that is what puts a transaction in the typical rate counts:
-  // one whose one-off aged out, or whose payee now repeats, does nothing here.
-  const countedBy = (payee: CashFlowTypicalPayee) => adjustments.find(adjustment =>
-    adjustment.kind === 'include_one_off' && (payee.countedOneOffIds ?? []).includes(adjustment.key));
+  // The report names the choice that holds a transaction in a typical rate:
+  // counted although it looked like a one-off, or spread over its payee's months.
+  const choice = (id: string | null | undefined) => (id ? adjustments.find(adjustment => adjustment.id === id) : undefined);
+  // A one-off is not yet in a typical rate, so it has no spreadBy; look up the
+  // payee's spread choice directly so the control can show what is already set.
+  const payeeSpread = (transaction: CashFlowItemTransaction, flow: Flow) =>
+    choice(transaction.spreadBy)
+    ?? adjustments.find(adjustment =>
+      adjustment.kind === 'spread_payee' && adjustment.flow === flow && adjustment.key === transaction.payeeKey);
+  const spreadPayee = (transaction: CashFlowItemTransaction, flow: Flow, months: number | null) => {
+    if (!transaction.payeeKey) return;
+    if (months !== null) return adjust({ kind: 'spread_payee', flow, key: transaction.payeeKey, spreadMonths: months });
+    const spread = payeeSpread(transaction, flow);
+    return spread ? undo(spread) : undefined;
+  };
+  // Below a transaction in a typical rate: the user's choice that holds it there.
+  const typicalMarkers = (transaction: CashFlowItemTransaction) => {
+    const counted = choice(transaction.countedBy);
+    const months = choice(transaction.spreadBy)?.spreadMonths ?? null;
+    if (!counted && months === null) return null;
+    return (
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {months !== null && <span className="font-semibold text-[#28704d]">{spreadLabel(months).toLowerCase()}, set by you</span>}
+        {counted && <span className="font-semibold text-[#28704d]">counted by you</span>}
+        {counted && <MoveButton label="Move back" item={transaction.label} toward="out" disabled={busy} onClick={() => undo(counted)} />}
+      </div>
+    );
+  };
+  // What a typical transaction's payee can be told: how often it comes, or to stay out.
+  const typicalChoices = (transaction: CashFlowItemTransaction, flow: Flow) => (transaction.payeeKey ? {
+    label: `Choices for ${transaction.label}`,
+    content: (
+      <PayeeChoices
+        transaction={transaction}
+        spread={payeeSpread(transaction, flow)}
+        basisDays={basisDays}
+        busy={busy}
+        onSpread={months => void spreadPayee(transaction, flow, months)}
+        onLeaveOut={() => void adjust({ kind: 'exclude_payee', flow, key: transaction.payeeKey! })}
+      />
+    ),
+  } : null);
 
   // Where each regular item is expected, once there is more than one account it could be.
   const accountNames = accountNamesById(report);
@@ -400,38 +557,35 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
         category={categoryOf(item)}
         marker={item.continuedByUser ? 'kept by you' : undefined}
         amount={formatMoney(item.amount, true)}
-        transactions={item.transactions}
-        transactionCount={item.transactionCount}
+        transactions={{ ...item, flow: item.flow }}
         action={keptBy
           ? <MoveButton label="Stop counting" item={item.label} toward="out" disabled={busy} onClick={() => undo(keptBy)} />
           : <MoveButton label="Leave out" item={item.label} toward="out" disabled={busy} onClick={() => adjust({ kind: 'exclude_payee', flow: item.flow, key: item.payeeKey })} />}
       />
     );
   };
-  const typicalRow = (payee: CashFlowTypicalPayee) => {
-    const counted = countedBy(payee);
-    return (
-      <ItemRow
-        key={`${payee.flow}:${payee.payeeKey}`}
-        name={payee.label}
-        category={payee.transactions?.[0]?.category}
-        marker={counted ? 'counted by you' : undefined}
-        amount={`${formatMoney(payee.monthlyAmount)}/mo`}
-        transactions={payee.transactions}
-        transactionCount={payee.transactionCount}
-        action={counted
-          ? <MoveButton label="Move back" item={payee.label} toward="out" disabled={busy} onClick={() => undo(counted)} />
-          : <MoveButton label="Leave out" item={payee.label} toward="out" disabled={busy} onClick={() => adjust({ kind: 'exclude_payee', flow: payee.flow, key: payee.payeeKey })} />}
-      />
-    );
-  };
+  const categoryRow = ({ category, dollars }: { category: CashFlowTypicalCategory; dollars: number }) => (
+    <ItemRow
+      key={`${category.flow}:${category.key}`}
+      name={category.label}
+      amount={`${formatMoney(dollars)}/mo`}
+      transactions={{
+        ...category,
+        flow: category.flow,
+        withLabels: true,
+        renderExtra: typicalMarkers,
+        renderChoices: transaction => typicalChoices(transaction, category.flow),
+      }}
+      action={<MoveButton label="Leave out" item={category.label} toward="out" disabled={busy} onClick={() => adjust({ kind: 'exclude_category', flow: category.flow, key: category.key })} />}
+    />
+  );
 
   // A side's usual month, split into its two halves, plus the card interest
   // spending carries. The halves are rounded together, so the shown figures
   // add up to the side's total.
   const split = (flow: Flow) => {
     const regular = report.recurring.filter(item => item.flow === flow && item.status === 'active');
-    const typical = typicalPayees.filter(payee => payee.flow === flow);
+    const categories = typicalCategories.filter(category => category.flow === flow);
     const repeating = (flow === 'income' ? baseline.recurringMonthlyIncome : baseline.recurringMonthlySpending)
       // A report from before the field existed: the same items at their monthly rates.
       ?? regular.reduce((sum, item) => sum + item.monthlyAmount, 0);
@@ -446,6 +600,14 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
     const exact = [repeating, spread, interest];
     const total = Math.round(exact.reduce((sum, part) => sum + part, 0));
     const [repeatingShown, spreadShown, interestShown] = roundToTotal(exact, total);
+    // Each category's dollars, rounded together so they add up to the half they
+    // make; the report's categories add up to it, so only rounding is shared out.
+    const categoriesTotal = categories.reduce((sum, category) => sum + category.monthlyAmount, 0);
+    const categoryDollars = roundToTotal(
+      categories.map(category => category.monthlyAmount),
+      Math.abs(categoriesTotal - spreadShown) <= 1 ? spreadShown : categoriesTotal,
+    );
+    const typical = categories.map((category, index) => ({ category, dollars: categoryDollars[index] }));
     return { regular, typical, total, repeating: repeatingShown, spread: spreadShown, interest: interestShown };
   };
 
@@ -472,7 +634,7 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
             <CappedList items={parts.regular} render={regularRow} empty="Nothing repeats on a schedule yet." />
           </Half>
           <Half kind="spread" title="Everything else" monthly={parts.spread} note={HALF_NOTES[flow].spread(basisDays)}>
-            <CappedList items={parts.typical} render={typicalRow} empty={`Nothing else in your last ${basisDays} days.`} />
+            <CappedList items={parts.typical} render={categoryRow} empty={`Nothing else in your last ${basisDays} days.`} />
           </Half>
           {parts.interest > 0 && (
             <Half kind="interest" title="Card interest" monthly={parts.interest} note="Projected from each card’s APR at your usual payment pace." />
@@ -489,7 +651,13 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
   const oneOffSides = (['spending', 'income'] as const).filter(learned);
   const oneOffs = report.oneOffs.filter(item => learned(item.flow));
   const stopped = report.recurring.filter(item => item.status === 'lapsed' && learned(item.flow));
-  const leftOutByUser = adjustments.filter(adjustment => adjustment.kind === 'exclude_payee' || adjustment.kind === 'exclude_transfer');
+  const leftOutByUser = adjustments.filter(adjustment =>
+    adjustment.kind === 'exclude_payee' || adjustment.kind === 'exclude_transfer' || adjustment.kind === 'exclude_category');
+  const leftOutWhat = (adjustment: CashFlowAdjustment) => {
+    if (adjustment.kind === 'exclude_transfer') return adjustment.flow === 'income' ? 'Transfer in' : 'Transfer out';
+    const side = adjustment.flow === 'income' ? 'Money in' : 'Money out';
+    return adjustment.kind === 'exclude_category' ? `Category · ${side}` : side;
+  };
   const thresholdText = thresholds && oneOffSides.length > 0
     ? oneOffSides
       .map(flow => `${formatMoney(thresholds[flow])} or more ${flow === 'income' ? 'received' : 'spent'}`)
@@ -499,144 +667,155 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
   const showTransfers = transfers !== null && (transfers.recurring.length > 0 || Math.round(transfers.typicalMonthlyNet) !== 0);
 
   return (
-    <section className="rounded-[1.6rem] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-sm sm:p-7" aria-labelledby="forecast-board-heading">
-      <h3 id="forecast-board-heading" className="text-lg font-semibold text-[#102319]">What the forecast counts</h3>
-      <p className="mt-1 max-w-3xl text-sm leading-6 text-[#5e6b63]">
-        Move anything in or out with its button, and the forecast updates. Changes only affect the forecast; past months
-        stay as they happened. If something isn’t really income or spending, like a transfer to your own account, change its
-        category in <Link href="/profile" className="font-semibold text-[#102319] underline">Accounts &amp; context</Link>{' '}
-        instead, which corrects your history too.
-      </p>
-
-      {error && (
-        <p role="alert" className="mt-4 rounded-xl border border-[#b84a3d]/25 bg-[#f8e8e3] px-3.5 py-2.5 text-sm text-[#8b3027]">
-          {error}
+    <BoardContext.Provider value={{ apiUrl, onChanged }}>
+      <section className="rounded-[1.6rem] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-sm sm:p-7" aria-labelledby="forecast-board-heading">
+        <h3 id="forecast-board-heading" className="text-lg font-semibold text-[#102319]">What the forecast counts</h3>
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-[#5e6b63]">
+          Move anything in or out with its button, and the forecast updates. Changes only affect the forecast; past months
+          stay as they happened. If something isn’t really income or spending, like a transfer to your own account, change its
+          category in <Link href="/profile" className="font-semibold text-[#102319] underline">Accounts &amp; context</Link>{' '}
+          instead, which corrects your history too.
         </p>
-      )}
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <Column title="Counted in the forecast" description="Projected forward from your history." tone="in">
-          <div className="space-y-4">
-            <FlowSection tone="in" title="Money in" total={sideTotal('income')}>{side('income')}</FlowSection>
-            <FlowSection tone="out" title="Money out" total={sideTotal('spending')}>{side('spending')}</FlowSection>
-            {showTransfers && transfers && (
-              <FlowSection
-                tone="transfers"
-                title="Transfers"
-                note="Money moving to or from accounts that aren’t connected here, like investments. It changes your cash position, but isn’t income or spending."
-              >
-                <CappedList
-                  items={transfers.recurring}
-                  render={item => (
-                    <ItemRow
-                      key={item.id}
-                      name={item.label}
-                      detail={`${CADENCE_LABELS[item.cadence]}${item.nextDate ? ` · next ${formatCalendarDate(item.nextDate)}` : ''}${inAccount(item.accountId)}`}
-                      amount={`${item.direction === 'in' ? '+' : '−'}${formatMoney(item.amount, true)}`}
-                      transactions={item.transactions}
-                      transactionCount={item.transactionCount}
-                      action={(
-                        <MoveButton
-                          label="Leave out"
-                          item={item.label}
-                          toward="out"
-                          disabled={busy}
-                          onClick={() => adjust({ kind: 'exclude_transfer', flow: item.direction === 'in' ? 'income' : 'spending', key: item.payeeKey })}
-                        />
-                      )}
-                    />
+        {error && (
+          <p role="alert" className="mt-4 rounded-xl border border-[#b84a3d]/25 bg-[#f8e8e3] px-3.5 py-2.5 text-sm text-[#8b3027]">
+            {error}
+          </p>
+        )}
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <Column title="Counted in the forecast" description="Projected forward from your history." tone="in">
+            <div className="space-y-4">
+              <FlowSection tone="in" title="Money in" total={sideTotal('income')}>{side('income')}</FlowSection>
+              <FlowSection tone="out" title="Money out" total={sideTotal('spending')}>{side('spending')}</FlowSection>
+              {showTransfers && transfers && (
+                <FlowSection
+                  tone="transfers"
+                  title="Transfers"
+                  note="Money moving to or from accounts that aren’t connected here, like investments. It changes your cash position, but isn’t income or spending."
+                >
+                  <CappedList
+                    items={transfers.recurring}
+                    render={item => (
+                      <ItemRow
+                        key={item.id}
+                        name={item.label}
+                        detail={`${CADENCE_LABELS[item.cadence]}${item.nextDate ? ` · next ${formatCalendarDate(item.nextDate)}` : ''}${inAccount(item.accountId)}`}
+                        amount={`${item.direction === 'in' ? '+' : '−'}${formatMoney(item.amount, true)}`}
+                        transactions={{ ...item, flow: item.direction === 'in' ? 'income' : 'spending' }}
+                        action={(
+                          <MoveButton
+                            label="Leave out"
+                            item={item.label}
+                            toward="out"
+                            disabled={busy}
+                            onClick={() => adjust({ kind: 'exclude_transfer', flow: item.direction === 'in' ? 'income' : 'spending', key: item.payeeKey })}
+                          />
+                        )}
+                      />
+                    )}
+                  />
+                  {Math.round(transfers.typicalMonthlyNet) !== 0 && (
+                    <p className="mt-1 text-xs leading-5 text-[#66736b]">
+                      Plus about {formatMoney(Math.abs(transfers.typicalMonthlyNet))} a month
+                      {transfers.typicalMonthlyNet < 0 ? ' out' : ' in'} in other transfers, spread evenly.
+                    </p>
                   )}
-                />
-                {Math.round(transfers.typicalMonthlyNet) !== 0 && (
-                  <p className="mt-1 text-xs leading-5 text-[#66736b]">
-                    Plus about {formatMoney(Math.abs(transfers.typicalMonthlyNet))} a month
-                    {transfers.typicalMonthlyNet < 0 ? ' out' : ' in'} in other transfers, spread evenly.
-                  </p>
+                </FlowSection>
+              )}
+            </div>
+          </Column>
+
+          <Column title="Left out" description="Not projected. Move anything back in." tone="out">
+            <Group
+              title="One-offs"
+              note={thresholdText
+                ? `A large amount that stands out from everything else from its payee in your last ${basisDays} days: ${thresholdText}, and at least twice the rest from that payee. Amounts within ten days of each other, like a sum moved in pieces, count together. Counting one spreads it over those ${basisDays} days, as if amounts like it come that often; if they come less often, say how often under Choices.`
+                : undefined}
+            >
+              <CappedList
+                items={oneOffs}
+                empty={thresholdText ? `None in your last ${basisDays} days.` : 'None yet.'}
+                render={item => (
+                  <ItemRow
+                    key={item.id}
+                    name={item.label}
+                    detail={formatCalendarDate(item.date)}
+                    // An older report carries no category picker values, and offers nothing to change.
+                    category={item.categoryCodes ? <CategoryButton transaction={item} flow={item.flow} onChanged={onChanged} /> : item.category}
+                    amount={`${item.flow === 'income' ? '+' : ''}${formatMoney(item.amount, true)}`}
+                    action={<MoveButton label="Count it" item={item.label} toward="in" disabled={busy} onClick={() => adjust({ kind: 'include_one_off', flow: item.flow, key: item.id })} />}
+                    extra={item.payeeKey ? (
+                      <div className="mt-1">
+                        <ChoicesToggle label={`Choices for ${item.label}`}>
+                          <PayeeChoices
+                            transaction={item}
+                            spread={payeeSpread(item, item.flow)}
+                            basisDays={basisDays}
+                            busy={busy}
+                            onSpread={months => void spreadPayee(item, item.flow, months)}
+                          />
+                        </ChoicesToggle>
+                      </div>
+                    ) : undefined}
+                  />
                 )}
-              </FlowSection>
-            )}
-          </div>
-        </Column>
+              />
+            </Group>
 
-        <Column title="Left out" description="Not projected. Move anything back in." tone="out">
-          <Group
-            title="One-offs"
-            note={thresholdText
-              ? `A large amount that stands out from everything else from its payee in your last ${basisDays} days: ${thresholdText}, and at least twice the rest from that payee. Amounts within ten days of each other, like a sum moved in pieces, count together. Counting one spreads it over those ${basisDays} days, as if amounts like it come that often.`
-              : undefined}
-          >
-            <CappedList
-              items={oneOffs}
-              empty={thresholdText ? `None in your last ${basisDays} days.` : 'None yet.'}
-              render={item => (
-                <ItemRow
-                  key={item.id}
-                  name={item.label}
-                  detail={formatCalendarDate(item.date)}
-                  category={item.category}
-                  amount={`${item.flow === 'income' ? '+' : ''}${formatMoney(item.amount, true)}`}
-                  action={<MoveButton label="Count it" item={item.label} toward="in" disabled={busy} onClick={() => adjust({ kind: 'include_one_off', flow: item.flow, key: item.id })} />}
-                />
-              )}
-            />
-          </Group>
+            <Group title="Stopped" note="Regular items that haven’t shown up lately. Keep counting one you know continues.">
+              <CappedList
+                items={stopped}
+                empty="Nothing has stopped."
+                render={item => (
+                  <ItemRow
+                    key={item.id}
+                    name={item.label}
+                    detail={`${CADENCE_LABELS[item.cadence]} · last ${formatCalendarDate(item.lastDate)}${inAccount(item.accountId)}`}
+                    category={categoryOf(item)}
+                    amount={formatMoney(item.amount, true)}
+                    transactions={{ ...item, flow: item.flow }}
+                    action={<MoveButton label="Keep counting" item={item.label} toward="in" disabled={busy} onClick={() => adjust({ kind: 'continue_stream', flow: item.flow, key: item.payeeKey })} />}
+                  />
+                )}
+              />
+            </Group>
 
-          <Group title="Stopped" note="Regular items that haven’t shown up lately. Keep counting one you know continues.">
-            <CappedList
-              items={stopped}
-              empty="Nothing has stopped."
-              render={item => (
-                <ItemRow
-                  key={item.id}
-                  name={item.label}
-                  detail={`${CADENCE_LABELS[item.cadence]} · last ${formatCalendarDate(item.lastDate)}${inAccount(item.accountId)}`}
-                  category={categoryOf(item)}
-                  amount={formatMoney(item.amount, true)}
-                  transactions={item.transactions}
-                  transactionCount={item.transactionCount}
-                  action={<MoveButton label="Keep counting" item={item.label} toward="in" disabled={busy} onClick={() => adjust({ kind: 'continue_stream', flow: item.flow, key: item.payeeKey })} />}
-                />
-              )}
-            />
-          </Group>
+            <Group title="Left out by you">
+              <CappedList
+                items={leftOutByUser}
+                empty="Nothing yet. Use Leave out on anything you don’t want projected."
+                render={adjustment => (
+                  <ItemRow
+                    key={adjustment.id}
+                    name={adjustment.label}
+                    detail={`${leftOutWhat(adjustment)}${overrideNote(adjustment)}`}
+                    category={adjustment.kind === 'exclude_category' ? undefined : adjustment.transactions?.[0]?.category}
+                    transactions={{ ...adjustment, flow: adjustment.flow, withLabels: adjustment.kind === 'exclude_category' }}
+                    action={<MoveButton label="Put back" item={adjustment.label} toward="in" disabled={busy} onClick={() => undo(adjustment)} />}
+                  />
+                )}
+              />
+            </Group>
+          </Column>
+        </div>
 
-          <Group title="Left out by you">
-            <CappedList
-              items={leftOutByUser}
-              empty="Nothing yet. Use Leave out on anything you don’t want projected."
-              render={adjustment => (
+        {adjustments.length > 0 && (
+          <details className="mt-4 rounded-2xl border border-[#102319]/10 bg-white/50 px-4 py-3">
+            <summary className="cursor-pointer text-sm font-bold text-[#102319]">All your changes ({adjustments.length})</summary>
+            <ul className="mt-2 divide-y divide-[#102319]/10">
+              {adjustments.map(adjustment => (
                 <ItemRow
                   key={adjustment.id}
                   name={adjustment.label}
-                  detail={`${adjustment.kind === 'exclude_transfer'
-                    ? (adjustment.flow === 'income' ? 'Transfer in' : 'Transfer out')
-                    : (adjustment.flow === 'income' ? 'Money in' : 'Money out')}${overrideNote(adjustment)}`}
-                  category={adjustment.transactions?.[0]?.category}
-                  transactions={adjustment.transactions}
-                  transactionCount={adjustment.transactionCount}
-                  action={<MoveButton label="Put back" item={adjustment.label} toward="in" disabled={busy} onClick={() => undo(adjustment)} />}
+                  detail={`${describeAdjustment(adjustment)}${overrideNote(adjustment)}`}
+                  action={<MoveButton label="Undo" item={adjustment.label} disabled={busy} onClick={() => undo(adjustment)} />}
                 />
-              )}
-            />
-          </Group>
-        </Column>
-      </div>
-
-      {adjustments.length > 0 && (
-        <details className="mt-4 rounded-2xl border border-[#102319]/10 bg-white/50 px-4 py-3">
-          <summary className="cursor-pointer text-sm font-bold text-[#102319]">All your changes ({adjustments.length})</summary>
-          <ul className="mt-2 divide-y divide-[#102319]/10">
-            {adjustments.map(adjustment => (
-              <ItemRow
-                key={adjustment.id}
-                name={adjustment.label}
-                detail={`${describeAdjustment(adjustment)}${overrideNote(adjustment)}`}
-                action={<MoveButton label="Undo" item={adjustment.label} disabled={busy} onClick={() => undo(adjustment)} />}
-              />
-            ))}
-          </ul>
-        </details>
-      )}
-    </section>
+              ))}
+            </ul>
+          </details>
+        )}
+      </section>
+    </BoardContext.Provider>
   );
 }

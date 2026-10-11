@@ -22,14 +22,15 @@ const venmo: TransactionCategorySubject = {
   isUserCategory: false,
 };
 
-function mockFetch(matchCount: number, direction: 'in' | 'out' = 'out') {
+function mockFetch(matchCount: number, direction: 'in' | 'out' = 'out', matches: Record<string, unknown> = {}) {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, init });
     let body: unknown = {};
     if (url.endsWith('/options')) body = { success: true, data: options };
-    else if (url.endsWith('/matches')) body = { success: true, data: { count: matchCount, direction } };
+    else if (url.endsWith('/matches')) body = { success: true, data: { count: matchCount, direction, ...matches } };
+    else if (init?.method === 'DELETE') body = { success: true };
     else if (init?.method === 'PUT') {
       const sent = JSON.parse(String(init.body));
       body = {
@@ -94,6 +95,64 @@ describe('TransactionCategoryModal', () => {
     await chooseRent();
     await waitFor(() => expect(calls.some(call => call.url.endsWith('/matches'))).toBe(true));
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('offers new transactions alone when the payee has no others yet', async () => {
+    const calls = mockFetch(0, 'out', { canApplyToMatching: true, rule: null });
+    render(<TransactionCategoryModal transaction={venmo} onClose={jest.fn()} onSaved={jest.fn()} />);
+    await chooseRent();
+    fireEvent.click(await screen.findByRole('checkbox', { name: /^Also apply to new transactions with Venmo/ }));
+    expect(screen.getByText(/New ones get it when they arrive\./)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save category' }));
+    await waitFor(() => expect(calls.some(call => call.init?.method === 'PUT')).toBe(true));
+    expect(JSON.parse(String(calls.find(call => call.init?.method === 'PUT')!.init!.body)).applyToMatching).toBe(true);
+  });
+
+  it('says when the payee’s new transactions get a category, and stops that', async () => {
+    const calls = mockFetch(2, 'out', {
+      canApplyToMatching: true,
+      rule: { id: 'rule-1', category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'] },
+    });
+    render(<TransactionCategoryModal transaction={{ ...venmo, isUserCategory: true }} onClose={jest.fn()} onSaved={jest.fn()} />);
+    expect(await screen.findByText(/New transactions with Venmo get Rent when they arrive\./))
+      .toHaveTextContent('Restoring this one’s original category stops that too.');
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() => expect(screen.queryByText(/New transactions with Venmo get/)).not.toBeInTheDocument());
+    expect(calls.find(call => call.init?.method === 'DELETE')!.url).toMatch(/\/api\/transaction-categories\/rules\/rule-1$/);
+  });
+
+  it('keeps a rule it could not stop, unless the server says it is already gone', async () => {
+    const rule = { canApplyToMatching: true, rule: { id: 'rule-1', category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'] } };
+    let gone: unknown = {};
+    mockFetch(2, 'out', rule);
+    const fetchWithRule = global.fetch as jest.Mock;
+    global.fetch = jest.fn((input: RequestInfo | URL, init?: RequestInit) => (init?.method === 'DELETE'
+      ? Promise.resolve({ ok: false, status: 404, json: async () => gone })
+      : fetchWithRule(input, init))) as jest.Mock;
+    render(<TransactionCategoryModal transaction={venmo} onClose={jest.fn()} onSaved={jest.fn()} />);
+    await screen.findByText(/New transactions with Venmo get/);
+
+    // A server without the route says 404 too, and the rule is still there.
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('We couldn’t stop it.');
+    expect(screen.getByText(/New transactions with Venmo get/)).toBeInTheDocument();
+
+    gone = { success: false, error: 'No such rule', code: 'RULE_NOT_FOUND' };
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() => expect(screen.queryByText(/New transactions with Venmo get/)).not.toBeInTheDocument());
+  });
+
+  it('shows a calendar date as that day, wherever the user is', async () => {
+    // West of UTC, midnight UTC on Oct 1 is still Sep 30.
+    const zone = process.env.TZ;
+    process.env.TZ = 'America/Los_Angeles';
+    try {
+      mockFetch(0);
+      render(<TransactionCategoryModal transaction={venmo} onClose={jest.fn()} onSaved={jest.fn()} />);
+      expect(await screen.findByText(/Oct 1, 2026/)).toBeInTheDocument();
+    } finally {
+      process.env.TZ = zone;
+    }
   });
 
   it('says which way the money goes as the server reports it, not by the sign', async () => {

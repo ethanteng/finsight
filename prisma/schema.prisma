@@ -42,6 +42,7 @@ model User {
   financialSummaryHistory      FinancialSummaryHistory[]
   retirementAnalyses           RetirementAnalysis[]
   transactionCategoryOverrides TransactionCategoryOverride[]
+  transactionCategoryRules     TransactionCategoryRule[]
 
   publicApiCredential PublicApiCredential?
   acquisition         UserAcquisition?
@@ -110,6 +111,33 @@ model TransactionCategoryOverride {
   @@unique([userId, transactionId])
   @@index([userId])
   @@map("transaction_category_overrides")
+}
+
+/// A user's standing category for one payee's transactions that move money one
+/// way, made by applying a category to the payee's other transactions. Each new
+/// matching transaction gets its own TransactionCategoryOverride from it at
+/// ingestion, so the rule only reaches transactions with no category of their
+/// own, and removing it leaves the ones it already reached as they are.
+model TransactionCategoryRule {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The payee, keyed the way the cash-flow ledger keys it (`counterpartyKey`).
+  counterpartyKey String
+  /// 'in' or 'out': which way the payee's transactions move the user's cash.
+  direction       String
+  /// Investment activity rather than banking.
+  investment      Boolean  @default(false)
+  /// What the payee was called when the rule was made.
+  label           String
+  /// Ordered `[primary]` or `[primary, detailed]` personal-finance-category values.
+  category        String[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, counterpartyKey, direction, investment], map: "transaction_category_rules_user_payee_key")
+  @@index([userId])
+  @@map("transaction_category_rules")
 }
 
 model Account {
@@ -658,21 +686,25 @@ model PlannedCashFlowEvent {
 }
 
 /// A user's choice about what the cash-flow forecast counts: a payee left out,
-/// a one-off counted, a stopped item kept, or a transfer left out. It changes
-/// what the forecast learns from, never the history it shows.
+/// a one-off counted, a stopped item kept, a transfer left out, a category left
+/// out, or a payee spread over months of its own. It changes what the forecast
+/// learns from, never the history it shows.
 model CashFlowForecastAdjustment {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// 'exclude_payee', 'include_one_off', 'continue_stream' or 'exclude_transfer'.
-  kind      String
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 'exclude_payee', 'include_one_off', 'continue_stream', 'exclude_transfer',
+  /// 'exclude_category' or 'spread_payee'.
+  kind         String
   /// 'income' or 'spending'; for a transfer, 'income' is money in.
-  flow      String
-  /// The payee's ledger key, or a one-off's transaction id.
-  key       String
+  flow         String
+  /// The payee's ledger key, a one-off's transaction id, or a category's label key.
+  key          String
   /// What the item was called when the user made the choice.
-  label     String
-  createdAt DateTime @default(now())
+  label        String
+  /// For 'spread_payee', the months each of the payee's amounts is spread over; null otherwise.
+  spreadMonths Int?
+  createdAt    DateTime @default(now())
 
   @@unique([userId, kind, flow, key])
   @@index([userId])

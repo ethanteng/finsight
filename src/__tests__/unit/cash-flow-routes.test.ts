@@ -26,6 +26,7 @@ const prisma: Record<string, any> = {
     findFirst: jest.fn(),
     count: jest.fn(),
     create: jest.fn(),
+    update: jest.fn(),
     deleteMany: jest.fn(),
   },
 };
@@ -401,6 +402,7 @@ describe('cash flow routes', () => {
       flow: 'spending',
       key: 'oak street apartments',
       label: 'Oak Street Apartments',
+      spreadMonths: null,
       createdAt: new Date(),
       ...overrides,
     });
@@ -414,10 +416,12 @@ describe('cash flow routes', () => {
 
       expect(response.status).toBe(201);
       expect(response.body.adjustment).toEqual({
-        id: 'adjustment-1', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments',
+        id: 'adjustment-1', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments', spreadMonths: null,
       });
       expect(prisma.cashFlowForecastAdjustment.create).toHaveBeenCalledWith({
-        data: { userId: 'user-1', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments' },
+        data: {
+          userId: 'user-1', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments', spreadMonths: null,
+        },
       });
       const lock = prisma.$executeRaw.mock.calls[0];
       expect(lock[0].join('?')).toContain('pg_advisory_xact_lock(872014273, hashtext(?))');
@@ -472,6 +476,38 @@ describe('cash flow routes', () => {
       // History still has the rent that was paid.
       const september = response.body.periods.find((period: any) => period.key === '2026-09');
       expect(september.actual.spending).toBeGreaterThan(2000);
+    });
+
+    it('spreads a payee, and changes how often it comes on the choice already saved', async () => {
+      const spreadFlights = { kind: 'spread_payee', flow: 'spending', key: 'united airlines', spreadMonths: 12 };
+      prisma.cashFlowForecastAdjustment.count.mockResolvedValue(0);
+      prisma.cashFlowForecastAdjustment.create.mockImplementation(async ({ data }: any) => adjustmentRow({ ...data, id: 'spread' }));
+      const created = await request(app).post('/api/cash-flow/adjustments').send(spreadFlights);
+      expect(created.status).toBe(201);
+      expect(created.body.adjustment).toMatchObject({ kind: 'spread_payee', label: 'United Airlines', spreadMonths: 12 });
+
+      const saved = adjustmentRow({ id: 'spread', kind: 'spread_payee', key: 'united airlines', label: 'United Airlines', spreadMonths: 12 });
+      prisma.cashFlowForecastAdjustment.findMany.mockResolvedValue([saved]);
+      prisma.cashFlowForecastAdjustment.findFirst.mockResolvedValue(saved);
+      prisma.cashFlowForecastAdjustment.update.mockImplementation(async ({ data }: any) => ({ ...saved, ...data }));
+      const twiceAYear = await request(app).post('/api/cash-flow/adjustments').send({ ...spreadFlights, spreadMonths: 6 });
+      expect(twiceAYear.status).toBe(200);
+      expect(twiceAYear.body.adjustment).toMatchObject({ id: 'spread', spreadMonths: 6 });
+      expect(prisma.cashFlowForecastAdjustment.update).toHaveBeenCalledWith({ where: { id: 'spread' }, data: { spreadMonths: 6 } });
+      expect(prisma.cashFlowForecastAdjustment.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('lists every transaction behind a list the report names', async () => {
+      const report = await request(app).get('/api/cash-flow?granularity=month&horizonMonths=3');
+      const category = report.body.typicalCategories.find((item: any) => item.transactionCount > 12);
+      expect(category.transactions).toHaveLength(12);
+      const response = await request(app).get('/api/cash-flow/transactions').query({ ref: category.transactionsRef });
+      expect(response.status).toBe(200);
+      expect(response.body.transactions).toHaveLength(category.transactionCount);
+      expect(response.body.transactions.slice(0, 12)).toEqual(category.transactions);
+
+      expect((await request(app).get('/api/cash-flow/transactions').query({ ref: 'stream:not-one' })).status).toBe(404);
+      expect((await request(app).get('/api/cash-flow/transactions')).status).toBe(400);
     });
 
     it('only undoes a change the user made', async () => {

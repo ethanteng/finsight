@@ -148,7 +148,7 @@ describe('cash flow forecast facts', () => {
 describe('the user’s adjustments in the pack', () => {
   it('names what the user moved in or out, and the figures already reflect it', () => {
     const leftOut: ForecastAdjustment = {
-      id: 'rent', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments',
+      id: 'rent', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments', spreadMonths: null,
     };
     const adjusted = context({ adjustments: [leftOut] });
     expect(adjusted.recurring!.some(item => item.label === 'Oak Street Apartments')).toBe(false);

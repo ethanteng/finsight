@@ -119,8 +119,9 @@ describe('buildCashFlowModel', () => {
     const built = model({ transactions: [...transactions, ...sitter] });
     expect(built.oneOffs.some(entry => entry.counterpartyKey === 'sitter')).toBe(false);
     expect(built.streams.some(stream => stream.counterpartyKey === 'sitter')).toBe(false);
-    const total = sitter.filter(item => String(item.date) >= '2026-07-03').reduce((sum, item) => sum + Number(item.amount), 0);
-    expect(built.typicalPayees.find(payee => payee.counterpartyKey === 'sitter')?.daily).toBeCloseTo(total / 90, 6);
+    const inRate = new Set(built.typicalCategories.spending.get('uncategorized')!.entryIds);
+    const inBasis = sitter.filter(item => String(item.date) >= '2026-07-03');
+    expect(inBasis.every(item => inRate.has(String(item.transaction_id)))).toBe(true);
   });
 
   it('does not let refunds make repeating large purchases look like one-offs', () => {
@@ -296,22 +297,22 @@ describe('buildCashFlowReport', () => {
     expect(september.total).toEqual(september.actual);
   });
 
-  it('lists every payee behind typical spending, however many there are', () => {
-    // Forty small shops, each visited once, all in the rate.
-    const letters = 'abcdefghijklmnopqrstuvwxyz';
-    const shops = Array.from({ length: 40 }, (_, index) => tx(
-      'checking',
-      addDays('2026-07-10', index * 2),
-      'expense',
-      20 + index,
-      `Shop ${letters[Math.floor(index / 26)]}${letters[index % 26]}`
-    ));
+  it('lists every category behind typical spending, and counts every transaction in each', () => {
+    // Forty small shops in four categories, each visited once, all in the rate.
+    const categories = ['FOOD_AND_DRINK_RESTAURANT', 'FOOD_AND_DRINK_COFFEE', 'GENERAL_MERCHANDISE_BOOKSTORES_AND_NEWSSTANDS', 'ENTERTAINMENT_MUSIC_AND_AUDIO'];
+    const shops = Array.from({ length: 40 }, (_, index) => {
+      const detailed = categories[index % 4];
+      return tx('checking', addDays('2026-07-10', index * 2), 'expense', 20 + index, `Shop ${index}`, {
+        personal_finance_category: { primary: detailed.split('_').slice(0, 2).join('_'), detailed },
+      });
+    });
     const built = model({ transactions: [...transactions, ...shops] });
-    const spending = built.typicalPayees.filter(payee => payee.flow === 'spending');
-    expect(spending.length).toBeGreaterThan(40);
-    const listed = buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 }).typicalPayees
-      .filter(payee => payee.flow === 'spending');
-    expect(listed.map(payee => payee.payeeKey)).toEqual(spending.map(payee => payee.counterpartyKey));
+    const listed = buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 }).typicalCategories
+      .filter(category => category.flow === 'spending');
+    expect(listed.map(category => category.key).sort()).toEqual([...built.typicalCategories.spending.keys()].sort());
+    expect(listed.length).toBeGreaterThanOrEqual(5);
+    expect(listed.reduce((sum, category) => sum + category.transactionCount, 0))
+      .toBe([...built.typicalCategories.spending.values()].reduce((sum, category) => sum + category.entryIds.length, 0));
   });
 
   it('forecasts the days a stale snapshot has not seen', () => {

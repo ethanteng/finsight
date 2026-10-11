@@ -1,5 +1,5 @@
 import { getPrismaClient } from '../prisma-client';
-import { counterpartyKey } from '../cash-flow/ledger';
+import { counterpartyKey, legacyCounterpartyKey } from '../cash-flow/ledger';
 import { cashFlowDirection, resolveCanonicalTransactionType } from './canonical-transaction-adapter';
 import { canonicalTypeForCategory } from './transaction-category-taxonomy';
 
@@ -19,6 +19,11 @@ import { canonicalTypeForCategory } from './transaction-category-taxonomy';
  * The in-place patch is display-only — it cannot recompute `transactionsSummary`, whose
  * totals are produced from the ingested data at revision time. Callers therefore schedule
  * a background revision so the cash-flow rollups catch up with the edit.
+ *
+ * A category applied to a payee's other transactions is also saved as a rule for that
+ * payee. Ingestion gives each new matching transaction its own override from the rule,
+ * so from then on it is like any other override: the user can change or restore it on
+ * its own, and removing the rule leaves it be.
  */
 
 /** Same resolution order the snapshot builder uses, so ids line up on both sides. */
@@ -132,9 +137,156 @@ export function applyOverridesToTransactions(
   return applied;
 }
 
-/** Re-applies stored overrides to freshly ingested provider data. */
+/** A payee, keyed the way `matchingTransactions` matches it. */
+export interface CategoryRulePayee {
+  counterpartyKey: string;
+  /** The key the payee had before reference words were dropped whole; set only where it differs. */
+  legacyCounterpartyKey?: string;
+  investment: boolean;
+}
+
+/** A payee and the way its transactions move money: what a category rule is for. */
+export interface CategoryRuleSubject extends CategoryRulePayee {
+  direction: 'in' | 'out';
+}
+
+export interface CategoryRule {
+  id: string;
+  counterpartyKey: string;
+  direction: 'in' | 'out';
+  investment: boolean;
+  label: string;
+  category: string[];
+}
+
+/** A transaction's payee as a rule names it; null when it has no name to match on. */
+export function categoryRulePayee(transaction: any): CategoryRulePayee | null {
+  const key = counterpartyKey(transaction?.merchant_name, transaction?.name);
+  if (!key) return null;
+  const legacy = legacyCounterpartyKey(transaction?.merchant_name, transaction?.name);
+  return { counterpartyKey: key, ...(legacy && { legacyCounterpartyKey: legacy }), investment: isInvestmentActivity(transaction) };
+}
+
+/**
+ * What a rule would be for, keyed the way `matchingTransactions` matches: null when
+ * the payee has no name to match on or which way the money moves can't be told.
+ * The direction is the row's own unless one is given.
+ */
+export function categoryRuleSubject(transaction: any, direction = moneyDirection(transaction)): CategoryRuleSubject | null {
+  const payee = categoryRulePayee(transaction);
+  return payee && direction ? { ...payee, direction } : null;
+}
+
+/**
+ * Which way a transaction moves money as its provider classified it. A category the
+ * user chose restates the row's classification, and can turn it around: a payment out
+ * recategorized as income reads as money in. Rules are matched against the provider's
+ * classification of new transactions, so a user-stamped row is read with the provider
+ * category its override recorded stamped back. Null when that category is not known.
+ */
+export function providerMoneyDirection(transaction: any, originalCategory: readonly string[] | null | undefined): 'in' | 'out' | null {
+  if (!transaction) return null;
+  if (transaction.category_source !== 'user') return moneyDirection(transaction);
+  if (!originalCategory || originalCategory.length === 0) return null;
+  const asProvided = { ...transaction };
+  stampCategoryFieldsOnTransaction(asProvided, [...originalCategory], 'provider');
+  return moneyDirection(asProvided);
+}
+
+/**
+ * The rule a transaction's payee takes or has, keyed by the provider's direction:
+ * for a row the user categorized, the one its override's restore point gives. A row
+ * whose restore point says nothing is read as it stands.
+ */
+export async function categoryRuleSubjectFor(userId: string, transaction: any): Promise<CategoryRuleSubject | null> {
+  const id = resolveProviderTransactionId(transaction);
+  if (transaction?.category_source !== 'user' || !id) return categoryRuleSubject(transaction);
+  const override = await getPrismaClient().transactionCategoryOverride.findUnique({
+    where: { userId_transactionId: { userId, transactionId: id } },
+    select: { originalCategory: true },
+  });
+  return categoryRuleSubject(transaction, providerMoneyDirection(transaction, override?.originalCategory) ?? moneyDirection(transaction));
+}
+
+/** Whether a rule is for this payee: by its key, or by the key it had when the rule was made. */
+export function ruleCovers(rule: Pick<CategoryRule, 'counterpartyKey' | 'direction' | 'investment'>, subject: CategoryRuleSubject): boolean {
+  return rule.direction === subject.direction
+    && rule.investment === subject.investment
+    && (rule.counterpartyKey === subject.counterpartyKey || rule.counterpartyKey === subject.legacyCounterpartyKey);
+}
+
+function toCategoryRule(row: { id: string; counterpartyKey: string; direction: string; investment: boolean; label: string; category: string[] }): CategoryRule {
+  return { ...row, direction: row.direction === 'in' ? 'in' : 'out' };
+}
+
+export async function getCategoryRules(userId: string): Promise<CategoryRule[]> {
+  const rows = await getPrismaClient().transactionCategoryRule.findMany({
+    where: { userId },
+    select: { id: true, counterpartyKey: true, direction: true, investment: true, label: true, category: true },
+  });
+  return rows.map(toCategoryRule);
+}
+
+/** The rule for a transaction's payee, if the user made one. */
+export async function findCategoryRule(userId: string, transaction: any): Promise<CategoryRule | null> {
+  const subject = await categoryRuleSubjectFor(userId, transaction);
+  if (!subject) return null;
+  return (await getCategoryRules(userId)).find(rule => ruleCovers(rule, subject)) ?? null;
+}
+
+/**
+ * The overrides rules give transactions that have none: each one the payee's rule
+ * covers, with the provider category it had as its restore point.
+ */
+export function overridesFromRules(
+  transactions: readonly any[],
+  overrides: ReadonlyMap<string, string[]>,
+  rules: readonly CategoryRule[]
+): Array<{ transactionId: string; category: string[]; originalCategory: string[] }> {
+  if (rules.length === 0) return [];
+  const created: Array<{ transactionId: string; category: string[]; originalCategory: string[] }> = [];
+  for (const transaction of transactions) {
+    const id = resolveProviderTransactionId(transaction);
+    if (!id || overrides.has(id)) continue;
+    const subject = categoryRuleSubject(transaction);
+    const rule = subject && rules.find(item => ruleCovers(item, subject));
+    if (!rule) continue;
+    created.push({ transactionId: id, category: [...rule.category], originalCategory: providerCategoryFromTransaction(transaction) });
+  }
+  return created;
+}
+
+/**
+ * Re-applies stored overrides to freshly ingested provider data, first giving each
+ * new transaction a rule covers an override of its own.
+ */
 export async function applyCategoryOverrides(userId: string, data: any): Promise<void> {
   const overrides = await getCategoryOverrides(userId);
+  // Rules only add overrides: one that cannot be read or saved must not cost the
+  // user the categories already saved, so the stored ones are applied regardless.
+  try {
+    const transactions = [
+      ...(Array.isArray(data?.bankingTransactions) ? data.bankingTransactions : []),
+      ...(Array.isArray(data?.investments?.transactions) ? data.investments.transactions : []),
+    ];
+    const fromRules = overridesFromRules(transactions, overrides, await getCategoryRules(userId));
+    if (fromRules.length > 0) {
+      const prisma = getPrismaClient();
+      await prisma.transactionCategoryOverride.createMany({
+        data: fromRules.map(override => ({ userId, ...override })),
+        skipDuplicates: true,
+      });
+      // A save since the overrides were read may have given one a category of its
+      // own, which the insert skipped; what is stored now is what gets stamped.
+      const stored = await prisma.transactionCategoryOverride.findMany({
+        where: { userId, transactionId: { in: fromRules.map(override => override.transactionId) } },
+        select: { transactionId: true, category: true },
+      });
+      for (const row of stored) overrides.set(row.transactionId, row.category);
+    }
+  } catch (error) {
+    console.warn('Failed to apply transaction category rules (non-fatal):', error);
+  }
   if (overrides.size === 0) return;
   applyOverridesToTransactions(data?.bankingTransactions, overrides);
   applyOverridesToTransactions(data?.investments?.transactions, overrides);
@@ -257,21 +409,40 @@ function isInvestmentActivity(transaction: any): boolean {
  * and a merchant's refunds keep their own category. A transaction whose
  * direction can't be told matches nothing, rather than risk mixing the two.
  *
+ * `direction` and `originalCategories` let a caller match the way a rule is
+ * keyed: by the provider's classification. A user category can turn a row's
+ * direction around, so without those a recategorized payment would match the
+ * payee's money the other way. When they are omitted, each row is read as it
+ * stands (unit tests and any caller that has no restore points).
+ *
  * Transactions without a provider id cannot carry an override and are skipped,
  * as is everything when the payee has no name to match on.
  */
-export function matchingTransactions(transactions: readonly any[], target: any): any[] {
+export function matchingTransactions(
+  transactions: readonly any[],
+  target: any,
+  options?: {
+    direction?: 'in' | 'out';
+    originalCategories?: ReadonlyMap<string, readonly string[]>;
+  }
+): any[] {
   const key = counterpartyKey(target?.merchant_name, target?.name);
-  const direction = moneyDirection(target);
+  const direction = options?.direction ?? moneyDirection(target);
   if (!key || !direction) return [];
   const targetId = resolveProviderTransactionId(target);
   const investment = isInvestmentActivity(target);
+  const directionOf = (transaction: any): 'in' | 'out' | null => {
+    if (!options?.originalCategories) return moneyDirection(transaction);
+    const id = resolveProviderTransactionId(transaction);
+    const original = id ? options.originalCategories.get(id) : undefined;
+    return providerMoneyDirection(transaction, original) ?? moneyDirection(transaction);
+  };
   return transactions.filter(transaction => {
     const id = resolveProviderTransactionId(transaction);
     return id !== null
       && id !== targetId
       && isInvestmentActivity(transaction) === investment
-      && moneyDirection(transaction) === direction
+      && directionOf(transaction) === direction
       && counterpartyKey(transaction?.merchant_name, transaction?.name) === key;
   });
 }
@@ -280,8 +451,9 @@ export function matchingTransactions(transactions: readonly any[], target: any):
 export async function findMatchingSnapshotTransactions(
   userId: string,
   transactionId: string
-): Promise<{ target: any; matches: any[] } | null> {
-  const snapshot = await getPrismaClient().financialSummarySnapshot.findUnique({
+): Promise<{ target: any; matches: any[]; subject: CategoryRuleSubject | null } | null> {
+  const prisma = getPrismaClient();
+  const snapshot = await prisma.financialSummarySnapshot.findUnique({
     where: { userId },
     select: { transactions: true },
   });
@@ -289,5 +461,25 @@ export async function findMatchingSnapshotTransactions(
   const transactions = snapshot.transactions as any[];
   const target = transactions.find(transaction => resolveProviderTransactionId(transaction) === transactionId);
   if (!target) return null;
-  return { target, matches: matchingTransactions(transactions, target) };
+  // Same provider direction a rule would use, so "also apply" and the rule agree
+  // when the target was already recategorized across a cash-flow boundary.
+  const subject = await categoryRuleSubjectFor(userId, target);
+  if (!subject) return { target, matches: [], subject: null };
+  const ids = transactions
+    .map(transaction => resolveProviderTransactionId(transaction))
+    .filter((id): id is string => id !== null);
+  const originals = ids.length === 0
+    ? []
+    : await prisma.transactionCategoryOverride.findMany({
+      where: { userId, transactionId: { in: ids } },
+      select: { transactionId: true, originalCategory: true },
+    });
+  return {
+    target,
+    subject,
+    matches: matchingTransactions(transactions, target, {
+      direction: subject.direction,
+      originalCategories: new Map(originals.map(row => [row.transactionId, row.originalCategory])),
+    }),
+  };
 }

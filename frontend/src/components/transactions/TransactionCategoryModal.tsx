@@ -62,6 +62,9 @@ export default function TransactionCategoryModal({
   // say, since a card account stores purchases and refunds alike as positive.
   const [matchDirection, setMatchDirection] = useState<'in' | 'out' | null>(null);
   const [applyToMatching, setApplyToMatching] = useState(false);
+  // The category the payee's new transactions get, if the user saved one for them.
+  const [rule, setRule] = useState<{ id: string; category: string[] } | null>(null);
+  const [ruleError, setRuleError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const primaryRef = useRef<HTMLSelectElement>(null);
 
@@ -100,9 +103,16 @@ export default function TransactionCategoryModal({
         const body = await response.json();
         const count = Number(body?.data?.count);
         const direction = body?.data?.direction;
-        if (!cancelled && Number.isInteger(count) && count > 0) {
+        // A payee that can be matched takes a rule for its new transactions even
+        // with no others yet; an older server that does not say offers only matches.
+        const canApply = typeof body?.data?.canApplyToMatching === 'boolean' ? body.data.canApplyToMatching : count > 0;
+        if (!cancelled && Number.isInteger(count) && canApply) {
           setMatchCount(count);
           setMatchDirection(direction === 'in' || direction === 'out' ? direction : null);
+        }
+        const saved = body?.data?.rule;
+        if (!cancelled && saved && typeof saved.id === 'string' && Array.isArray(saved.category)) {
+          setRule({ id: saved.id, category: saved.category });
         }
       } catch {
         // Without a count the option is simply not offered.
@@ -171,6 +181,13 @@ export default function TransactionCategoryModal({
     };
   }, [onClose]);
 
+  // A category in the menu's own words: its subcategory, or else its category.
+  const categoryWords = (category: string[]) => {
+    const option = options?.find(entry => entry.primary === category[0]);
+    const detail = category[1] ? option?.detailed.find(entry => entry.value === category[1]) : undefined;
+    return detail?.label ?? (category[1] ? humanize(category[1]) : option?.label ?? humanize(category[0] ?? ''));
+  };
+
   const detailedOptions = useMemo(
     () => options?.find(option => option.primary === primary)?.detailed ?? [],
     [options, primary]
@@ -219,6 +236,24 @@ export default function TransactionCategoryModal({
     }
   };
 
+  const stopRule = async () => {
+    if (!rule) return;
+    setRuleError(null);
+    try {
+      const response = await fetch(`${API_URL}/api/transaction-categories/rules/${encodeURIComponent(rule.id)}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      // Already gone is what was asked for, but only the API saying so counts:
+      // a server without the route answers 404 too, with the rule still there.
+      const body = await response.json().catch(() => null);
+      if (!response.ok && !(response.status === 404 && body?.code === 'RULE_NOT_FOUND')) throw new Error('Failed to stop it');
+      setRule(null);
+    } catch {
+      setRuleError('We couldn’t stop it. Please try again.');
+    }
+  };
+
   const reset = async () => {
     setSaving(true);
     setSaveError(null);
@@ -244,7 +279,11 @@ export default function TransactionCategoryModal({
   };
 
   const formattedDate = (() => {
-    const date = new Date(transaction.date);
+    // A bare calendar date is that day where the user is, not midnight UTC.
+    const calendar = /^(\d{4})-(\d{2})-(\d{2})$/.exec(transaction.date);
+    const date = calendar
+      ? new Date(Number(calendar[1]), Number(calendar[2]) - 1, Number(calendar[3]))
+      : new Date(transaction.date);
     return Number.isNaN(date.getTime())
       ? transaction.date
       : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -364,15 +403,30 @@ export default function TransactionCategoryModal({
               />
               <span>
                 <span className="block text-sm font-medium text-white">
-                  Also apply to {matchCount} other {matchCount === 1 ? 'transaction' : 'transactions'} with {transaction.name}
+                  {matchCount > 0
+                    ? `Also apply to ${matchCount} other ${matchCount === 1 ? 'transaction' : 'transactions'} with ${transaction.name}, and to new ones`
+                    : `Also apply to new transactions with ${transaction.name}`}
                 </span>
                 <span className="mt-0.5 block text-xs leading-5 text-gray-400">
                   {matchDirection === 'out' && 'Only money going out. Refunds and other money coming in from them keep their own categories. '}
                   {matchDirection === 'in' && 'Only money coming in. Payments to them keep their own categories. '}
-                  Each one can still be restored on its own.
+                  New ones get it when they arrive. Each one can still be changed or restored on its own.
                 </span>
               </span>
             </label>
+          )}
+
+          {rule && (
+            <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-lg border border-gray-700 p-3 text-xs leading-5 text-gray-400">
+              <span>
+                New transactions with {transaction.name} get {categoryWords(rule.category)} when they arrive.
+                {transaction.isUserCategory && ' Restoring this one’s original category stops that too.'}
+              </span>
+              <button type="button" onClick={() => void stopRule()} className="font-semibold text-[#8b4137] underline">
+                Stop
+              </button>
+              {ruleError && <span role="alert" className="w-full text-red-300">{ruleError}</span>}
+            </div>
           )}
 
           {saveError && (
@@ -406,7 +460,7 @@ export default function TransactionCategoryModal({
           >
             {saving
               ? 'Saving…'
-              : applyToMatching && matchCount !== null
+              : applyToMatching && matchCount !== null && matchCount > 0
                 ? `Save for ${matchCount + 1} transactions`
                 : 'Save category'}
           </button>

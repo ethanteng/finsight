@@ -68,15 +68,30 @@ export type RecurringCadence = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly'
 export interface CashFlowItemTransaction {
   id: string;
   date: string;
+  /** The payee or description the provider gave it. */
+  label: string;
+  /** Income, spending or a transfer's size; a refund is negative spending. */
   amount: number;
   /** Null when the transaction has no category. */
   category: string | null;
+  /** Its category as the category picker names it; empty when it has none. */
+  categoryCodes: string[];
+  /** The user chose its category. */
+  userCategory: boolean;
+  /** Its payee's key, which an adjustment names it by; null when the provider named none. */
+  payeeKey: string | null;
+  /** In a typical rate only because the user counted it: that choice's id. */
+  countedBy: string | null;
+  /** In a typical rate spread over months the user chose: that choice's id. */
+  spreadBy: string | null;
 }
 
-/** The latest transactions behind an item (at most 12, latest first), and how many there are in all. */
+/** The latest transactions behind an item (at most 12, latest first), how many there are in all, and how to ask for every one. */
 export interface CashFlowItemTransactions {
   transactions: CashFlowItemTransaction[];
   transactionCount: number;
+  /** Names the list to GET /api/cash-flow/transactions, which returns all of it. */
+  transactionsRef: string;
 }
 
 export interface CashFlowRecurringItem extends CashFlowItemTransactions {
@@ -102,29 +117,36 @@ export interface CashFlowRecurringItem extends CashFlowItemTransactions {
   continuedBy: string | null;
 }
 
-/** What a forecast adjustment does: leave a payee out, count a one-off, keep a stopped item, or leave a transfer out. */
-export type ForecastAdjustmentKind = 'exclude_payee' | 'include_one_off' | 'continue_stream' | 'exclude_transfer';
+/**
+ * What a forecast adjustment does: leave a payee out, count a one-off, keep a
+ * stopped item, leave a transfer out, leave a category out, or spread a payee's
+ * amounts over months of their own.
+ */
+export type ForecastAdjustmentKind =
+  'exclude_payee' | 'include_one_off' | 'continue_stream' | 'exclude_transfer' | 'exclude_category' | 'spread_payee';
 
 export interface CashFlowAdjustment extends CashFlowItemTransactions {
   id: string;
   kind: ForecastAdjustmentKind;
   /** For a transfer, `income` is money in. */
   flow: 'income' | 'spending';
-  /** A payee's key, or a one-off's transaction id. */
+  /** A payee's key, a one-off's transaction id, or a category's key. */
   key: string;
   label: string;
+  /** For spread_payee, the months each amount is spread over; otherwise null. */
+  spreadMonths: number | null;
   /** For a counted one-off: when it happened and how much it was. */
   date: string | null;
   amount: number | null;
 }
 
-export interface CashFlowTypicalPayee extends CashFlowItemTransactions {
+/** A category behind a typical rate, and what it adds to it a month. */
+export interface CashFlowTypicalCategory extends CashFlowItemTransactions {
   flow: 'income' | 'spending';
-  payeeKey: string;
+  /** The category's key, which an adjustment names it by. */
+  key: string;
   label: string;
   monthlyAmount: number;
-  /** Transactions in it only because the user counted them, by transaction id. */
-  countedOneOffIds: string[];
 }
 
 export type PlannedEventKind = 'income' | 'expense' | 'transfer' | 'card_payment';
@@ -176,23 +198,13 @@ export interface ExpectedMonthlySummary {
   learned: { income: number | null; spending: number | null } | null;
 }
 
-/** One transaction behind a usual-spending category. */
-export interface CashFlowSpendingCategoryTransaction {
-  id: string;
-  date: string;
-  /** The payee or description the provider gave it. */
-  label: string;
-  /** Spending is positive, a refund negative. */
-  amount: number;
-}
-
 /**
  * Where part of a category's month comes from: a regular bill at its monthly
  * rate, the typical rate the basis spent in the category, or the card interest
  * the usual pace runs up, which no transaction is behind yet.
  */
 export type CashFlowSpendingCategorySource =
-  | {
+  | ({
     kind: 'bill';
     streamId: string;
     label: string;
@@ -200,22 +212,17 @@ export type CashFlowSpendingCategorySource =
     /** Each payment. */
     amount: number;
     monthly: number;
-    /** Latest first, at most 12. */
-    transactions: CashFlowSpendingCategoryTransaction[];
-    transactionCount: number;
-  }
-  | {
+  } & CashFlowItemTransactions)
+  | ({
     kind: 'typical';
     monthly: number;
-    /** What its transactions add up to over the basis, refunds netted. */
+    /** What its transactions add up to, refunds netted. */
     total: number;
+    /** The earliest of them, or the basis's first day when that is earlier. */
     from: string;
     /** The basis's last day. */
     through: string;
-    /** Latest first, at most 100. */
-    transactions: CashFlowSpendingCategoryTransaction[];
-    transactionCount: number;
-  }
+  } & CashFlowItemTransactions)
   | { kind: 'projected_interest'; monthly: number };
 
 /** One category of the expected month's spending. */
@@ -274,11 +281,11 @@ export interface CashFlowReport {
   };
   recurring: CashFlowRecurringItem[];
   /** Every one-off in the basis, largest first, so each can be counted. */
-  oneOffs: Array<{ id: string; date: string; label: string; flow: 'income' | 'spending'; amount: number; category: string | null }>;
+  oneOffs: Array<CashFlowItemTransaction & { flow: 'income' | 'spending' }>;
   /** How large a non-repeating amount must be to be a one-off, by direction; null without a basis. */
   oneOffThresholds: { income: number; spending: number } | null;
-  /** Every payee behind the typical rates, largest first. */
-  typicalPayees: CashFlowTypicalPayee[];
+  /** Every category behind the typical rates, largest first, for the sides read from transactions. */
+  typicalCategories: CashFlowTypicalCategory[];
   /** The user's choices about what the forecast counts. */
   adjustments: CashFlowAdjustment[];
   plannedEvents: CashFlowPlannedEventSummary[];

@@ -10,7 +10,8 @@ import request from 'supertest';
 const prisma: Record<string, any> = {
   $transaction: jest.fn(async (operations: Promise<unknown>[]) => Promise.all(operations)),
   financialSummarySnapshot: { findUnique: jest.fn(), updateMany: jest.fn() },
-  transactionCategoryOverride: { findUnique: jest.fn(), upsert: jest.fn(), delete: jest.fn() },
+  transactionCategoryOverride: { findUnique: jest.fn(), findMany: jest.fn(), upsert: jest.fn(), delete: jest.fn() },
+  transactionCategoryRule: { findMany: jest.fn(), upsert: jest.fn(), deleteMany: jest.fn() },
 };
 
 jest.mock('../../prisma-client', () => ({ getPrismaClient: () => prisma }));
@@ -47,6 +48,10 @@ beforeEach(() => {
   prisma.financialSummarySnapshot.findUnique.mockResolvedValue({ computedAt, transactions: snapshotTransactions() });
   prisma.financialSummarySnapshot.updateMany.mockResolvedValue({ count: 1 });
   prisma.transactionCategoryOverride.findUnique.mockResolvedValue(null);
+  prisma.transactionCategoryOverride.findMany.mockResolvedValue([]);
+  prisma.transactionCategoryRule.findMany.mockResolvedValue([]);
+  prisma.transactionCategoryRule.upsert.mockImplementation(async (args: any) => ({ id: 'rule-1', ...args.create }));
+  prisma.transactionCategoryRule.deleteMany.mockResolvedValue({ count: 1 });
   prisma.transactionCategoryOverride.upsert.mockImplementation(async (args: any) => ({
     transactionId: args.where.userId_transactionId.transactionId,
     category: args.create.category,
@@ -59,7 +64,17 @@ describe('GET /api/transaction-categories/:transactionId/matches', () => {
   it('counts the other transactions with the same payee, money moving the same way', async () => {
     const response = await request(app).get('/api/transaction-categories/txn-1/matches');
     expect(response.status).toBe(200);
-    expect(response.body.data).toEqual({ count: 2, direction: 'out' });
+    expect(response.body.data).toEqual({ count: 2, direction: 'out', canApplyToMatching: true, rule: null });
+  });
+
+  it('offers a rule for a payee with no other transactions yet, and names the rule it already has', async () => {
+    prisma.transactionCategoryRule.findMany.mockResolvedValue([
+      { id: 'rule-1', counterpartyKey: 'safeway', direction: 'out', investment: false, label: 'Safeway', category: ['FOOD_AND_DRINK', 'FOOD_AND_DRINK_GROCERIES'] },
+    ]);
+    const response = await request(app).get('/api/transaction-categories/txn-5/matches');
+    expect(response.body.data).toEqual({
+      count: 0, direction: 'out', canApplyToMatching: true, rule: { id: 'rule-1', category: ['FOOD_AND_DRINK', 'FOOD_AND_DRINK_GROCERIES'] },
+    });
   });
 
   it('is a 404 for a transaction the snapshot does not have', async () => {
@@ -79,6 +94,17 @@ describe('PUT /api/transaction-categories/:transactionId', () => {
       transactionId: 'txn-1',
       category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'],
       appliedTo: ['txn-1', 'txn-2', 'txn-3'],
+      appliesToNew: true,
+    });
+
+    // Saved as the payee's rule in the same write, so new Venmo payments get it too.
+    expect(prisma.transactionCategoryRule.upsert).toHaveBeenCalledWith({
+      where: { userId_counterpartyKey_direction_investment: { userId: 'user-1', counterpartyKey: 'venmo', direction: 'out', investment: false } },
+      create: {
+        userId: 'user-1', counterpartyKey: 'venmo', direction: 'out', investment: false, label: 'Venmo',
+        category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'],
+      },
+      update: { category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'], label: 'Venmo' },
     });
 
     // One override each, written together, each with its own restore point.
@@ -107,6 +133,40 @@ describe('PUT /api/transaction-categories/:transactionId', () => {
     expect(schedule).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps a recategorized payee’s rule keyed the way the provider moves its money', async () => {
+    // txn-1 is a payment out the user already called income, which reads as money in on the row.
+    prisma.financialSummarySnapshot.findUnique.mockResolvedValue({
+      computedAt,
+      transactions: snapshotTransactions().map(transaction => transaction.transaction_id === 'txn-1'
+        ? { ...transaction, category: ['INCOME', 'INCOME_OTHER_INCOME'], category_source: 'user', transaction_type: 'income' }
+        : transaction),
+    });
+    prisma.transactionCategoryOverride.findUnique.mockResolvedValue({ originalCategory: ['TRANSFER_OUT'] });
+    prisma.transactionCategoryOverride.findMany.mockResolvedValue([
+      { transactionId: 'txn-1', originalCategory: ['TRANSFER_OUT'] },
+    ]);
+    const response = await request(app).put('/api/transaction-categories/txn-1').send({ primary: 'RENT_AND_UTILITIES', applyToMatching: true });
+    expect(prisma.transactionCategoryRule.upsert.mock.calls[0][0].where.userId_counterpartyKey_direction_investment)
+      .toMatchObject({ counterpartyKey: 'venmo', direction: 'out' });
+    // Matches follow that same provider direction: other payments out, not the cashout in.
+    expect(response.body.data.appliedTo).toEqual(['txn-1', 'txn-2', 'txn-3']);
+  });
+
+  it('names match direction from the provider when the row was recategorized', async () => {
+    prisma.financialSummarySnapshot.findUnique.mockResolvedValue({
+      computedAt,
+      transactions: snapshotTransactions().map(transaction => transaction.transaction_id === 'txn-1'
+        ? { ...transaction, category: ['INCOME', 'INCOME_OTHER_INCOME'], category_source: 'user', transaction_type: 'income' }
+        : transaction),
+    });
+    prisma.transactionCategoryOverride.findUnique.mockResolvedValue({ originalCategory: ['TRANSFER_OUT'] });
+    prisma.transactionCategoryOverride.findMany.mockResolvedValue([
+      { transactionId: 'txn-1', originalCategory: ['TRANSFER_OUT'] },
+    ]);
+    const response = await request(app).get('/api/transaction-categories/txn-1/matches');
+    expect(response.body.data).toMatchObject({ count: 2, direction: 'out', canApplyToMatching: true });
+  });
+
   it('without it, still sets only the one transaction', async () => {
     const response = await request(app)
       .put('/api/transaction-categories/txn-1')
@@ -115,6 +175,7 @@ describe('PUT /api/transaction-categories/:transactionId', () => {
     expect(response.status).toBe(200);
     expect(response.body.data.appliedTo).toBeUndefined();
     expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.transactionCategoryRule.upsert).not.toHaveBeenCalled();
     expect(prisma.transactionCategoryOverride.upsert).toHaveBeenCalledTimes(1);
     const written = prisma.financialSummarySnapshot.updateMany.mock.calls[0][0].data.transactions;
     expect(written.map((transaction: any) => transaction.category[0])).toEqual([
@@ -136,5 +197,76 @@ describe('PUT /api/transaction-categories/:transactionId', () => {
       .send({ primary: 'RENT_AND_UTILITIES', applyToMatching: true });
     expect(response.status).toBe(404);
     expect(prisma.transactionCategoryOverride.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('DELETE /api/transaction-categories/:transactionId', () => {
+  const stamped = () => snapshotTransactions().map(transaction => transaction.transaction_id === 'txn-1'
+    ? { ...transaction, category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'], category_source: 'user', transaction_type: 'expense' }
+    : transaction);
+
+  it('stops the rule that gave the payee the category, and leaves the others it reached alone', async () => {
+    prisma.financialSummarySnapshot.findUnique.mockResolvedValue({ computedAt, transactions: stamped() });
+    prisma.transactionCategoryOverride.findUnique.mockResolvedValue({
+      originalCategory: ['TRANSFER_OUT'], category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'],
+    });
+    prisma.transactionCategoryRule.findMany.mockResolvedValue([
+      { id: 'rule-venmo', counterpartyKey: 'venmo', direction: 'out', investment: false, label: 'Venmo', category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'] },
+      { id: 'rule-safeway', counterpartyKey: 'safeway', direction: 'out', investment: false, label: 'Safeway', category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'] },
+    ]);
+
+    const response = await request(app).delete('/api/transaction-categories/txn-1');
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ category: ['TRANSFER_OUT'], ruleRemoved: true });
+    expect(prisma.transactionCategoryRule.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1', id: { in: ['rule-venmo'] } } });
+    // Rules leave before the override, in one write, so a concurrent revision
+    // cannot recreate the override from a rule that is about to go.
+    expect(prisma.$transaction).toHaveBeenCalled();
+    const ops = prisma.$transaction.mock.calls[0][0] as Promise<unknown>[];
+    expect(ops).toHaveLength(2);
+    expect(prisma.transactionCategoryRule.deleteMany.mock.invocationCallOrder[0])
+      .toBeLessThan(prisma.transactionCategoryOverride.delete.mock.invocationCallOrder[0]);
+    // Only the restored transaction changes.
+    const written = prisma.financialSummarySnapshot.updateMany.mock.calls[0][0].data.transactions;
+    expect(written.map((transaction: any) => transaction.category[0])).toEqual([
+      'TRANSFER_OUT', 'TRANSFER_OUT', 'RENT_AND_UTILITIES', 'TRANSFER_IN', 'FOOD_AND_DRINK',
+    ]);
+  });
+
+  it('keeps the payee’s rule for money the other way, though it gives the same category', async () => {
+    prisma.financialSummarySnapshot.findUnique.mockResolvedValue({ computedAt, transactions: stamped() });
+    prisma.transactionCategoryOverride.findUnique.mockResolvedValue({
+      originalCategory: ['TRANSFER_OUT'], category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'],
+    });
+    prisma.transactionCategoryRule.findMany.mockResolvedValue([
+      { id: 'rule-out', counterpartyKey: 'venmo', direction: 'out', investment: false, label: 'Venmo', category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'] },
+      { id: 'rule-in', counterpartyKey: 'venmo', direction: 'in', investment: false, label: 'Venmo', category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'] },
+    ]);
+    await request(app).delete('/api/transaction-categories/txn-1');
+    expect(prisma.transactionCategoryRule.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1', id: { in: ['rule-out'] } } });
+  });
+
+  it('keeps a rule for another category: this transaction was set apart from it', async () => {
+    prisma.financialSummarySnapshot.findUnique.mockResolvedValue({ computedAt, transactions: stamped() });
+    prisma.transactionCategoryOverride.findUnique.mockResolvedValue({
+      originalCategory: ['TRANSFER_OUT'], category: ['RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT'],
+    });
+    prisma.transactionCategoryRule.findMany.mockResolvedValue([
+      { id: 'rule-venmo', counterpartyKey: 'venmo', direction: 'out', investment: false, label: 'Venmo', category: ['GENERAL_SERVICES'] },
+    ]);
+    const response = await request(app).delete('/api/transaction-categories/txn-1');
+    expect(response.body.data.ruleRemoved).toBe(false);
+    expect(prisma.transactionCategoryRule.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('DELETE /api/transaction-categories/rules/:ruleId', () => {
+  it('removes only the user’s own rule', async () => {
+    expect((await request(app).delete('/api/transaction-categories/rules/rule-1')).status).toBe(200);
+    expect(prisma.transactionCategoryRule.deleteMany).toHaveBeenCalledWith({ where: { id: 'rule-1', userId: 'user-1' } });
+    prisma.transactionCategoryRule.deleteMany.mockResolvedValue({ count: 0 });
+    const missing = await request(app).delete('/api/transaction-categories/rules/someone-elses');
+    expect(missing.status).toBe(404);
+    expect(missing.body.code).toBe('RULE_NOT_FOUND');
   });
 });

@@ -2,9 +2,13 @@ import express from 'express';
 import { requireAuth, AuthenticatedRequest } from './middleware';
 import { getPrismaClient } from '../prisma-client';
 import {
+  categoryRulePayee,
+  findCategoryRule,
   findMatchingSnapshotTransactions,
   findSnapshotTransaction,
+  getCategoryRules,
   moneyDirection,
+  providerMoneyDirection,
   patchSnapshotTransactionCategories,
   patchSnapshotTransactionCategory,
   providerCategoryFromTransaction,
@@ -48,8 +52,20 @@ router.get('/:transactionId/matches', requireAuth, async (req: AuthenticatedRequ
       return res.status(404).json({ success: false, error: 'Transaction not found' });
     }
     // The direction lets the page say which way the matches go, which the
-    // amount's sign can't: card purchases are stored positive.
-    res.json({ success: true, data: { count: found.matches.length, direction: moneyDirection(found.target) } });
+    // amount's sign can't: card purchases are stored positive. It is the
+    // provider's direction (same as the rule), so a row the user already
+    // recategorized across a cash-flow boundary still names the money that way.
+    // A payee that can take a rule can be matched even with no others yet.
+    const rule = await findCategoryRule(req.user!.id, found.target);
+    res.json({
+      success: true,
+      data: {
+        count: found.matches.length,
+        direction: found.subject?.direction ?? moneyDirection(found.target),
+        canApplyToMatching: found.subject !== null,
+        rule: rule && { id: rule.id, category: rule.category },
+      },
+    });
   } catch (error) {
     console.error('Failed to find matching transactions:', error);
     res.status(500).json({ success: false, error: 'Failed to find matching transactions' });
@@ -57,9 +73,10 @@ router.get('/:transactionId/matches', requireAuth, async (req: AuthenticatedRequ
 });
 
 /**
- * Sets one category on a transaction and every transaction that matches it. Each
- * gets its own override, so each keeps its own restore point and is restored on
- * its own; one already set by the user keeps the provider category it had then.
+ * Sets one category on a transaction and every transaction that matches it, and
+ * saves it as the payee's rule, so new transactions from the payee get it too.
+ * Each gets its own override, so each keeps its own restore point and is restored
+ * on its own; one already set by the user keeps the provider category it had then.
  */
 async function applyToMatching(
   userId: string,
@@ -73,16 +90,32 @@ async function applyToMatching(
   }
   const rows = [found.target, ...found.matches];
   const prisma = getPrismaClient();
+  // Matches and the rule share the provider's direction (from findMatching…),
+  // so a target the user already recategorized across a cash-flow boundary
+  // updates the rule that did it and applies to the same-way siblings.
+  const subject = found.subject;
+  const label = String(found.target?.merchant_name || found.target?.name || '').trim().slice(0, RULE_LABEL_MAX_LENGTH);
   // Every override is written before the snapshot is patched, for the same reason
   // as a single edit: no user category in the JSON blob without a row behind it.
-  await prisma.$transaction(rows.map(row => {
-    const id = resolveProviderTransactionId(row)!;
-    return prisma.transactionCategoryOverride.upsert({
-      where: { userId_transactionId: { userId, transactionId: id } },
-      create: { userId, transactionId: id, category, originalCategory: providerCategoryFromTransaction(row) },
-      update: { category },
-    });
-  }));
+  await prisma.$transaction([
+    ...rows.map(row => {
+      const id = resolveProviderTransactionId(row)!;
+      return prisma.transactionCategoryOverride.upsert({
+        where: { userId_transactionId: { userId, transactionId: id } },
+        create: { userId, transactionId: id, category, originalCategory: providerCategoryFromTransaction(row) },
+        update: { category },
+      });
+    }),
+    ...(subject ? [prisma.transactionCategoryRule.upsert({
+      where: {
+        userId_counterpartyKey_direction_investment: {
+          userId, counterpartyKey: subject.counterpartyKey, direction: subject.direction, investment: subject.investment,
+        },
+      },
+      create: { userId, counterpartyKey: subject.counterpartyKey, direction: subject.direction, investment: subject.investment, label, category },
+      update: { category, label },
+    })] : []),
+  ]);
   const ids = rows.map(row => resolveProviderTransactionId(row)!);
   // A revision that lands in between wins the snapshot; the one scheduled below
   // re-applies every override, so the edit still reaches it.
@@ -96,9 +129,13 @@ async function applyToMatching(
       category,
       canonicalTransactionType: canonicalTypeForCategory(category),
       appliedTo: ids,
+      appliesToNew: subject !== null,
     },
   });
 }
+
+/** Longest payee name a rule is stored under; descriptions can run long. */
+const RULE_LABEL_MAX_LENGTH = 120;
 
 // PUT /api/transaction-categories/:transactionId - Set the category for one transaction,
 // or with `applyToMatching`, for it and every transaction that matches it
@@ -178,7 +215,7 @@ router.delete('/:transactionId', requireAuth, async (req: AuthenticatedRequest, 
 
     const existing = await getPrismaClient().transactionCategoryOverride.findUnique({
       where: { userId_transactionId: { userId, transactionId } },
-      select: { originalCategory: true },
+      select: { originalCategory: true, category: true },
     });
     if (!existing) {
       return res.status(404).json({ success: false, error: 'No category override to remove' });
@@ -188,7 +225,8 @@ router.delete('/:transactionId', requireAuth, async (req: AuthenticatedRequest, 
     // user category on screen with the provider value already thrown away. A transaction
     // that has since left the snapshot window has nothing to restore and must not be
     // held hostage to that patch — otherwise its override could never be removed.
-    const stillInSnapshot = Boolean(await findSnapshotTransaction(userId, transactionId));
+    const snapshotTransaction = await findSnapshotTransaction(userId, transactionId);
+    const stillInSnapshot = Boolean(snapshotTransaction);
     if (stillInSnapshot) {
       const restored = await patchSnapshotTransactionCategory(
         userId,
@@ -201,9 +239,31 @@ router.delete('/:transactionId', requireAuth, async (req: AuthenticatedRequest, 
       }
     }
 
-    await getPrismaClient().transactionCategoryOverride.delete({
-      where: { userId_transactionId: { userId, transactionId } },
-    });
+    // A rule that gave the payee this category would give the next one it again,
+    // so restoring one of them stops the rule; the others keep their categories.
+    // Rules match the provider's direction, which the restored category gives back;
+    // when it says none, every same-category rule for the payee goes, since any of
+    // them would undo the restore.
+    // Drop the rule(s) before the override: a concurrent revision's
+    // applyCategoryOverrides would otherwise recreate the override from the
+    // still-living rule once the row is gone.
+    const payee = snapshotTransaction && categoryRulePayee(snapshotTransaction);
+    const direction = snapshotTransaction ? providerMoneyDirection(snapshotTransaction, existing.originalCategory) : null;
+    const sameCategory = (rule: { category: string[] }) => rule.category.join('|') === existing.category.join('|');
+    const rules = payee
+      ? (await getCategoryRules(userId)).filter(rule => sameCategory(rule) && rule.investment === payee.investment
+        && (direction === null || rule.direction === direction)
+        && (rule.counterpartyKey === payee.counterpartyKey || rule.counterpartyKey === payee.legacyCounterpartyKey))
+      : [];
+    const prisma = getPrismaClient();
+    await prisma.$transaction([
+      ...(rules.length > 0
+        ? [prisma.transactionCategoryRule.deleteMany({ where: { userId, id: { in: rules.map(rule => rule.id) } } })]
+        : []),
+      prisma.transactionCategoryOverride.delete({
+        where: { userId_transactionId: { userId, transactionId } },
+      }),
+    ]);
 
     scheduleCashFlowCatchUp(userId, 'transaction-category-restored');
 
@@ -213,11 +273,32 @@ router.delete('/:transactionId', requireAuth, async (req: AuthenticatedRequest, 
         transactionId,
         category: existing.originalCategory,
         canonicalTransactionType: canonicalTypeForCategory(existing.originalCategory),
+        ruleRemoved: rules.length > 0,
       },
     });
   } catch (error) {
     console.error('Failed to clear transaction category:', error);
     res.status(500).json({ success: false, error: 'Failed to clear transaction category' });
+  }
+});
+
+// DELETE /api/transaction-categories/rules/:ruleId - Stop giving a payee's new transactions
+// its category. The transactions the rule already reached keep theirs.
+router.delete('/rules/:ruleId', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const raw = req.params.ruleId;
+    const ruleId = (Array.isArray(raw) ? raw[0] : raw ?? '').trim();
+    const deleted = ruleId
+      ? await getPrismaClient().transactionCategoryRule.deleteMany({ where: { id: ruleId, userId: req.user!.id } })
+      : { count: 0 };
+    if (deleted.count === 0) {
+      // The code says the rule is gone, which a page can tell from a route that is missing.
+      return res.status(404).json({ success: false, error: 'No such rule', code: 'RULE_NOT_FOUND' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to remove transaction category rule:', error);
+    res.status(500).json({ success: false, error: 'Failed to remove the rule' });
   }
 });
 

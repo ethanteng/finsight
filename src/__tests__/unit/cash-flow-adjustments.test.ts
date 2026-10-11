@@ -6,6 +6,7 @@ import {
   buildCashFlowReport,
   forecastAdjustmentTarget,
   forecastTotals,
+  listCashFlowTransactions,
   type CashFlowModelInput,
 } from '../../cash-flow/forecast';
 import { ACCOUNTS, CARD_PAYMENT_CATEGORY, householdTransactions, tx } from './factories/cash-flow.factory';
@@ -36,19 +37,34 @@ function model(adjustments: ForecastAdjustment[] = [], overrides: Partial<CashFl
 
 let sequence = 0;
 const adjustment = (overrides: Partial<ForecastAdjustment>): ForecastAdjustment => ({
-  id: `adjustment-${++sequence}`, kind: 'exclude_payee', flow: 'spending', key: '', label: 'Item',
+  id: `adjustment-${++sequence}`, kind: 'exclude_payee', flow: 'spending', key: '', label: 'Item', spreadMonths: null,
   ...overrides,
 });
 
+const report = (built: ReturnType<typeof model>) => buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 });
+/** Every transaction behind a typical rate's categories, as the page lists them on request. */
+const typicalTransactions = (built: ReturnType<typeof model>) => report(built).typicalCategories
+  .flatMap(category => listCashFlowTransactions(built, category.transactionsRef) ?? []);
+
 describe('validateForecastAdjustmentInput', () => {
   it('takes a kind, a direction and a key, and nothing else', () => {
-    expect(validateForecastAdjustmentInput({ kind: 'exclude_payee', flow: 'spending', key: ' netflix ', label: 'ignored' }))
-      .toEqual({ ok: true, value: { kind: 'exclude_payee', flow: 'spending', key: 'netflix' } });
+    expect(validateForecastAdjustmentInput({ kind: 'exclude_payee', flow: 'spending', key: ' netflix ', label: 'ignored', spreadMonths: 12 }))
+      .toEqual({ ok: true, value: { kind: 'exclude_payee', flow: 'spending', key: 'netflix', spreadMonths: null } });
     expect(validateForecastAdjustmentInput({ kind: 'drop_table', flow: 'spending', key: 'x' }).ok).toBe(false);
     expect(validateForecastAdjustmentInput({ kind: 'exclude_payee', flow: 'sideways', key: 'x' }).ok).toBe(false);
     expect(validateForecastAdjustmentInput({ kind: 'exclude_payee', flow: 'income', key: '   ' }).ok).toBe(false);
     expect(validateForecastAdjustmentInput({ kind: 'exclude_payee', flow: 'income', key: 'x'.repeat(201) }).ok).toBe(false);
     expect(validateForecastAdjustmentInput(null).ok).toBe(false);
+  });
+
+  it('takes how often a spread payee comes, from the months it offers', () => {
+    expect(validateForecastAdjustmentInput({ kind: 'spread_payee', flow: 'spending', key: 'state farm', spreadMonths: 12 }))
+      .toEqual({ ok: true, value: { kind: 'spread_payee', flow: 'spending', key: 'state farm', spreadMonths: 12 } });
+    expect(validateForecastAdjustmentInput({ kind: 'spread_payee', flow: 'spending', key: 'state farm' }).ok).toBe(false);
+    expect(validateForecastAdjustmentInput({ kind: 'spread_payee', flow: 'spending', key: 'state farm', spreadMonths: 5 }).ok).toBe(false);
+    expect(validateForecastAdjustmentInput({ kind: 'spread_payee', flow: 'spending', key: 'state farm', spreadMonths: '12' }).ok).toBe(false);
+    expect(validateForecastAdjustmentInput({ kind: 'exclude_category', flow: 'spending', key: 'groceries' }))
+      .toEqual({ ok: true, value: { kind: 'exclude_category', flow: 'spending', key: 'groceries', spreadMonths: null } });
   });
 });
 
@@ -64,20 +80,26 @@ describe('adjusting what the forecast counts', () => {
     expect(actualTotals(adjusted, '2026-07-01', '2026-10-01')).toEqual(actualTotals(base, '2026-07-01', '2026-10-01'));
   });
 
-  it('takes a payee out of typical spending, and lists what typical spending is made of', () => {
+  it('takes a payee out of typical spending, and lists what typical spending is made of by category', () => {
     const base = model();
-    const traderJoes = base.typicalPayees.find(payee => payee.label === 'Trader Joes')!;
-    expect(traderJoes).toMatchObject({ flow: 'spending', counterpartyKey: 'trader joes' });
+    const inBasis = base.ledger.entries.filter(entry => entry.counterpartyKey === 'trader joes'
+      && entry.date >= base.typical.basisStart! && entry.date < base.forecastStart);
+    expect(inBasis.length).toBeGreaterThan(0);
     const adjusted = model([adjustment({ key: 'trader joes', label: 'Trader Joes' })]);
-    expect(base.typical.dailySpending - adjusted.typical.dailySpending).toBeCloseTo(traderJoes.daily, 6);
-    expect(adjusted.typicalPayees.some(payee => payee.label === 'Trader Joes')).toBe(false);
+    expect(base.typical.dailySpending - adjusted.typical.dailySpending)
+      .toBeCloseTo(inBasis.reduce((sum, entry) => sum + entry.amount, 0) / base.typical.basisDays, 6);
+    expect(typicalTransactions(adjusted).some(item => item.payeeKey === 'trader joes')).toBe(false);
 
-    // Every typical dollar here comes from a named payee, largest first.
-    const named = base.typicalPayees.filter(payee => payee.flow === 'spending').reduce((sum, payee) => sum + payee.daily, 0);
-    expect(named).toBeCloseTo(base.typical.dailySpending, 6);
-    const listed = buildCashFlowReport(base, { granularity: 'month', horizonMonths: 3 }).typicalPayees;
-    expect(listed.map(payee => payee.monthlyAmount)).toEqual([...listed.map(payee => payee.monthlyAmount)].sort((a, b) => b - a));
-    expect(listed[0]).toEqual(expect.objectContaining({ flow: 'spending', payeeKey: expect.any(String), monthlyAmount: expect.any(Number) }));
+    // Every typical dollar here comes from a category, largest first.
+    const categorized = [...base.typicalCategories.spending.values()].reduce((sum, category) => sum + category.daily, 0);
+    expect(categorized).toBeCloseTo(base.typical.dailySpending, 6);
+    const listed = report(base).typicalCategories;
+    expect(listed.map(category => category.monthlyAmount)).toEqual([...listed.map(category => category.monthlyAmount)].sort((a, b) => b - a));
+    expect(listed[0]).toEqual(expect.objectContaining({
+      flow: 'spending', key: expect.any(String), label: expect.any(String), monthlyAmount: expect.any(Number), transactionsRef: expect.any(String),
+    }));
+    expect(listed.reduce((sum, category) => sum + category.monthlyAmount, 0))
+      .toBeCloseTo(report(base).baseline.typicalMonthlySpending, 1);
   });
 
   it('counts a one-off in the typical rate when the user says it belongs there', () => {
@@ -89,28 +111,26 @@ describe('adjusting what the forecast counts', () => {
     expect(adjusted.typical.dailySpending - base.typical.dailySpending).toBeCloseTo(2400 / base.typical.basisDays, 6);
     const report = buildCashFlowReport(adjusted, { granularity: 'month', horizonMonths: 3 });
     expect(report.adjustments).toEqual([expect.objectContaining({ kind: 'include_one_off', date: flight.date, amount: 2400 })]);
-    // The payee it now sits under says it is there because the user counted it.
-    expect(report.typicalPayees).toEqual(expect.arrayContaining([
-      expect.objectContaining({ payeeKey: 'united airlines', countedOneOffIds: [flight.id] }),
-    ]));
+    // Listed under its category, it says it is there because the user counted it.
+    const counted = adjusted.adjustments[0];
+    expect(typicalTransactions(adjusted).find(item => item.id === flight.id)).toMatchObject({ payeeKey: 'united airlines', countedBy: counted.id });
   });
 
   it('only says a one-off was counted while counting it is what puts it in the typical rate', () => {
     const flight = model().oneOffs.find(entry => entry.label === 'United Airlines')!;
     const counted = adjustment({ kind: 'include_one_off', key: flight.id, label: 'United Airlines' });
-    const unitedPayee = (built: ReturnType<typeof model>) =>
-      buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 }).typicalPayees.find(payee => payee.payeeKey === 'united airlines');
+    const listedFlight = (built: ReturnType<typeof model>) => typicalTransactions(built).find(item => item.id === flight.id);
 
     // The payee now flies again, at a similar fare, so the first flight is ordinary
     // typical spending with or without the change, and the change takes no credit for it.
     // (A charge within ten days of the flight would be the same trip, and a much smaller
     // fare would leave this one standing out: either way it would still be a one-off.)
     const again = tx('card', '2026-07-20', 'expense', 1800, 'UNITED AIRLINES', { merchant_name: 'United Airlines' });
-    expect(unitedPayee(model([counted], { transactions: [...history, again] }))!.countedOneOffIds).toEqual([]);
+    expect(listedFlight(model([counted], { transactions: [...history, again] }))!.countedBy).toBeNull();
 
     // Months later the flight is before the 90-day basis: nothing is left to credit it to.
     const later = model([counted], { dataThrough: '2026-12-15', today: '2026-12-16' });
-    expect(unitedPayee(later)?.countedOneOffIds ?? []).toEqual([]);
+    expect(listedFlight(later)).toBeUndefined();
   });
 
   it('does not name a counted one-off’s payee once it has left the typical basis', () => {
@@ -126,14 +146,14 @@ describe('adjusting what the forecast counts', () => {
       { transactions: [...recent, oldFlight, ...recentUnited], dataThrough: '2027-01-14', today: '2027-01-15' },
     );
     expect(built.typical.basisStart! > '2026-09-10').toBe(true);
-    const report = buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 });
-    // United is a typical payee on its own now, and the old count is not credited
-    // with any of it, so the page does not mark the row "counted by you".
-    expect(report.typicalPayees).toEqual(expect.arrayContaining([
-      expect.objectContaining({ payeeKey: 'united airlines', countedOneOffIds: [] }),
-    ]));
+    const listed = report(built);
+    // United is typical spending on its own now, and the old count is not credited
+    // with any of it, so the page marks none of it "counted by you".
+    const united = typicalTransactions(built).filter(item => item.payeeKey === 'united airlines');
+    expect(united).toHaveLength(5);
+    expect(united.every(item => item.countedBy === null)).toBe(true);
     // Date and amount stay for the list of changes.
-    expect(report.adjustments).toEqual([
+    expect(listed.adjustments).toEqual([
       expect.objectContaining({ kind: 'include_one_off', date: '2026-09-10', amount: 2400 }),
     ]);
   });
@@ -198,10 +218,8 @@ describe('the transactions behind each item', () => {
   const groceries = { personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_GROCERIES' } };
   const safeway = ['2026-08-02', '2026-08-23', '2026-09-13']
     .map(date => tx('card', date, 'expense', 61.5, 'Safeway', { merchant_name: 'Safeway', ...groceries }));
-  const report = (adjustments: ForecastAdjustment[] = []) => buildCashFlowReport(
-    model(adjustments, { transactions: [...history, ...safeway] }),
-    { granularity: 'month', horizonMonths: 3 },
-  );
+  const withSafeway = (adjustments: ForecastAdjustment[] = []) => model(adjustments, { transactions: [...history, ...safeway] });
+  const report = (adjustments: ForecastAdjustment[] = []) => buildCashFlowReport(withSafeway(adjustments), { granularity: 'month', horizonMonths: 3 });
 
   it('lists a regular item’s transactions, latest first, with how many there are', () => {
     // The history starts June 3, so rent was paid on the 1st of July, August and September.
@@ -212,14 +230,61 @@ describe('the transactions behind each item', () => {
     ]);
   });
 
-  it('lists the transactions a typical payee is made of, with their category', () => {
-    const payee = report().typicalPayees.find(item => item.payeeKey === 'safeway')!;
-    expect(payee.transactionCount).toBeGreaterThanOrEqual(3);
-    const added = payee.transactions.filter(item => item.amount === 61.5);
-    expect(added.map(item => item.date)).toEqual(['2026-09-13', '2026-08-23', '2026-08-02']);
-    expect(added[0].category).toEqual(expect.any(String));
+  it('lists the transactions a typical category is made of, with each one’s payee and category', () => {
+    const groceryCategory = report().typicalCategories.find(item => item.label === 'Groceries')!;
+    expect(groceryCategory).toMatchObject({ flow: 'spending', key: 'groceries', transactionCount: 3, transactionsRef: 'category:spending:groceries' });
+    expect(groceryCategory.transactions.map(item => item.date)).toEqual(['2026-09-13', '2026-08-23', '2026-08-02']);
+    expect(groceryCategory.transactions[0]).toEqual({
+      id: expect.any(String),
+      date: '2026-09-13',
+      label: 'Safeway',
+      amount: 61.5,
+      category: 'Groceries',
+      // PFC-only rows still hand the picker the codes the label came from.
+      categoryCodes: ['FOOD_AND_DRINK', 'FOOD_AND_DRINK_GROCERIES'],
+      userCategory: false,
+      payeeKey: 'safeway',
+      countedBy: null,
+      spreadBy: null,
+    });
     // A transaction with no category says so, rather than calling it "Uncategorized".
-    expect(payee.transactions.filter(item => item.amount !== 61.5).every(item => item.category === null)).toBe(true);
+    const uncategorized = report().typicalCategories.find(item => item.key === 'uncategorized')!;
+    expect(uncategorized.transactions.every(item => item.category === null)).toBe(true);
+  });
+
+  it('gives each transaction the category picker’s values and whether the user chose them', () => {
+    const chosen = tx('card', '2026-09-20', 'expense', 42, 'Blue Bottle', {
+      merchant_name: 'Blue Bottle', category: ['FOOD_AND_DRINK', 'FOOD_AND_DRINK_COFFEE'], category_source: 'user',
+    });
+    const listed = typicalTransactions(model([], { transactions: [...history, chosen] })).find(item => item.id === chosen.transaction_id)!;
+    expect(listed).toMatchObject({ categoryCodes: ['FOOD_AND_DRINK', 'FOOD_AND_DRINK_COFFEE'], userCategory: true });
+  });
+
+  it('lists the latest few in the report, and every one on request', () => {
+    const rent = report().recurring.find(item => item.label === 'Oak Street Apartments')!;
+    expect(listCashFlowTransactions(withSafeway(), rent.transactionsRef)!.map(item => item.date))
+      .toEqual(['2026-09-01', '2026-08-01', '2026-07-01']);
+
+    const uncategorized = report().typicalCategories.find(item => item.key === 'uncategorized')!;
+    expect(uncategorized.transactionCount).toBeGreaterThan(12);
+    expect(uncategorized.transactions).toHaveLength(12);
+    const every = listCashFlowTransactions(withSafeway(), uncategorized.transactionsRef)!;
+    expect(every).toHaveLength(uncategorized.transactionCount);
+    expect(every.slice(0, 12)).toEqual(uncategorized.transactions);
+
+    const vanguard = report().position.transfers.recurring.find(item => item.label === 'VANGUARD BUY TRANSFER')!;
+    expect(listCashFlowTransactions(withSafeway(), vanguard.transactionsRef)).toHaveLength(4);
+
+    const leftOut = adjustment({ key: 'oak street apartments', label: 'Oak Street Apartments' });
+    const built = withSafeway([leftOut]);
+    expect(listCashFlowTransactions(built, report([leftOut]).adjustments[0].transactionsRef)).toHaveLength(3);
+  });
+
+  it('finds no list the model does not have', () => {
+    const built = withSafeway();
+    for (const ref of ['stream:nope', 'transfer:nope', 'category:spending:nope', 'category:sideways:groceries', 'adjustment:nope', 'nope', 'other:x']) {
+      expect(listCashFlowTransactions(built, ref)).toBeNull();
+    }
   });
 
   it('gives a one-off its category, and a left-out payee its transactions', () => {
@@ -253,6 +318,67 @@ describe('the transactions behind each item', () => {
 
 });
 
+describe('spreading a payee over months of its own', () => {
+  /** A $1,200 premium paid once a year, last in June: before the 90-day basis. */
+  const premium = (date: string) => tx('checking', date, 'expense', 1200, 'STATE FARM', { merchant_name: 'State Farm' });
+  const spread = (key: string, spreadMonths: number) => adjustment({ kind: 'spread_payee', key, label: key, spreadMonths });
+
+  it('counts each amount over its months for as long as it is that recent, however old the basis says it is', () => {
+    const transactions = [...history, premium('2025-09-20'), premium('2026-06-10')];
+    const base = model([], { transactions });
+    const yearly = spread('state farm', 12);
+    const adjusted = model([yearly], { transactions });
+    // The June premium is 113 days old, outside the basis, so nothing counted it.
+    expect(base.typical.basisStart).toBe('2026-07-03');
+    // Spread over a year, it adds $1,200 a year; last September's is over a year old and adds nothing.
+    expect(adjusted.typical.dailySpending - base.typical.dailySpending).toBeCloseTo(1200 / 365, 6);
+    const listed = typicalTransactions(adjusted).filter(item => item.payeeKey === 'state farm');
+    expect(listed.map(item => [item.date, item.spreadBy])).toEqual([['2026-06-10', yearly.id]]);
+    // Twice a year, the June premium is still recent enough, and counts double.
+    expect(model([spread('state farm', 6)], { transactions }).typical.dailySpending - base.typical.dailySpending)
+      .toBeCloseTo(1200 / (365 / 2), 6);
+  });
+
+  it('never leaves a spread payee’s amount out as a one-off', () => {
+    const base = model();
+    expect(base.oneOffs.map(entry => entry.label)).toEqual(['United Airlines']);
+    const adjusted = model([spread('united airlines', 12)]);
+    expect(adjusted.oneOffs).toEqual([]);
+    expect(adjusted.typical.dailySpending - base.typical.dailySpending).toBeCloseTo(2400 / 365, 6);
+  });
+
+  it('leaves what a regular item projects alone', () => {
+    expect(forecastTotals(model([spread('oak street apartments', 12)]), ...NEXT_12)).toEqual(forecastTotals(model(), ...NEXT_12));
+  });
+});
+
+describe('leaving a category out', () => {
+  it('takes its transactions out of the typical rate, and still projects a regular bill in it', () => {
+    const base = model();
+    const uncategorized = base.typicalCategories.spending.get('uncategorized')!;
+    expect(uncategorized.daily).toBeGreaterThan(0);
+    const leftOut = adjustment({ kind: 'exclude_category', key: 'uncategorized', label: 'Uncategorized' });
+    const adjusted = model([leftOut]);
+    expect(base.typical.dailySpending - adjusted.typical.dailySpending).toBeCloseTo(uncategorized.daily, 6);
+    expect(adjusted.typicalCategories.spending.has('uncategorized')).toBe(false);
+    // Rent has no category either, and is still projected on its schedule.
+    expect(adjusted.streams.some(stream => stream.label === 'Oak Street Apartments')).toBe(true);
+    // Its one-off is gone with it; the choice lists what the rate would have counted.
+    expect(adjusted.oneOffs).toEqual([]);
+    const listed = report(adjusted).adjustments[0];
+    expect(listed.transactionCount).toBeGreaterThan(0);
+    expect(listed.transactions.some(item => item.label === 'Oak Street Apartments')).toBe(false);
+  });
+
+  it('groups typical income by category too', () => {
+    const venmo = ['2026-07-15', '2026-08-02', '2026-09-21'].map(date =>
+      tx('checking', date, 'income', 150, 'VENMO CASHOUT', { merchant_name: 'Venmo' }));
+    const listed = report(model([], { transactions: [...history, ...venmo] })).typicalCategories.filter(item => item.flow === 'income');
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toMatchObject({ transactionCount: 3, monthlyAmount: expect.closeTo(450 / 90 * (365 / 12), 1) });
+  });
+});
+
 describe('choices saved under a payee’s earlier key', () => {
   // The earlier key kept an ordinal's letters ("sq blue bottle nd st"); now the word is dropped whole.
   const coffee = (date: string) => tx('card', date, 'expense', 120, 'SQ *BLUE BOTTLE 2ND ST');
@@ -281,28 +407,37 @@ describe('forecastAdjustmentTarget', () => {
   const built = model();
 
   it('finds each kind of item in the user’s data, by the name it last had', () => {
-    expect(forecastAdjustmentTarget(built, { kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments' }))
+    expect(forecastAdjustmentTarget(built, { kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', spreadMonths: null }))
       .toEqual({ label: 'Oak Street Apartments' });
-    expect(forecastAdjustmentTarget(built, { kind: 'exclude_payee', flow: 'spending', key: 'trader joes' }))
+    expect(forecastAdjustmentTarget(built, { kind: 'exclude_payee', flow: 'spending', key: 'trader joes', spreadMonths: null }))
       .toEqual({ label: 'Trader Joes' });
     const flight = built.oneOffs.find(entry => entry.label === 'United Airlines')!;
-    expect(forecastAdjustmentTarget(built, { kind: 'include_one_off', flow: 'spending', key: flight.id })).toEqual({ label: 'United Airlines' });
-    expect(forecastAdjustmentTarget(built, { kind: 'continue_stream', flow: 'spending', key: 'harbor bay club' })).toEqual({ label: 'Harbor Bay Club' });
+    expect(forecastAdjustmentTarget(built, { kind: 'include_one_off', flow: 'spending', key: flight.id, spreadMonths: null })).toEqual({ label: 'United Airlines' });
+    expect(forecastAdjustmentTarget(built, { kind: 'continue_stream', flow: 'spending', key: 'harbor bay club', spreadMonths: null })).toEqual({ label: 'Harbor Bay Club' });
     const vanguard = built.transfers.streams.find(stream => stream.label === 'VANGUARD BUY TRANSFER')!;
-    expect(forecastAdjustmentTarget(built, { kind: 'exclude_transfer', flow: 'spending', key: vanguard.counterpartyKey }))
+    expect(forecastAdjustmentTarget(built, { kind: 'exclude_transfer', flow: 'spending', key: vanguard.counterpartyKey, spreadMonths: null }))
       .toEqual({ label: 'VANGUARD BUY TRANSFER' });
   });
 
   it('finds nothing that is not there, or not what the choice says it is', () => {
-    expect(forecastAdjustmentTarget(built, { kind: 'exclude_payee', flow: 'spending', key: 'someone else' })).toBeNull();
+    expect(forecastAdjustmentTarget(built, { kind: 'exclude_payee', flow: 'spending', key: 'someone else', spreadMonths: null })).toBeNull();
     // Rent is spending, not income.
-    expect(forecastAdjustmentTarget(built, { kind: 'exclude_payee', flow: 'income', key: 'oak street apartments' })).toBeNull();
+    expect(forecastAdjustmentTarget(built, { kind: 'exclude_payee', flow: 'income', key: 'oak street apartments', spreadMonths: null })).toBeNull();
     // An active stream has not stopped, so there is nothing to keep.
-    expect(forecastAdjustmentTarget(built, { kind: 'continue_stream', flow: 'spending', key: 'oak street apartments' })).toBeNull();
+    expect(forecastAdjustmentTarget(built, { kind: 'continue_stream', flow: 'spending', key: 'oak street apartments', spreadMonths: null })).toBeNull();
     // A transaction that is not a one-off cannot be counted as one.
     const rent = built.ledger.entries.find(entry => entry.label === 'Oak Street Apartments')!;
-    expect(forecastAdjustmentTarget(built, { kind: 'include_one_off', flow: 'spending', key: rent.id })).toBeNull();
+    expect(forecastAdjustmentTarget(built, { kind: 'include_one_off', flow: 'spending', key: rent.id, spreadMonths: null })).toBeNull();
     // A paired payment to a projected card is not a transfer the user can leave out.
-    expect(forecastAdjustmentTarget(built, { kind: 'exclude_transfer', flow: 'spending', key: 'card autopay' })).toBeNull();
+    expect(forecastAdjustmentTarget(built, { kind: 'exclude_transfer', flow: 'spending', key: 'card autopay', spreadMonths: null })).toBeNull();
+    // Nothing was spent in a category the history does not have.
+    expect(forecastAdjustmentTarget(built, { kind: 'exclude_category', flow: 'spending', key: 'travel', spreadMonths: null })).toBeNull();
+  });
+
+  it('names a category by its label, and a spread payee as it last appeared', () => {
+    expect(forecastAdjustmentTarget(built, { kind: 'exclude_category', flow: 'spending', key: 'uncategorized', spreadMonths: null }))
+      .toEqual({ label: 'Uncategorized' });
+    expect(forecastAdjustmentTarget(built, { kind: 'spread_payee', flow: 'spending', key: 'united airlines', spreadMonths: 12 }))
+      .toEqual({ label: 'United Airlines' });
   });
 });

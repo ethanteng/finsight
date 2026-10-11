@@ -45,6 +45,10 @@ export interface CashFlowEntry {
   category: string;
   /** Interest a credit card charged. The card model can project it from the card's APR instead. */
   interest?: boolean;
+  /** The provider's or the user's category values, as the category picker names them. */
+  categoryCodes?: string[];
+  /** The user chose its category. */
+  userCategory?: boolean;
 }
 
 /**
@@ -71,6 +75,9 @@ export interface CashFlowMovement {
   /** The key this payee had before reference words were dropped whole; set only where it differs. */
   legacyCounterpartyKey?: string;
   label: string;
+  /** As on an entry: the category picker's values, and whether the user chose them. */
+  categoryCodes?: string[];
+  userCategory?: boolean;
 }
 
 export interface CashFlowLedger {
@@ -163,6 +170,29 @@ function cleanDescription(name: string): string {
 function withLegacyKey(transaction: any): { legacyCounterpartyKey?: string } {
   const legacy = legacyCounterpartyKey(transaction?.merchant_name, transaction?.name);
   return legacy ? { legacyCounterpartyKey: legacy } : {};
+}
+
+/** Drop blanks and the sentinel `0` the way the category picker does. */
+function categoryCodeValues(raw: unknown): string[] {
+  const values: unknown[] = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
+  return values.filter((value): value is string => typeof value === 'string' && value.trim() !== '' && value !== '0');
+}
+
+/**
+ * The transaction's category values, as the category picker reads them. Prefer the
+ * array when present; otherwise the same PFC sources `detailedCategory` / labels use,
+ * so a row that only carries `personal_finance_category` still opens with a selection.
+ */
+function categoryFields(transaction: any): { categoryCodes: string[]; userCategory?: boolean } {
+  const fromArray = categoryCodeValues(transaction?.category);
+  const pfc = transaction?.personal_finance_category || transaction?.enriched_data?.personal_finance_category;
+  const fromPfc = fromArray.length === 0 && pfc
+    ? categoryCodeValues([pfc.primary, pfc.detailed])
+    : [];
+  return {
+    categoryCodes: fromArray.length > 0 ? fromArray : fromPfc,
+    ...(transaction?.category_source === 'user' && { userCategory: true }),
+  };
 }
 
 function displayLabel(transaction: any): string {
@@ -264,6 +294,7 @@ export function buildCashFlowLedger(
         counterpartyKey: counterpartyKey(transaction?.merchant_name, transaction?.name),
         ...withLegacyKey(transaction),
         label: displayLabel(transaction),
+        ...categoryFields(transaction),
       });
       continue;
     }
@@ -295,6 +326,7 @@ export function buildCashFlowLedger(
       category: canonical.category?.trim() || 'Uncategorized',
       ...(flow === 'spending' && creditIds.has(canonical.accountKey)
         && detailedCategory(transaction) === 'bank_fees_interest_charge' && { interest: true }),
+      ...categoryFields(transaction),
     });
   }
 

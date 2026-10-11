@@ -447,7 +447,7 @@ export default function CashFlowPageClient() {
               )}
             </section>
 
-            <UsualSpendingBreakdown report={report} />
+            <UsualSpendingBreakdown report={report} apiUrl={API_URL} onChanged={load} />
 
             <CreditCardsPanel
               cards={report.cards}
