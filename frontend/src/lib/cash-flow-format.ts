@@ -149,6 +149,8 @@ export const CADENCE_LABELS: Record<RecurringCadence, string> = {
  * months of its own instead of the typical basis. The same months the API takes.
  */
 export const SPREAD_CHOICES: ReadonlyArray<{ months: number; label: string }> = [
+  { months: 2, label: '6 times a year' },
+  { months: 3, label: '4 times a year' },
   { months: 4, label: '3 times a year' },
   { months: 6, label: 'Twice a year' },
   { months: 12, label: 'Once a year' },

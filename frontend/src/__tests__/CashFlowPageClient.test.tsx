@@ -655,6 +655,9 @@ describe('CashFlowPageClient', () => {
       fireEvent.click(within(section).getByRole('button', { name: 'Choices for State Farm' }));
       const often = within(section).getByLabelText('How often amounts from State Farm come');
       expect(often).toHaveValue('12');
+      expect(within(often).getAllByRole('option').map(option => option.textContent)).toEqual([
+        'Often (your last 90 days)', '6 times a year', '4 times a year', '3 times a year', 'Twice a year', 'Once a year', 'Every 2 years',
+      ]);
 
       fireEvent.change(often, { target: { value: '6' } });
       await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));

@@ -33,11 +33,16 @@ export const FORECAST_ADJUSTMENT_KINDS = [
 export type ForecastAdjustmentKind = (typeof FORECAST_ADJUSTMENT_KINDS)[number];
 
 /**
- * How often a spread payee's amounts can come, in months: three times a year,
- * twice, once, or every other year. Anything more often is what the basis
- * already averages over.
+ * How often a spread payee's amounts can come, in months: six times a year,
+ * four, three, twice, once, or every other year. Every two months is shorter
+ * than the basis, but a 90-day window holds one or two such amounts, so it reads
+ * them as half again too little or too much; spread over its own two months,
+ * each counts once. Every three months is about the basis itself, and still
+ * says something it can't: an amount that size is how the payee comes, never a
+ * one-off. Anything monthly or more often repeats enough for the basis, or is a
+ * regular item.
  */
-export const SPREAD_MONTHS = [4, 6, 12, 24] as const;
+export const SPREAD_MONTHS = [2, 3, 4, 6, 12, 24] as const;
 export type SpreadMonths = (typeof SPREAD_MONTHS)[number];
 
 /** The days one amount from a payee spread over `months` counts for. */
