@@ -9,6 +9,8 @@ Every retirement calculator in Ask Linc counts Social Security and a pension the
 - **Rises with inflation** (the default for a stream, and always for Social Security): the amount is in today's dollars and rises with each historical sequence's own CPI, like the spending it offsets.
 - **Fixed**: the amount is the dollars it pays, exactly as a pension statement quotes it, and it never changes. Each sequence's inflation erodes it, including in the years before it starts.
 
+When the plan counts income tax (`docs/RETIREMENT_TAXES.md`), each stream is taxed as `taxedAs` says, or as its label says when unset: Social Security, spousal and survivor benefits by Social Security's own formula, anything else as ordinary income.
+
 Income reduces that month's portfolio withdrawal while it is paid. Income above that month's spending is not reinvested, and income paid before withdrawals begin is not banked. The engine also reports `firstYearPortfolioWithdrawal`, the median spending the portfolio itself covered in the first twelve months of withdrawals. It is measured in the simulation, because a fixed pension is worth whatever each sequence's inflation left of it. Analysis version 11 introduced both.
 
 ## How each income resolves

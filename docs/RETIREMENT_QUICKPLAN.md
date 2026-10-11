@@ -43,6 +43,11 @@ Inputs are the six numbers the page asks for (current age, retirement age,
 investable assets, annual spending, annual contributions, Social Security),
 plus a claiming age and one of three asset-mix presets.
 
+Ask Linc's calculators also pass a third argument (`QuickPlanOptions`): a
+spending cut in a bad market, and income tax and health premiums
+(`docs/RETIREMENT_TAXES.md`). The page never does, so its runs, and a lead's
+first decision written from one, stay untaxed, as its limitations say.
+
 ## Deliberate choices
 
 **No provider lookups.** The synthetic portfolio carries no ticker symbols, so
