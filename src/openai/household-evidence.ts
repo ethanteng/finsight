@@ -114,9 +114,9 @@ export function describeHouseholdTimeline(
       ? `you reach ${timeline.firstDeath.atUserAge}`
       : `your partner reaches ${plan.planThroughAge} (your ${timeline.firstDeath.atUserAge})`;
     const after = spending.survivor
-      ? `, and spending becomes ${money(spending.survivor.annualAmount)} a year, what you said one of you would spend alone${source('survivorAnnualSpending')}`
+      ? `spending becomes ${money(spending.survivor.annualAmount)} a year, what you said one of you would spend alone${source('survivorAnnualSpending')}`
       : spending.annual !== undefined
-        ? `, and spending stays ${money(spending.annual)} a year unless you tell me what one of you would spend alone`
+        ? `spending stays ${money(spending.annual)} a year unless you tell me what one of you would spend alone`
         : '';
     const incomes = countedIncomes ?? [
       ...(plan.socialSecurity ? [{ kind: 'social_security' as const }] : []),
@@ -129,10 +129,10 @@ export function describeHouseholdTimeline(
         ? 'a pension stops with the person it belongs to'
         : null,
     ].filter((clause): clause is string => Boolean(clause));
-    if (incomeRules.length > 0 || after) {
-      const rules = incomeRules.length > 0 ? `, ${incomeRules.join(' and ')}` : '';
-      parts.push(`from when ${first}${rules}${after}`);
-    }
+    // "the survivor keeps ... and a pension stops ..., and spending stays ...",
+    // or the spending alone when no income rule applies.
+    const changes = [incomeRules.join(' and '), after].filter(Boolean).join(', and ');
+    if (changes) parts.push(`from when ${first}, ${changes}`);
   }
   return parts;
 }

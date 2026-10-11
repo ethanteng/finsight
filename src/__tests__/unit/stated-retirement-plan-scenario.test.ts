@@ -742,7 +742,18 @@ describe('retirement plan from stated figures', () => {
     ) as CompletedStatedRetirementPlanExecution;
     expect(younger.scenarios[0].household?.survivorSpending).toEqual({ fromAge: 95, annualAmount: 50_000 });
     expect(describeStatedRetirementPlanExecution(younger)).toContain(
-      'and spending becomes $50,000 a year, what you said one of you would spend alone.'
+      'From when you reach 95, spending becomes $50,000 a year, what you said one of you would spend alone.'
+    );
+  });
+
+  it('says what changes at the first death plainly when the partner has no income of their own', async () => {
+    const execution = await runStatedRetirementPlan(
+      { ...NO_HOLDINGS, statedPartner: { age: 42 } },
+      plan(LEAD),
+      householdRunner() as QuickPlanRunner
+    );
+    expect(describeStatedRetirementPlanExecution(execution)).toContain(
+      'From when you reach 95, spending stays $70,000 a year unless you tell me what one of you would spend alone.'
     );
   });
 
