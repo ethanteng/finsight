@@ -32,6 +32,13 @@ import type { SearchContext } from '../data/orchestrator';
 import type { PersonalContextValues } from '../profile/personal-context';
 import { parseStatedFigures, savedNumber, type StatedFigures } from '../services/stated-figures';
 import { resolveRetirementIncome, sameIncomeStreams, type RetirementIncomeOrigins } from './retirement-income';
+import {
+  accountsWithErrors,
+  linkedContributions,
+  resolveRetirementContribution,
+  type LinkedContributions,
+  type RetirementContributionOrigin,
+} from './retirement-contributions';
 import { buildCashFlowForecastContext, withoutUnlinkedIncome, type CashFlowForecastContext } from './cash-flow-forecast-context';
 import { expectedMonthly } from '../cash-flow/forecast';
 
@@ -138,6 +145,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       includeAccounts: true,
       includeTransactions: questionNeeds.needsTransactionDetails,
       includeInvestments: questionNeeds.needsInvestments || Boolean(questionNeeds.needsRetirement),
+      includeInvestmentActivity: Boolean(questionNeeds.needsRetirement),
     });
 
     if (snapshot) {
@@ -238,6 +246,26 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           }),
           holdings: holdings,
           securities: securities,
+          // Reduced here to one small figure, so two years of activity rows
+          // never travel with the snapshot. Manual balances have no activity
+          // stream, so only provider accounts that hold these holdings count.
+          ...(questionNeeds.needsRetirement && (() => {
+            const accountIds = new Set<string>(
+              holdings
+                .map((holding: any) => String(holding?.account_id ?? ''))
+                .filter((id: string) => id.length > 0 && !id.startsWith('manual-'))
+            );
+            return {
+              linkedContributions: linkedContributions(
+                Array.isArray(snapshot.activities) ? snapshot.activities as unknown[] : [],
+                {
+                  accountIds,
+                  asOf: snapshot.computedAt instanceof Date ? snapshot.computedAt : new Date(snapshot.computedAt as any),
+                  incompleteAccountIds: accountsWithErrors(snapshot.quality, accountIds),
+                }
+              ),
+            };
+          })()),
         };
 
         if (questionNeeds.needsRetirement) {
@@ -679,6 +707,7 @@ export async function completeRetirementAnalysis(
       holdings,
       securities,
       unmodeledInvestments: snapshot.investments?.unmodeledInvestments,
+      linkedContributions: snapshot.investments?.linkedContributions ?? null,
       // The registry is dated, so take the full UTC date from the snapshot.
       // This prevents look-ahead and keeps replays deterministic.
       asOfDate: snapshotDate(snapshot),
@@ -734,6 +763,8 @@ async function fetchOrCreateRetirementAnalysis(args: {
   currentAnnualSpending?: number | null;
   /** The plan the user saved in Your numbers. */
   statedFigures?: StatedFigures;
+  /** What the linked accounts holding these holdings receive in a typical month. */
+  linkedContributions?: LinkedContributions | null;
 }): Promise<RetirementAnalysisResolution> {
   const {
     userId,
@@ -748,6 +779,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
     asOfDate,
     currentAnnualSpending,
     statedFigures,
+    linkedContributions: linkedContributionFigure = null,
   } = args;
 
   // Parse retirement parameters from the question and the turns that set it up.
@@ -870,6 +902,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
   // states which of them were assumed, and where each income came from.
   let assumedInputs: AssumedRetirementInputs = {};
   let incomeOrigins: RetirementIncomeOrigins | undefined = undefined;
+  let contributionOrigin: RetirementContributionOrigin | undefined = undefined;
   const withSources = (analysis: RetirementAnalysis): RetirementAnalysisResolution => {
     const covered = withCoverage(analysis);
     const assumed = Object.keys(assumedInputs).length > 0 ? { _assumedInputs: assumedInputs } : {};
@@ -879,6 +912,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         ...(inputSources && { _inputSources: inputSources }),
         ...assumed,
         ...(incomeOrigins && { _incomeOrigins: incomeOrigins }),
+        ...(contributionOrigin && { _contributionOrigin: contributionOrigin }),
       },
     };
   };
@@ -993,6 +1027,19 @@ async function fetchOrCreateRetirementAnalysis(args: {
   const storedIncome = Array.isArray(storedAnalysisInput.incomeStreams) ? storedAnalysisInput.incomeStreams : [];
   const sameIncome = sameIncomeStreams(storedIncome, income.streams);
 
+  // What goes in each year until withdrawals begin: what the user said here,
+  // then Your numbers, then what the linked accounts receive in a typical
+  // month. Once withdrawals have begun there is nothing left to add it in,
+  // and a baseline carrying it would fail every what-if built on it.
+  const contribution = withdrawalStartAge > currentAge
+    ? resolveRetirementContribution({
+      stated: extracted?.annualContributionAmount,
+      statedFigures,
+      linked: linkedContributionFigure,
+    })
+    : { annualAmount: 0, origin: { origin: 'none' as const } };
+  contributionOrigin = contribution.origin;
+
   // Resolve once so cache matching and the stored input use the same evidence
   // boundary as the engine. A full date prevents a January snapshot from
   // selecting an allocation that was not published until June.
@@ -1016,6 +1063,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       storedInput.withdrawalStartAge === withdrawalStartAge &&
       (storedInput.lifeExpectancy ?? 95) === lifeExpectancy &&
       sameIncome &&
+      (storedInput.annualContributionAmount ?? 0) === contribution.annualAmount &&
       sameAssumptions(storedAssumptions, persistableAssumptions(assumed)) &&
       storedAnalysisInput.analysisVersion === RETIREMENT_ANALYSIS_VERSION &&
       storedAnalysisInput.historicalDatasetVersion === historicalDatasetVersion &&
@@ -1107,6 +1155,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       annualWithdrawalAmount,
       withdrawalStartAge,
       incomeStreams: income.streams,
+      annualContributionAmount: contribution.annualAmount,
       // Which of these were assumed, so a later run never reads them back as
       // the user's plan. A figure from an earlier conversation is theirs and
       // is not listed.
@@ -1144,6 +1193,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         withdrawalStartAge: analysisInput.withdrawalStartAge,
         lifeExpectancy: analysisInput.lifeExpectancy,
         incomeStreams: analysisInput.incomeStreams,
+        annualContributionAmount: analysisInput.annualContributionAmount,
       };
       // No `_evidence`: that cites a stored record, and this one is not stored.
       return withSources(degradedResult);
@@ -1185,6 +1235,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       withdrawalStartAge: analysisInput.withdrawalStartAge,
       lifeExpectancy: analysisInput.lifeExpectancy,
       incomeStreams: analysisInput.incomeStreams,
+      annualContributionAmount: analysisInput.annualContributionAmount,
     };
     resultWithInputs._evidence = {
       recordId: createdAnalysis.id,

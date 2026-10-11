@@ -11,6 +11,8 @@ export interface AnalysisSnapshotOptions {
   includeAccounts?: boolean;
   includeTransactions?: boolean;
   includeInvestments?: boolean;
+  /** Investment activity, which only a retirement question reads, for what goes in each month. */
+  includeInvestmentActivity?: boolean;
 }
 
 export type AnalysisFinancialSummarySnapshot = Pick<
@@ -25,7 +27,7 @@ export type AnalysisFinancialSummarySnapshot = Pick<
   | 'quality'
   | 'sourceObservations'
   | 'meta'
-> & Partial<Pick<FinancialSummarySnapshot, 'accounts' | 'transactions' | 'holdings' | 'securities'>>;
+> & Partial<Pick<FinancialSummarySnapshot, 'accounts' | 'transactions' | 'holdings' | 'securities' | 'activities'>>;
 
 export async function upsertFinancialSnapshot(userId: string, payload: any): Promise<void> {
   const { computedAt, asOf, status, reportingCurrency, financialOverview,
@@ -107,6 +109,7 @@ export async function getFinancialSnapshotForAnalysis(
     select.holdings = true;
     select.securities = true;
   }
+  if (options.includeInvestmentActivity) select.activities = true;
   return await getPrismaClient().financialSummarySnapshot.findUnique({
     where: { userId },
     select: select as any,

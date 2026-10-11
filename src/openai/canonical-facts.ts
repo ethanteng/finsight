@@ -839,6 +839,41 @@ export function buildCanonicalFactPack(
         `retirementAnalysis.inputs.incomeStreams.${key}.startAge`
       );
     }
+    // What goes in each year until withdrawals begin, labelled with where it
+    // came from. A linked figure is a typical month's, so its totals are
+    // published beside it: the answer may not net or add facts itself.
+    const stored = retirement._storedInputParams;
+    const contributionOrigin = retirement._contributionOrigin;
+    const contributing = contributionOrigin && stored &&
+      typeof stored.currentAge === 'number' && typeof stored.withdrawalStartAge === 'number' &&
+      stored.withdrawalStartAge > stored.currentAge;
+    if (contributing && (contributionOrigin.origin !== 'none')) {
+      const linked = contributionOrigin.linked;
+      const from = contributionOrigin.origin === 'stated'
+        ? 'as the user stated'
+        : contributionOrigin.origin === 'saved'
+          ? 'from the user\'s saved figures in Your numbers'
+          : 'from the user\'s linked investment accounts: a typical month\'s contributions less withdrawals, times twelve';
+      addSnapshotFact(
+        'retirement_annual_contribution',
+        `Annual contribution counted in the retirement projection until withdrawals begin, in today's dollars, ${from}`,
+        stored.annualContributionAmount ?? 0,
+        'usd',
+        'retirementAnalysis.inputs.annualContributionAmount'
+      );
+      if (contributionOrigin.origin === 'linked' && linked) {
+        const span = `${linked.firstMonth} through ${linked.lastMonth}`;
+        addSnapshotFact('retirement_linked_contribution_months', `Complete months of linked investment activity read for contributions, ${span}`, linked.months, 'count', 'retirementAnalysis.contributions.linked.months');
+        addSnapshotFact('retirement_linked_typical_monthly_contribution', `Typical month's contributions less withdrawals into the linked investment accounts, ${span}`, linked.typicalMonthlyNet, 'usd', 'retirementAnalysis.contributions.linked.typicalMonthlyNet');
+        addSnapshotFact('retirement_linked_contributions_total', `Total contributions into the linked investment accounts, ${span}`, linked.contributed, 'usd', 'retirementAnalysis.contributions.linked.contributed');
+        addSnapshotFact('retirement_linked_withdrawals_total', `Total withdrawals from the linked investment accounts, ${span}`, linked.withdrawn, 'usd', 'retirementAnalysis.contributions.linked.withdrawn');
+        if (typeof linked.accountsRead === 'number' && typeof linked.accountsHeld === 'number' && linked.accountsRead < linked.accountsHeld) {
+          addSnapshotFact('retirement_linked_contribution_accounts_read', 'Linked investment accounts whose activity the contribution figure reads', linked.accountsRead, 'count', 'retirementAnalysis.contributions.linked.accountsRead');
+          addSnapshotFact('retirement_linked_investment_accounts', 'Linked investment accounts holding the projection\'s investments', linked.accountsHeld, 'count', 'retirementAnalysis.contributions.linked.accountsHeld');
+        }
+      }
+    }
+
     if (projectionIncome.length > 0) {
       addSnapshotFact(
         'first_year_portfolio_withdrawal',

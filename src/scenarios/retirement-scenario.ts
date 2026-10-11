@@ -388,6 +388,12 @@ function resolveVariant(
       source,
     });
   }
+  // Saving stops when withdrawals begin, so a what-if that begins them now has
+  // no years left to add the baseline's contributions in. Only contributions
+  // the variant itself states are its own to keep, and fail on.
+  if (overrides.annualContributionAmount === undefined && input.withdrawalStartAge <= input.currentAge) {
+    input.annualContributionAmount = 0;
+  }
   // A pension whose start was only ever "when you retire" moves with a
   // what-if that retires at another age; everything else the user stated
   // about their income stays as it is.
@@ -608,9 +614,9 @@ export async function runRetirementScenario(
     lifeExpectancy: stored.lifeExpectancy ?? 95,
     annualWithdrawalAmount: stored.annualWithdrawalAmount,
     withdrawalStartAge: stored.withdrawalStartAge,
-    annualContributionAmount: 0,
-    // The baseline's Social Security and pension, so a what-if changes only
-    // what the user asked to change.
+    // The baseline's contributions, Social Security and pension, so a what-if
+    // changes only what the user asked to change.
+    annualContributionAmount: stored.annualContributionAmount ?? 0,
     incomeStreams: stored.incomeStreams ?? [],
     // Variants must exclude exactly what the baseline excluded, or a scenario
     // comparison would attribute a coverage difference to the change modeled.
@@ -1028,8 +1034,8 @@ export const retirementScenarioCalculator: ScenarioCalculatorDefinition<
     },
     {
       id: 'annual_contribution_amount',
-      value: 0,
-      description: 'No additional contributions before withdrawals begin.',
+      value: 'baseline contribution',
+      description: 'The baseline\'s own contribution: what the user stated, saved in Your numbers, or what linked accounts receive in a typical month, and zero only when nothing says. Dropped for a variant whose withdrawals begin now.',
     },
     {
       id: 'life_expectancy',

@@ -198,6 +198,41 @@ describe('retirement scenario runner', () => {
     expect(facts.find((fact) => fact.id.endsWith('_assumption_social_security_start_age'))?.value).toBe(70);
   });
 
+  it('keeps the baseline\'s contributions in a what-if, and drops them where withdrawals begin now', async () => {
+    const analyzer = jest.fn(async () => analysis(0.85));
+    const data = snapshot();
+    data.retirementAnalysis._storedInputParams.annualContributionAmount = 18_000;
+
+    const later = await runRetirementScenario(data, {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: { annualWithdrawalAmount: 45_000, sources: { annualWithdrawalAmount: 'spend $45k' } },
+      },
+    }, analyzer);
+    expect(later.status).toBe('completed');
+    expect((analyzer.mock.calls[0] as any[])[0].annualContributionAmount).toBe(18_000);
+    if (later.status === 'completed') {
+      expect(later.scenarios[1].reusedBaseline).toBe(true);
+      expect(describeRetirementScenarioExecution(later)).toContain('$18,000 a year in pre-withdrawal contributions');
+    }
+
+    analyzer.mockClear();
+    const now = await runRetirementScenario(data, {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: {
+          retirementAge: 50,
+          withdrawalStartAge: 50,
+          sources: { retirementAge: 'retire now', withdrawalStartAge: 'retire now' },
+        },
+      },
+    }, analyzer);
+    expect(now.status).toBe('completed');
+    expect((analyzer.mock.calls[0] as any[])[0].annualContributionAmount).toBe(0);
+  });
+
   it('says there is no Social Security to move rather than comparing nothing', async () => {
     const analyzer = jest.fn(async () => analysis(0.85));
     const execution = await runRetirementScenario(snapshot(), {
