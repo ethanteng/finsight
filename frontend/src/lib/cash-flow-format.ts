@@ -144,6 +144,21 @@ export const CADENCE_LABELS: Record<RecurringCadence, string> = {
   quarterly: 'Every 3 months',
 };
 
+/**
+ * How often a payee's amounts can come, for one the forecast spreads over
+ * months of its own instead of the typical basis. The same months the API takes.
+ */
+export const SPREAD_CHOICES: ReadonlyArray<{ months: number; label: string }> = [
+  { months: 4, label: '3 times a year' },
+  { months: 6, label: 'Twice a year' },
+  { months: 12, label: 'Once a year' },
+  { months: 24, label: 'Every 2 years' },
+];
+
+export function spreadLabel(months: number): string {
+  return SPREAD_CHOICES.find(choice => choice.months === months)?.label ?? `Every ${months} months`;
+}
+
 export const RECURRENCE_LABELS: Record<PlannedEventRecurrence, string> = {
   once: 'Doesn’t repeat',
   weekly: 'Every week',

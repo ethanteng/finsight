@@ -4,7 +4,7 @@ import {
   FORECAST_ADJUSTMENTS_PER_USER_LIMIT,
   validateForecastAdjustmentInput,
 } from '../cash-flow/adjustments';
-import { forecastAdjustmentTarget } from '../cash-flow/forecast';
+import { forecastAdjustmentTarget, listCashFlowTransactions } from '../cash-flow/forecast';
 import { parseCashFlowQuery } from '../cash-flow/report-query';
 import {
   PLANNED_EVENTS_PER_USER_LIMIT,
@@ -55,6 +55,9 @@ async function accountError(userId: string, input: PlannedEventInput): Promise<s
     : 'Choose one of your connected checking or savings accounts';
 }
 
+/** A list's ref is a kind, a direction and a key, or an id; nothing longer is one the report gave. */
+const TRANSACTIONS_REF_MAX_LENGTH = 300;
+
 function routeId(req: AuthenticatedRequest): string {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   return typeof id === 'string' ? id : '';
@@ -71,6 +74,22 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   } catch (error) {
     console.error('Failed to build cash flow report:', error);
     return res.status(500).json({ error: 'Failed to load cash flow' });
+  }
+});
+
+// Every transaction behind one list the report shows the latest of, named by
+// the `transactionsRef` the report gave it. Built by the same engine as the report.
+router.get('/transactions', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const ref = typeof req.query.ref === 'string' ? req.query.ref : '';
+  if (!ref || ref.length > TRANSACTIONS_REF_MAX_LENGTH) return res.status(400).json({ error: 'Choose a list of transactions' });
+  try {
+    const loaded = await loadCashFlowModel(req.user!.id);
+    const transactions = loaded ? listCashFlowTransactions(loaded.model, ref) : null;
+    if (!transactions) return res.status(404).json({ error: 'Those transactions aren’t in your forecast anymore. Reload the page and try again.' });
+    return res.json({ transactions });
+  } catch (error) {
+    console.error('Failed to list cash flow transactions:', error);
+    return res.status(500).json({ error: 'Failed to load the transactions' });
   }
 });
 
@@ -153,7 +172,7 @@ router.post('/adjustments', requireAuth, async (req: AuthenticatedRequest, res) 
     if (!loaded) return res.status(404).json({ error: NOT_IN_FORECAST });
     const saved = loaded.model.adjustments.find(adjustment =>
       adjustment.kind === input.kind && adjustment.flow === input.flow && adjustment.key === input.key);
-    if (saved) return res.json({ adjustment: saved });
+    if (saved && saved.spreadMonths === input.spreadMonths) return res.json({ adjustment: saved });
     const target = forecastAdjustmentTarget(loaded.model, input);
     if (!target) return res.status(404).json({ error: NOT_IN_FORECAST });
     const result = await saveForecastAdjustmentWithinLimit(req.user!.id, input, target.label, FORECAST_ADJUSTMENTS_PER_USER_LIMIT);

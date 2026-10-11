@@ -45,6 +45,10 @@ export interface CashFlowEntry {
   category: string;
   /** Interest a credit card charged. The card model can project it from the card's APR instead. */
   interest?: boolean;
+  /** The provider's or the user's category values, as the category picker names them. */
+  categoryCodes?: string[];
+  /** The user chose its category. */
+  userCategory?: boolean;
 }
 
 /**
@@ -71,6 +75,9 @@ export interface CashFlowMovement {
   /** The key this payee had before reference words were dropped whole; set only where it differs. */
   legacyCounterpartyKey?: string;
   label: string;
+  /** As on an entry: the category picker's values, and whether the user chose them. */
+  categoryCodes?: string[];
+  userCategory?: boolean;
 }
 
 export interface CashFlowLedger {
@@ -163,6 +170,16 @@ function cleanDescription(name: string): string {
 function withLegacyKey(transaction: any): { legacyCounterpartyKey?: string } {
   const legacy = legacyCounterpartyKey(transaction?.merchant_name, transaction?.name);
   return legacy ? { legacyCounterpartyKey: legacy } : {};
+}
+
+/** The transaction's category values, as the category picker reads them: blanks dropped. */
+function categoryFields(transaction: any): { categoryCodes: string[]; userCategory?: boolean } {
+  const raw = transaction?.category;
+  const values: unknown[] = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
+  return {
+    categoryCodes: values.filter((value): value is string => typeof value === 'string' && value.trim() !== '' && value !== '0'),
+    ...(transaction?.category_source === 'user' && { userCategory: true }),
+  };
 }
 
 function displayLabel(transaction: any): string {
@@ -264,6 +281,7 @@ export function buildCashFlowLedger(
         counterpartyKey: counterpartyKey(transaction?.merchant_name, transaction?.name),
         ...withLegacyKey(transaction),
         label: displayLabel(transaction),
+        ...categoryFields(transaction),
       });
       continue;
     }
@@ -295,6 +313,7 @@ export function buildCashFlowLedger(
       category: canonical.category?.trim() || 'Uncategorized',
       ...(flow === 'spending' && creditIds.has(canonical.accountKey)
         && detailedCategory(transaction) === 'bank_fees_interest_charge' && { interest: true }),
+      ...categoryFields(transaction),
     });
   }
 

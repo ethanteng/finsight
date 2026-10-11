@@ -7,6 +7,7 @@ import {
   expectedMonthly,
   expectedSpendingByCategory,
   forecastTotals,
+  listCashFlowTransactions,
   type CashFlowModelInput,
 } from '../../cash-flow/forecast';
 import type { PlannedCashFlowEvent } from '../../cash-flow/planned-events';
@@ -39,7 +40,7 @@ function model(overrides: Partial<CashFlowModelInput> = {}) {
 }
 
 const adjustment = (overrides: Partial<ForecastAdjustment>): ForecastAdjustment => ({
-  id: 'adjustment', kind: 'exclude_payee', flow: 'spending', key: '', label: 'Item',
+  id: 'adjustment', kind: 'exclude_payee', flow: 'spending', key: '', label: 'Item', spreadMonths: null,
   ...overrides,
 });
 
@@ -232,7 +233,10 @@ describe('expectedSpendingByCategory', () => {
     const inBasis = built.ledger.entries.filter(entry => groceryStores.has(entry.label)
       && entry.date >= built.typical.basisStart! && entry.date <= typical.through);
     expect(typical.transactionCount).toBe(inBasis.length);
-    expect(typical.transactions.map(transaction => transaction.id).sort()).toEqual(inBasis.map(entry => entry.id).sort());
+    // The report lists the latest; the rest are one request away.
+    expect(typical.transactions).toHaveLength(12);
+    expect(listCashFlowTransactions(built, typical.transactionsRef)!.map(transaction => transaction.id).sort())
+      .toEqual(inBasis.map(entry => entry.id).sort());
     expect(typical.total).toBeCloseTo(inBasis.reduce((total, entry) => total + entry.amount, 0), 2);
     // The flight was a one-off, so it is behind no category.
     expect(categories.flatMap(category => category.sources)

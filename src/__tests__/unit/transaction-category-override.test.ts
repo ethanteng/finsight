@@ -5,14 +5,20 @@ const prisma = {
     findUnique: jest.fn<(_args: any) => Promise<any>>(),
     updateMany: jest.fn<(_args: any) => Promise<any>>(),
   },
-  transactionCategoryOverride: { findMany: jest.fn<() => Promise<any[]>>() },
+  transactionCategoryOverride: {
+    findMany: jest.fn<() => Promise<any[]>>(),
+    createMany: jest.fn<(_args: any) => Promise<any>>(),
+  },
+  transactionCategoryRule: { findMany: jest.fn<() => Promise<any[]>>() },
 };
 
 jest.mock('../../prisma-client', () => ({ getPrismaClient: () => prisma }));
 
 import {
+  applyCategoryOverrides,
   applyOverridesToTransactions,
   findSnapshotTransactionCategory,
+  overridesFromRules,
   matchingTransactions,
   patchSnapshotTransactionCategories,
   patchSnapshotTransactionCategory,
@@ -306,6 +312,56 @@ describe('transactions a category edit can also apply to', () => {
     // A transfer with no in or out detail has no direction to match on.
     const transfer = { transaction_id: 'txn-1', name: 'ZELLE', amount: -50, personal_finance_category: { primary: 'TRANSFER', detailed: 'TRANSFER' } };
     expect(matchingTransactions([transfer, { ...transfer, transaction_id: 'txn-2' }], transfer)).toEqual([]);
+  });
+});
+
+describe('a payee’s category rule', () => {
+  const groceries = ['FOOD_AND_DRINK', 'FOOD_AND_DRINK_GROCERIES'];
+  const rule = { id: 'rule-1', counterpartyKey: 'safeway', direction: 'out' as const, investment: false, label: 'Safeway', category: groceries };
+  const purchase = (id: string, extra: Record<string, unknown> = {}) =>
+    ({ transaction_id: id, name: 'SAFEWAY #1234', merchant_name: 'Safeway', amount: 40, category: ['GENERAL_MERCHANDISE'], transaction_type: 'expense', ...extra });
+
+  it('gives each new transaction it covers an override, and leaves alone one that has its own', () => {
+    const transactions = [
+      purchase('new-1'),
+      purchase('decided', { category: ['SHOPS'] }),
+      // A refund moves money the other way, and keeps its own category.
+      purchase('refund', { amount: -12, transaction_type: 'refund' }),
+      { transaction_id: 'other', name: 'TRADER JOES', merchant_name: 'Trader Joes', amount: 30, transaction_type: 'expense' },
+    ];
+    const created = overridesFromRules(transactions, new Map([['decided', ['SHOPS']]]), [rule]);
+    expect(created).toEqual([{ transactionId: 'new-1', category: groceries, originalCategory: ['GENERAL_MERCHANDISE'] }]);
+  });
+
+  it('saves the overrides it gives at ingestion, then stamps them like any other', async () => {
+    prisma.transactionCategoryOverride.findMany.mockResolvedValue([]);
+    prisma.transactionCategoryRule.findMany.mockResolvedValue([rule]);
+    prisma.transactionCategoryOverride.createMany.mockResolvedValue({ count: 1 });
+    const data = { bankingTransactions: [purchase('new-1')] };
+    await applyCategoryOverrides('user-1', data);
+    expect(prisma.transactionCategoryOverride.createMany).toHaveBeenCalledWith({
+      data: [{ userId: 'user-1', transactionId: 'new-1', category: groceries, originalCategory: ['GENERAL_MERCHANDISE'] }],
+      skipDuplicates: true,
+    });
+    expect(data.bankingTransactions[0]).toMatchObject({ category: groceries, category_source: 'user' });
+  });
+
+  it('still applies the saved overrides when the rules cannot be read', async () => {
+    prisma.transactionCategoryOverride.findMany.mockResolvedValue([{ transactionId: 'new-1', category: ['SHOPS'] }]);
+    prisma.transactionCategoryRule.findMany.mockRejectedValue(new Error('relation does not exist'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const data = { bankingTransactions: [purchase('new-1')] };
+    await applyCategoryOverrides('user-1', data);
+    expect(data.bankingTransactions[0]).toMatchObject({ category: ['SHOPS'], category_source: 'user' });
+    warn.mockRestore();
+  });
+
+  it('writes nothing when no rule covers a new transaction', async () => {
+    prisma.transactionCategoryOverride.findMany.mockResolvedValue([]);
+    prisma.transactionCategoryRule.findMany.mockResolvedValue([{ ...rule, direction: 'in' }]);
+    prisma.transactionCategoryOverride.createMany.mockClear();
+    await applyCategoryOverrides('user-1', { bankingTransactions: [purchase('new-1')] });
+    expect(prisma.transactionCategoryOverride.createMany).not.toHaveBeenCalled();
   });
 });
 

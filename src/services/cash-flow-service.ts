@@ -157,6 +157,7 @@ function toAdjustment(row: CashFlowForecastAdjustmentRow): ForecastAdjustment {
     flow: row.flow === 'income' ? 'income' : 'spending',
     key: row.key,
     label: row.label,
+    spreadMonths: row.kind === 'spread_payee' ? row.spreadMonths : null,
   };
 }
 
@@ -171,9 +172,10 @@ export async function listForecastAdjustments(userId: string): Promise<ForecastA
 /**
  * Save an adjustment under `label` unless the user already has `limit` of
  * them; null when they do. Making the same choice twice returns the one
- * already saved. The lookup, count and insert run under a per-user advisory
- * lock (namespace 872014273, beside the planned-event lock's 872014272), so
- * simultaneous saves cannot pass the cap or race the unique key.
+ * already saved, except that spreading a payee over other months changes the
+ * months of the choice already saved. The lookup, count and write run under a
+ * per-user advisory lock (namespace 872014273, beside the planned-event lock's
+ * 872014272), so simultaneous saves cannot pass the cap or race the unique key.
  */
 export async function saveForecastAdjustmentWithinLimit(
   userId: string,
@@ -186,10 +188,24 @@ export async function saveForecastAdjustmentWithinLimit(
     const existing = await tx.cashFlowForecastAdjustment.findFirst({
       where: { userId, kind: input.kind, flow: input.flow, key: input.key },
     });
+    if (existing && input.kind === 'spread_payee' && existing.spreadMonths !== input.spreadMonths) {
+      const row = await tx.cashFlowForecastAdjustment.update({
+        where: { id: existing.id },
+        data: { spreadMonths: input.spreadMonths },
+      });
+      return { adjustment: toAdjustment(row), created: false };
+    }
     if (existing) return { adjustment: toAdjustment(existing), created: false };
     if (await tx.cashFlowForecastAdjustment.count({ where: { userId } }) >= limit) return null;
     const row = await tx.cashFlowForecastAdjustment.create({
-      data: { userId, kind: input.kind, flow: input.flow, key: input.key, label: label.slice(0, ADJUSTMENT_LABEL_MAX_LENGTH) },
+      data: {
+        userId,
+        kind: input.kind,
+        flow: input.flow,
+        key: input.key,
+        label: label.slice(0, ADJUSTMENT_LABEL_MAX_LENGTH),
+        spreadMonths: input.spreadMonths,
+      },
     });
     return { adjustment: toAdjustment(row), created: true };
   });

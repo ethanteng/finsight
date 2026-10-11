@@ -1,19 +1,22 @@
 "use client";
 
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type {
   CashFlowReport,
   CashFlowSpendingCategory,
   CashFlowSpendingCategorySource,
-  CashFlowSpendingCategoryTransaction,
 } from '../../types/cash-flow';
 import { CADENCE_LABELS, formatCalendarDate, formatMoney, roundToTotal } from '../../lib/cash-flow-format';
+import TransactionList from './TransactionList';
 
 /** Categories listed before the rest fold into one line. */
 const CATEGORIES_SHOWN = 8;
-/** Transactions a source lists before "Show all". */
-const TRANSACTIONS_SHOWN = 10;
+/** What a source's list of transactions needs to load the rest and save a category. */
+const ListContext = createContext<{ apiUrl: string; onChanged: () => Promise<void> | void }>({
+  apiUrl: '',
+  onChanged: () => undefined,
+});
 /** The spending series' color in the cash flow chart, so spending looks the same everywhere. */
 const SPENDING_COLOR = '#c46a4a';
 
@@ -52,39 +55,22 @@ function RowCells({ row, widest, open }: { row: Row; widest: number; open: boole
 // On a phone the bar runs under the label and figures; wider, each category is one line.
 const ROW_GRID = 'grid w-full grid-cols-[minmax(0,1fr)_auto_2.75rem_0.875rem] items-baseline gap-x-3 gap-y-1.5 text-left text-sm sm:grid-cols-[12rem_minmax(0,1fr)_5rem_2.75rem_0.875rem] sm:items-center';
 
-function TransactionList({ transactions, count, withLabels }: {
-  transactions: readonly CashFlowSpendingCategoryTransaction[];
-  count: number;
+function SourceTransactions({ source, withLabels }: {
+  source: Extract<CashFlowSpendingCategorySource, { kind: 'bill' | 'typical' }>;
   /** A bill's transactions are all one payee, so they need no label. */
   withLabels: boolean;
 }) {
-  const [all, setAll] = useState(false);
-  if (transactions.length === 0) return null;
-  const shown = all ? transactions : transactions.slice(0, TRANSACTIONS_SHOWN);
+  const { apiUrl, onChanged } = useContext(ListContext);
   return (
-    <div className="mt-2">
-      <ul className="space-y-1 border-l-2 border-[#102319]/10 pl-3">
-        {shown.map(transaction => (
-          <li key={transaction.id} className="flex items-baseline gap-3 text-xs">
-            <span className="w-[5.75rem] shrink-0 tabular-nums text-[#5e6b63]">{formatCalendarDate(transaction.date)}</span>
-            <span className="min-w-0 flex-1 break-words text-[#5e6b63]">{withLabels ? transaction.label : ''}</span>
-            <span className="shrink-0 font-semibold tabular-nums text-[#102319]">{formatMoney(transaction.amount, true)}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 pl-3 text-xs">
-        {transactions.length > TRANSACTIONS_SHOWN && (
-          <button type="button" onClick={() => setAll(!all)} className="font-bold text-[#102319] underline">
-            {all
-              ? `Show the latest ${TRANSACTIONS_SHOWN}`
-              : `Show ${count > transactions.length ? 'the latest' : 'all'} ${transactions.length}`}
-          </button>
-        )}
-        {count > shown.length && (all || transactions.length <= TRANSACTIONS_SHOWN) && (
-          <span className="text-[#66736b]">Showing the latest {shown.length} of {count}.</span>
-        )}
-      </div>
-    </div>
+    <TransactionList
+      transactions={source.transactions}
+      count={source.transactionCount}
+      transactionsRef={source.transactionsRef}
+      flow="spending"
+      apiUrl={apiUrl}
+      withLabels={withLabels}
+      onChanged={onChanged}
+    />
   );
 }
 
@@ -110,7 +96,7 @@ function Source({ source, dollars }: { source: CashFlowSpendingCategorySource; d
             detail={`regular bill, ${formatMoney(source.amount, true)} ${CADENCE_LABELS[source.cadence].toLowerCase()}`}
             dollars={dollars}
           />
-          <TransactionList transactions={source.transactions} count={source.transactionCount} withLabels={false} />
+          <SourceTransactions source={source} withLabels={false} />
         </div>
       );
     case 'typical': {
@@ -123,7 +109,7 @@ function Source({ source, dollars }: { source: CashFlowSpendingCategorySource; d
               ? `${count} from ${formatCalendarDate(source.from)} to ${formatCalendarDate(source.through)} add up to ${formatMoney(source.total, true)}.`
               : `Your typical pace from ${formatCalendarDate(source.from)} to ${formatCalendarDate(source.through)}.`}
           </p>
-          <TransactionList transactions={source.transactions} count={source.transactionCount} withLabels />
+          <SourceTransactions source={source} withLabels />
         </div>
       );
     }
@@ -193,7 +179,12 @@ function CategoryRow({ row, widest, open, onToggle, detailsId }: {
 }
 
 /** The expected month's usual spending by category, as a ranked bar list; each category opens on what it is made of. */
-export default function UsualSpendingBreakdown({ report }: { report: CashFlowReport }) {
+export default function UsualSpendingBreakdown({ report, apiUrl, onChanged }: {
+  report: CashFlowReport;
+  apiUrl: string;
+  /** Reload the report after a transaction's category changes. */
+  onChanged: () => Promise<void> | void;
+}) {
   const [showAll, setShowAll] = useState(false);
   const [openLabel, setOpenLabel] = useState<string | null>(null);
   if (!report.forecast.available) return null;
@@ -241,29 +232,31 @@ export default function UsualSpendingBreakdown({ report }: { report: CashFlowRep
   const widest = Math.max(...shown.map(row => row.share));
 
   return (
-    <section className="rounded-[1.6rem] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-sm sm:p-7" aria-labelledby="usual-spending-heading">
-      {heading}
-      <p className="mt-1 text-xs text-[#66736b]">
-        A typical month before planned events: {formatMoney(Math.round(usual.monthly))}. Regular bills count at their
-        monthly rate, everything else at your typical pace. Choose a category to see the transactions behind it.
-      </p>
-      <ol className="mt-5 space-y-2" aria-label="Usual spending by category, largest first">
-        {shown.map((row, index) => (
-          <CategoryRow
-            key={row.label}
-            row={row}
-            widest={widest}
-            open={isExpandable(row.category) && openLabel === row.label}
-            onToggle={() => setOpenLabel(openLabel === row.label ? null : row.label)}
-            detailsId={`usual-spending-category-${index}`}
-          />
-        ))}
-      </ol>
-      {folds && (
-        <button type="button" onClick={() => setShowAll(!showAll)} className="mt-4 text-xs font-bold text-[#102319] underline">
-          {showAll ? `Show the top ${CATEGORIES_SHOWN}` : `Show all ${usual.categories.length} categories`}
-        </button>
-      )}
-    </section>
+    <ListContext.Provider value={{ apiUrl, onChanged }}>
+      <section className="rounded-[1.6rem] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-sm sm:p-7" aria-labelledby="usual-spending-heading">
+        {heading}
+        <p className="mt-1 text-xs text-[#66736b]">
+          A typical month before planned events: {formatMoney(Math.round(usual.monthly))}. Regular bills count at their
+          monthly rate, everything else at your typical pace. Choose a category to see the transactions behind it.
+        </p>
+        <ol className="mt-5 space-y-2" aria-label="Usual spending by category, largest first">
+          {shown.map((row, index) => (
+            <CategoryRow
+              key={row.label}
+              row={row}
+              widest={widest}
+              open={isExpandable(row.category) && openLabel === row.label}
+              onToggle={() => setOpenLabel(openLabel === row.label ? null : row.label)}
+              detailsId={`usual-spending-category-${index}`}
+            />
+          ))}
+        </ol>
+        {folds && (
+          <button type="button" onClick={() => setShowAll(!showAll)} className="mt-4 text-xs font-bold text-[#102319] underline">
+            {showAll ? `Show the top ${CATEGORIES_SHOWN}` : `Show all ${usual.categories.length} categories`}
+          </button>
+        )}
+      </section>
+    </ListContext.Provider>
   );
 }

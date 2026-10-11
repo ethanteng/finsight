@@ -112,7 +112,7 @@ export interface CashFlowForecastContext {
     }>;
   };
   /** The user's choices about what the forecast counts; the figures already reflect them. */
-  adjustments?: Array<{ kind: ForecastAdjustmentKind; flow: 'income' | 'spending'; label: string }>;
+  adjustments?: Array<{ kind: ForecastAdjustmentKind; flow: 'income' | 'spending'; label: string; spreadMonths?: number | null }>;
   /**
    * No checking or savings account is linked, so the forecast has no paycheck
    * to see: its income is unknown, not zero, and so is its net. Only spending,
@@ -236,7 +236,12 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
       withPlans: pace(card.withPlans),
     })),
     position: positionContext(model),
-    adjustments: model.adjustments.map(adjustment => ({ kind: adjustment.kind, flow: adjustment.flow, label: adjustment.label })),
+    adjustments: model.adjustments.map(adjustment => ({
+      kind: adjustment.kind,
+      flow: adjustment.flow,
+      label: adjustment.label,
+      spreadMonths: adjustment.spreadMonths,
+    })),
   };
 }
 
@@ -829,7 +834,7 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
         note: 'The user chose what the forecast counts; every figure already reflects these choices, and past months are unchanged.',
         changes: (context.adjustments ?? []).map(adjustment => ({
           item: adjustment.label,
-          change: adjustmentWords(adjustment.kind, adjustment.flow),
+          change: adjustmentWords(adjustment.kind, adjustment.flow, adjustment.spreadMonths ?? null),
         })),
       },
     }),
@@ -837,12 +842,16 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
 }
 
 /** What an adjustment did, in words the model can repeat. */
-function adjustmentWords(kind: ForecastAdjustmentKind, flow: 'income' | 'spending'): string {
+function adjustmentWords(kind: ForecastAdjustmentKind, flow: 'income' | 'spending', spreadMonths: number | null): string {
   switch (kind) {
     case 'exclude_payee': return `left out of the forecast: not projected as ${flow}`;
     case 'include_one_off': return `counted in typical ${flow} although it looked like a one-off`;
     case 'continue_stream': return `still projected as regular ${flow} although it had stopped`;
     case 'exclude_transfer': return `left out of the cash position's transfers ${flow === 'income' ? 'in' : 'out'}`;
+    case 'exclude_category': return `a category left out of typical ${flow}: its transactions no longer feed the typical rate`;
+    case 'spread_payee': return spreadMonths === null
+      ? `counted in typical ${flow} spread over a longer period than usual`
+      : `counted in typical ${flow} with each amount spread over ${spreadMonths} months, because it comes that rarely`;
   }
 }
 

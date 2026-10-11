@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import CashFlowPageClient from '@/app/cash-flow/CashFlowPageClient';
-import type { CashFlowReport } from '@/types/cash-flow';
+import type { CashFlowItemTransaction, CashFlowReport, CashFlowTypicalCategory } from '@/types/cash-flow';
 
 const mockRouter = { push: jest.fn() };
 jest.mock('next/navigation', () => ({ useRouter: () => mockRouter }));
@@ -34,23 +34,36 @@ const pace = (
 });
 const usualPayments = { nextPayment: { date: '2026-10-20', amount: 1520.83 }, paymentsTwelveMonths: 7349.62 };
 
+/** A transaction as the report lists it. */
+const transaction = (overrides: Partial<CashFlowItemTransaction> & Pick<CashFlowItemTransaction, 'id' | 'date' | 'amount'>): CashFlowItemTransaction => ({
+  label: 'Payee', category: null, categoryCodes: [], userCategory: false, payeeKey: null, countedBy: null, spreadBy: null,
+  ...overrides,
+});
+
 const rentBill = {
   kind: 'bill' as const, streamId: 'spending:rent', label: 'Oak Street Apartments', cadence: 'monthly' as const,
-  amount: 2000, monthly: 2000, transactionCount: 5,
+  amount: 2000, monthly: 2000, transactionCount: 5, transactionsRef: 'stream:spending:rent',
   transactions: ['2026-10-01', '2026-09-01', '2026-08-01', '2026-07-01', '2026-06-01']
-    .map(date => ({ id: `rent-${date}`, date, label: 'Oak Street Apartments', amount: 2000 })),
+    .map(date => transaction({ id: `rent-${date}`, date, label: 'Oak Street Apartments', amount: 2000, category: 'Rent' })),
 };
-// Twelve grocery runs, one a week, the latest first; one was a refund.
-const groceryRuns = Array.from({ length: 12 }, (_, index) => ({
+// Fourteen grocery runs, one a week, the latest first; one was a refund. The report lists the latest twelve.
+const groceryRuns = Array.from({ length: 14 }, (_, index) => transaction({
   id: `grocery-${index}`,
-  date: `2026-${index < 2 ? '10' : index < 6 ? '09' : '08'}-${String(28 - (index % 4) * 7).padStart(2, '0')}`,
+  date: `2026-${index < 2 ? '10' : index < 6 ? '09' : index < 10 ? '08' : '07'}-${String(28 - (index % 4) * 7).padStart(2, '0')}`,
   label: index % 2 === 0 ? 'Safeway' : 'Trader Joes',
+  payeeKey: index % 2 === 0 ? 'safeway' : 'trader joes',
   amount: index === 3 ? -42.5 : 280.85,
+  category: 'Groceries',
 }));
 const groceriesTypical = {
   kind: 'typical' as const, monthly: 1090.2, total: 3046.85, from: '2026-07-17', through: '2026-10-14',
-  transactions: groceryRuns, transactionCount: 12,
+  transactions: groceryRuns.slice(0, 12), transactionCount: 14, transactionsRef: 'category:spending:groceries',
 };
+/** A category behind "Everything else". */
+const typicalCategory = (overrides: Partial<CashFlowTypicalCategory> & Pick<CashFlowTypicalCategory, 'key' | 'label' | 'monthlyAmount'>): CashFlowTypicalCategory => ({
+  flow: 'spending', transactions: [], transactionCount: 0, transactionsRef: `category:${overrides.flow ?? 'spending'}:${overrides.key}`,
+  ...overrides,
+});
 
 function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
   return {
@@ -94,12 +107,12 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
       { id: 'spending:gym', payeeKey: 'old gym', label: 'Old Gym', flow: 'spending', cadence: 'monthly', amount: 40, monthlyAmount: 40, occurrences: 3, lastDate: '2026-07-05', nextDate: null, status: 'lapsed', category: 'Gym', replacedByOverride: false, continuedByUser: false },
     ],
     oneOffThresholds: { income: 1000, spending: 1000 },
-    typicalPayees: [
-      { flow: 'spending', payeeKey: 'safeway', label: 'Safeway', monthlyAmount: 610.2, countedOneOffIds: [] },
-      { flow: 'spending', payeeKey: 'trader joes', label: 'Trader Joes', monthlyAmount: 480, countedOneOffIds: [] },
+    typicalCategories: [
+      typicalCategory({ key: 'groceries', label: 'Groceries', monthlyAmount: 1090.2, transactions: groceryRuns.slice(0, 12), transactionCount: 14 }),
+      typicalCategory({ key: 'restaurants', label: 'Restaurants', monthlyAmount: 734.8 }),
     ],
     adjustments: [],
-    oneOffs: [{ id: 'flight', date: '2026-09-10', label: 'United Airlines', flow: 'spending', amount: 2400 }],
+    oneOffs: [{ ...transaction({ id: 'flight', date: '2026-09-10', label: 'United Airlines', amount: 2400, payeeKey: 'united airlines' }), flow: 'spending' }],
     plannedEvents: [
       { id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null, accountId: null, paymentMode: null, nextDate: '2026-12-15', occurrencesInRange: 0 },
     ],
@@ -393,7 +406,11 @@ describe('CashFlowPageClient', () => {
     });
 
     it('opens a category on what it is made of and the transactions behind it', async () => {
-      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+      const calls = mockFetch(url => {
+        if (url.includes('/api/cash-flow?')) return { status: 200, body: report() };
+        if (url.includes('/api/cash-flow/transactions?ref=category%3Aspending%3Agroceries')) return { status: 200, body: { transactions: groceryRuns } };
+        return undefined;
+      });
       render(<CashFlowPageClient />);
       await screen.findByRole('heading', { name: 'Where your usual spending goes' });
 
@@ -408,6 +425,8 @@ describe('CashFlowPageClient', () => {
       expect(within(rentDetails).getByText('$2,000 a month')).toBeInTheDocument();
       expect(within(rentDetails).getByText('Oct 1, 2026')).toBeInTheDocument();
       expect(within(rentDetails).getAllByRole('listitem')).toHaveLength(5);
+      // A bill's payments are all one payee's, so they don't repeat its name.
+      expect(within(rentDetails).getAllByText('Oak Street Apartments')).toHaveLength(1);
 
       // One category is open at a time.
       const groceries = screen.getByRole('button', { name: /^Groceries/ });
@@ -416,13 +435,18 @@ describe('CashFlowPageClient', () => {
       const groceryDetails = document.getElementById(groceries.getAttribute('aria-controls')!)!;
       // The part adds up to the $1,090 the row shows.
       expect(within(groceryDetails).getByText('$1,090 a month')).toBeInTheDocument();
-      expect(within(groceryDetails).getByText('12 transactions from Jul 17, 2026 to Oct 14, 2026 add up to $3,046.85.')).toBeInTheDocument();
-      expect(within(groceryDetails).getAllByRole('listitem')).toHaveLength(10);
+      expect(within(groceryDetails).getByText('14 transactions from Jul 17, 2026 to Oct 14, 2026 add up to $3,046.85.')).toBeInTheDocument();
+      expect(within(groceryDetails).getAllByRole('listitem')).toHaveLength(12);
+      expect(within(groceryDetails).getByText('Showing the latest 12 of 14.')).toBeInTheDocument();
       // A refund nets out of the category.
       expect(within(groceryDetails).getByText('−$42.50')).toBeInTheDocument();
-      fireEvent.click(within(groceryDetails).getByRole('button', { name: 'Show all 12' }));
+      // The rest come from the server, by the list's ref.
+      fireEvent.click(within(groceryDetails).getByRole('button', { name: 'Show all 14' }));
+      await waitFor(() => expect(within(groceryDetails).getAllByRole('listitem')).toHaveLength(14));
+      expect(calls.some(call => call.url.endsWith('/api/cash-flow/transactions?ref=category%3Aspending%3Agroceries'))).toBe(true);
+      expect(within(groceryDetails).getAllByText('Safeway')).toHaveLength(7);
+      fireEvent.click(within(groceryDetails).getByRole('button', { name: 'Show the latest 12' }));
       expect(within(groceryDetails).getAllByRole('listitem')).toHaveLength(12);
-      expect(within(groceryDetails).getAllByText('Safeway')).toHaveLength(6);
 
       // Projected interest has nothing charged behind it yet, and says so.
       const interest = screen.getByRole('button', { name: /^Credit card interest/ });
@@ -566,14 +590,99 @@ describe('CashFlowPageClient', () => {
       expect(within(await basis()).getByText('Every 2 weeks · next Oct 23, 2026 · Wages')).toBeInTheDocument();
     });
 
-    it('lists what typical spending is made of, and leaves a payee out of it', async () => {
+    it('lists typical spending by category, and leaves a category out of it', async () => {
       const calls = adjusting();
       render(<CashFlowPageClient />);
       const section = await basis();
-      expect(within(section).getByText('$610/mo')).toBeInTheDocument();
-      fireEvent.click(within(section).getByRole('button', { name: 'Leave out: Safeway' }));
+      expect(within(section).getByText('$1,090/mo')).toBeInTheDocument();
+      fireEvent.click(within(section).getByRole('button', { name: 'Leave out: Groceries' }));
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+      expect(posted(calls)).toEqual({ kind: 'exclude_category', flow: 'spending', key: 'groceries' });
+    });
+
+    it('leaves a payee out from any of its transactions', async () => {
+      const calls = adjusting();
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      fireEvent.click(within(section).getByRole('button', { name: '14 transactions · latest Oct 28, 2026: $280.85' }));
+      // Each transaction names its payee, since a category has many.
+      expect(within(section).getAllByText('Safeway')).toHaveLength(6);
+      fireEvent.click(within(section).getAllByRole('button', { name: 'Choices for Safeway' })[0]);
+      fireEvent.click(within(section).getByRole('button', { name: 'Leave out everything from Safeway' }));
       await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
       expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'spending', key: 'safeway' });
+    });
+
+    it('spreads a payee that comes rarely over its own months, and back over the basis', async () => {
+      const premium = transaction({ id: 'premium', date: '2026-06-10', label: 'State Farm', amount: 1200, payeeKey: 'state farm', category: 'Insurance', spreadBy: 'adj-premium' });
+      const body = report({
+        typicalCategories: [
+          ...report().typicalCategories,
+          typicalCategory({ key: 'insurance', label: 'Insurance', monthlyAmount: 100, transactions: [premium], transactionCount: 1 }),
+        ],
+        adjustments: [{
+          id: 'adj-premium', kind: 'spread_payee', flow: 'spending', key: 'state farm', label: 'State Farm', spreadMonths: 12, date: null, amount: null,
+          transactions: [premium], transactionCount: 1, transactionsRef: 'adjustment:adj-premium',
+        }],
+      });
+      const calls = adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByText('Comes once a year: each amount spread over 12 months')).toBeInTheDocument();
+      fireEvent.click(within(section).getByRole('button', { name: '1 transaction · latest Jun 10, 2026: $1,200.00' }));
+      expect(within(section).getByText('once a year, set by you')).toBeInTheDocument();
+      fireEvent.click(within(section).getByRole('button', { name: 'Choices for State Farm' }));
+      const often = within(section).getByLabelText('How often amounts from State Farm come');
+      expect(often).toHaveValue('12');
+
+      fireEvent.change(often, { target: { value: '6' } });
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+      expect(posted(calls)).toEqual({ kind: 'spread_payee', flow: 'spending', key: 'state farm', spreadMonths: 6 });
+
+      // The forecast reloads before anything else can be changed.
+      await waitFor(() => expect(within(section).getByLabelText('How often amounts from State Farm come')).not.toBeDisabled());
+      fireEvent.change(within(section).getByLabelText('How often amounts from State Farm come'), { target: { value: '' } });
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'DELETE')).toBe(true));
+      expect(calls.find(call => call.init?.method === 'DELETE')!.url).toMatch(/adjustments\/adj-premium$/);
+    });
+
+    it('changes a transaction’s category in place, and reloads the forecast', async () => {
+      const calls = mockFetch((url, init) => {
+        if (url.includes('/api/cash-flow?')) return { status: 200, body: report() };
+        if (url.endsWith('/api/transaction-categories/options')) {
+          return { status: 200, body: { success: true, data: [{ primary: 'TRAVEL', label: 'Travel', detailed: [{ value: 'TRAVEL_FLIGHTS', label: 'Flights' }] }] } };
+        }
+        if (url.endsWith('/flight/matches')) {
+          return { status: 200, body: { success: true, data: { count: 0, direction: 'out', canApplyToMatching: true, rule: null } } };
+        }
+        if (url.endsWith('/api/transaction-categories/flight') && init?.method === 'PUT') {
+          return { status: 200, body: { success: true, data: { category: ['TRAVEL', 'TRAVEL_FLIGHTS'] } } };
+        }
+        return undefined;
+      });
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      fireEvent.click(within(section).getByRole('button', { name: 'Change category: United Airlines on Sep 10, 2026' }));
+      const dialog = await screen.findByRole('dialog');
+      // The picker shows the amount as money out.
+      expect(dialog).toHaveTextContent('United Airlines • Sep 10, 2026 • -$2400.00');
+      fireEvent.change(await within(dialog).findByLabelText('Category'), { target: { value: 'TRAVEL' } });
+      fireEvent.change(within(dialog).getByLabelText('Subcategory'), { target: { value: 'TRAVEL_FLIGHTS' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save category' }));
+      await waitFor(() => expect(calls.filter(call => call.url.includes('/api/cash-flow?'))).toHaveLength(2));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('offers to spread a one-off’s payee, which counts it at that pace', async () => {
+      const calls = adjusting();
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      fireEvent.click(within(section).getByRole('button', { name: 'Choices for United Airlines' }));
+      // A one-off is left out already, so leaving its payee out is not offered.
+      expect(within(section).queryByRole('button', { name: 'Leave out everything from United Airlines' })).not.toBeInTheDocument();
+      fireEvent.change(within(section).getByLabelText('How often amounts from United Airlines come'), { target: { value: '12' } });
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+      expect(posted(calls)).toEqual({ kind: 'spread_payee', flow: 'spending', key: 'united airlines', spreadMonths: 12 });
     });
 
     it('splits each side into what repeats and everything else, adding up to the side', async () => {
@@ -599,7 +708,10 @@ describe('CashFlowPageClient', () => {
       expect(within(half('Repeating')).getByText('Oak Street Apartments')).toBeInTheDocument();
       expect(half('Everything else')).toHaveTextContent('$1,825 a month');
       expect(half('Everything else')).toHaveTextContent('Your last 90 days, spread evenly across every day ahead.');
-      expect(within(half('Everything else')).getByText('Safeway')).toBeInTheDocument();
+      // Grouped by category, rounded together so they add up to the half.
+      expect(within(half('Everything else')).getByText('Groceries')).toBeInTheDocument();
+      expect(within(half('Everything else')).getByText('$1,090/mo')).toBeInTheDocument();
+      expect(within(half('Everything else')).getByText('$735/mo')).toBeInTheDocument();
       expect(half('Card interest')).toHaveTextContent('$10 a month');
       expect(half('Card interest')).toHaveTextContent('Projected from each card’s APR at your usual payment pace.');
     });
@@ -617,7 +729,7 @@ describe('CashFlowPageClient', () => {
       expect(interest).toHaveTextContent('$10 a month');
     });
 
-    it('still offers typical income leave-out when spending is overridden', async () => {
+    it('still offers leaving typical income out when spending is overridden', async () => {
       const body = report({
         baseline: {
           ...report().baseline,
@@ -626,15 +738,15 @@ describe('CashFlowPageClient', () => {
           typicalMonthlySpending: 4000,
           typicalMonthlyIncome: 200,
         },
-        typicalPayees: [{ flow: 'income', payeeKey: 'venmo', label: 'Venmo', monthlyAmount: 200 }],
+        typicalCategories: [typicalCategory({ flow: 'income', key: 'other income', label: 'Other Income', monthlyAmount: 200 })],
       });
       const calls = adjusting(body);
       render(<CashFlowPageClient />);
       const section = await basis();
       expect(within(section).getByRole('heading', { name: 'Everything else' })).toBeInTheDocument();
-      fireEvent.click(within(section).getByRole('button', { name: 'Leave out: Venmo' }));
+      fireEvent.click(within(section).getByRole('button', { name: 'Leave out: Other Income' }));
       await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
-      expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'income', key: 'venmo' });
+      expect(posted(calls)).toEqual({ kind: 'exclude_category', flow: 'income', key: 'other income' });
     });
 
     it('shows the server’s reason when the item is no longer in the forecast', async () => {
@@ -689,7 +801,7 @@ describe('CashFlowPageClient', () => {
       render(<CashFlowPageClient />);
       const section = await basis();
       expect(within(section).getByText(
-        'A large amount that stands out from everything else from its payee in your last 90 days: $1,000 or more spent, or $1,000 or more received, and at least twice the rest from that payee. Amounts within ten days of each other, like a sum moved in pieces, count together. Counting one spreads it over those 90 days, as if amounts like it come that often.'
+        'A large amount that stands out from everything else from its payee in your last 90 days: $1,000 or more spent, or $1,000 or more received, and at least twice the rest from that payee. Amounts within ten days of each other, like a sum moved in pieces, count together. Counting one spreads it over those 90 days, as if amounts like it come that often; if they come less often, say how often under Choices.'
       )).toBeInTheDocument();
       expect(within(section).getByText('None in your last 90 days.')).toBeInTheDocument();
       expect(within(section).getByText('Nothing has stopped.')).toBeInTheDocument();
@@ -697,10 +809,9 @@ describe('CashFlowPageClient', () => {
     });
 
     it('shows the first eight of a long list, and the rest on request', async () => {
-      const typicalPayees = Array.from({ length: 12 }, (_, index) => ({
-        flow: 'spending' as const, payeeKey: `store ${index}`, label: `Store ${index}`, monthlyAmount: 500 - index * 10,
-      }));
-      adjusting(report({ typicalPayees }));
+      const typicalCategories = Array.from({ length: 12 }, (_, index) =>
+        typicalCategory({ key: `store ${index}`, label: `Store ${index}`, monthlyAmount: 500 - index * 10 }));
+      adjusting(report({ typicalCategories }));
       render(<CashFlowPageClient />);
       const section = await basis();
       expect(within(section).getByText('Store 7')).toBeInTheDocument();
@@ -710,10 +821,9 @@ describe('CashFlowPageClient', () => {
     });
 
     it('shows more eight at a time, all at once, fewer again, or none', async () => {
-      const typicalPayees = Array.from({ length: 20 }, (_, index) => ({
-        flow: 'spending' as const, payeeKey: `store ${index}`, label: `Store ${index}`, monthlyAmount: 500 - index * 10, countedOneOffIds: [],
-      }));
-      adjusting(report({ typicalPayees }));
+      const typicalCategories = Array.from({ length: 20 }, (_, index) =>
+        typicalCategory({ key: `store ${index}`, label: `Store ${index}`, monthlyAmount: 500 - index * 10 }));
+      adjusting(report({ typicalCategories }));
       render(<CashFlowPageClient />);
       const section = await basis();
       const button = (name: string) => within(section).getByRole('button', { name });
@@ -743,8 +853,8 @@ describe('CashFlowPageClient', () => {
         recurring: [gusto, {
           ...rent,
           transactions: [
-            { id: 'rent-oct', date: '2026-10-01', amount: 2000, category: 'Rent' },
-            { id: 'rent-sep', date: '2026-09-01', amount: 2000, category: 'Rent' },
+            transaction({ id: 'rent-oct', date: '2026-10-01', amount: 2000, category: 'Rent' }),
+            transaction({ id: 'rent-sep', date: '2026-09-01', amount: 2000, category: 'Rent' }),
           ],
           transactionCount: 5,
         }, gym],
@@ -754,28 +864,37 @@ describe('CashFlowPageClient', () => {
       render(<CashFlowPageClient />);
       const section = await basis();
       expect(within(section).getByText('Every month · next Nov 1, 2026 · Rent')).toBeInTheDocument();
-      expect(within(section).getByText('Sep 10, 2026 · Travel')).toBeInTheDocument();
+      // A one-off's category opens the category picker.
+      expect(within(section).getByRole('button', { name: 'Change category: United Airlines on Sep 10, 2026' })).toHaveTextContent('Travel');
 
       const toggle = within(section).getByRole('button', { name: '5 transactions · latest Oct 1, 2026: $2,000.00' });
       expect(toggle).toHaveAttribute('aria-expanded', 'false');
       fireEvent.click(toggle);
       expect(toggle).toHaveAttribute('aria-expanded', 'true');
-      expect(within(section).getByText('Sep 1, 2026 · Rent')).toBeInTheDocument();
+      expect(within(section).getByText('Sep 1, 2026')).toBeInTheDocument();
+      expect(within(section).getAllByRole('button', { name: /^Change category: Payee on/ }).map(button => button.textContent)).toEqual(['Rent', 'Rent']);
       expect(within(section).getByText('Showing the latest 2 of 5.')).toBeInTheDocument();
+      // An older report names no list to ask for the rest.
+      expect(within(section).queryByRole('button', { name: 'Show all 5' })).not.toBeInTheDocument();
     });
 
     it('marks a one-off the user counted where it now sits, and moves it back', async () => {
+      const flight = transaction({ id: 'flight', date: '2026-09-10', label: 'United Airlines', amount: 2400, payeeKey: 'united airlines', countedBy: 'adj-flight', category: 'Travel' });
       const body = report({
-        typicalPayees: [
-          ...report().typicalPayees,
-          { flow: 'spending', payeeKey: 'united airlines', label: 'United Airlines', monthlyAmount: 811.11, countedOneOffIds: ['flight'] },
+        typicalCategories: [
+          ...report().typicalCategories,
+          typicalCategory({ key: 'travel', label: 'Travel', monthlyAmount: 811.11, transactions: [flight], transactionCount: 1 }),
         ],
         oneOffs: [],
-        adjustments: [{ id: 'adj-flight', kind: 'include_one_off', flow: 'spending', key: 'flight', label: 'United Airlines', date: '2026-09-10', amount: 2400 }],
+        adjustments: [{
+          id: 'adj-flight', kind: 'include_one_off', flow: 'spending', key: 'flight', label: 'United Airlines', spreadMonths: null, date: '2026-09-10', amount: 2400,
+          transactions: [flight], transactionCount: 1, transactionsRef: 'adjustment:adj-flight',
+        }],
       });
       const calls = adjusting(body);
       render(<CashFlowPageClient />);
       const section = await basis();
+      fireEvent.click(within(section).getByRole('button', { name: '1 transaction · latest Sep 10, 2026: $2,400.00' }));
       expect(within(section).getByText('counted by you')).toBeInTheDocument();
       fireEvent.click(within(section).getByRole('button', { name: 'Move back: United Airlines' }));
       await waitFor(() => expect(calls.some(call => call.init?.method === 'DELETE')).toBe(true));
@@ -784,20 +903,23 @@ describe('CashFlowPageClient', () => {
 
     it('does not credit a counted one-off that no longer puts anything in the typical rate', async () => {
       // The user once counted a United flight; now the payee's spending is typical on its own.
+      const recent = transaction({ id: 'united-recent', date: '2026-10-02', label: 'United Airlines', amount: 120, payeeKey: 'united airlines', category: 'Travel' });
       const body = report({
-        typicalPayees: [
-          ...report().typicalPayees,
-          { flow: 'spending', payeeKey: 'united airlines', label: 'United Airlines', monthlyAmount: 120, countedOneOffIds: [] },
+        typicalCategories: [
+          ...report().typicalCategories,
+          typicalCategory({ key: 'travel', label: 'Travel', monthlyAmount: 120, transactions: [recent], transactionCount: 1 }),
         ],
-        // Even a change that names the payee is not credited unless the payee says it counts.
-        adjustments: [{ id: 'adj-old-flight', kind: 'include_one_off', flow: 'spending', key: 'old-flight', label: 'United Airlines', date: null, amount: null, payeeKey: 'united airlines' }],
+        oneOffs: [],
+        // Even a change that names the payee is not credited unless the report says it holds the transaction.
+        adjustments: [{ id: 'adj-old-flight', kind: 'include_one_off', flow: 'spending', key: 'old-flight', label: 'United Airlines', spreadMonths: null, date: null, amount: null, transactions: [], transactionCount: 0, transactionsRef: 'adjustment:adj-old-flight' }],
       });
       adjusting(body);
       render(<CashFlowPageClient />);
       const section = await basis();
+      fireEvent.click(within(section).getByRole('button', { name: '1 transaction · latest Oct 2, 2026: $120.00' }));
       expect(within(section).queryByText('counted by you')).not.toBeInTheDocument();
       expect(within(section).queryByRole('button', { name: 'Move back: United Airlines' })).not.toBeInTheDocument();
-      expect(within(section).getByRole('button', { name: 'Leave out: United Airlines' })).toBeInTheDocument();
+      expect(within(section).getByRole('button', { name: 'Choices for United Airlines' })).toBeInTheDocument();
     });
 
     it('lists what the user left out, and puts it back', async () => {
@@ -849,10 +971,10 @@ describe('CashFlowPageClient', () => {
       expect(calls.find(call => call.init?.method === 'DELETE')!.url).toMatch(/adjustments\/adj-gym$/);
     });
 
-    it('shows typical income and its payees when only spending is overridden', async () => {
+    it('shows typical income and its categories when only spending is overridden', async () => {
       const body = report({
         baseline: { ...report().baseline, spendingSource: 'override', monthlyExpenseOverride: 6000, typicalMonthlyIncome: 3211 },
-        typicalPayees: [{ flow: 'income', payeeKey: 'acme corp consulting', label: 'ACME CORP CONSULTING', monthlyAmount: 3210.65 }],
+        typicalCategories: [typicalCategory({ flow: 'income', key: 'consulting', label: 'Consulting', monthlyAmount: 3210.65 })],
       });
       const calls = adjusting(body);
       render(<CashFlowPageClient />);
@@ -860,9 +982,9 @@ describe('CashFlowPageClient', () => {
       const everythingElse = within(section).getByRole('heading', { name: 'Everything else' }).parentElement!;
       expect(everythingElse).toHaveTextContent('$3,211 a month');
       expect(within(section).getByText('Your monthly spending of $6,000 from the Finances page is used instead.')).toBeInTheDocument();
-      fireEvent.click(within(section).getByRole('button', { name: 'Leave out: ACME CORP CONSULTING' }));
+      fireEvent.click(within(section).getByRole('button', { name: 'Leave out: Consulting' }));
       await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
-      expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'income', key: 'acme corp consulting' });
+      expect(posted(calls)).toEqual({ kind: 'exclude_category', flow: 'income', key: 'consulting' });
     });
 
     it('offers no change a monthly override would cancel, and says which saved ones it does', async () => {

@@ -9,9 +9,11 @@ import {
   type CalendarDate,
 } from './calendar';
 import {
+  categoryKey,
   forecastAdjustmentSets,
   namesPayee,
-  payeeKey,
+  spreadDays,
+  spreadOf,
   type ForecastAdjustment,
   type ForecastAdjustmentInput,
 } from './adjustments';
@@ -157,15 +159,17 @@ export interface CashFlowModel {
     monthlyExpenseOverride: number | null;
   };
   oneOffs: CashFlowEntry[];
-  /** The payees behind the typical rates, for the sides read from transactions. */
-  typicalPayees: TypicalPayee[];
   /**
-   * The typical spending rate's categories as the basis spent them, net of
-   * refunds, keyed by `labelKey`, from the accounts the rate counts. They add
-   * up to `typical.dailySpending`, though a category whose refunds outweighed
-   * its purchases can be below zero.
+   * Each typical rate's categories as the basis spent or received them, net of
+   * refunds, keyed by `labelKey`, from the accounts the rate counts. A side's
+   * add up to its rate as learned from transactions, though a category whose
+   * refunds outweighed its purchases can be below zero.
    */
-  typicalSpendingByCategory: Map<string, TypicalSpendingCategory>;
+  typicalCategories: Record<CashFlowDirection, Map<string, TypicalCategory>>;
+  /** Transactions in the typical rates only because the user counted them: they would have been one-offs. */
+  countedOneOffIds: ReadonlySet<string>;
+  /** Transactions counted in the typical rates spread by the user's choice, to that choice's id. */
+  spreadEntries: ReadonlyMap<string, string>;
   /** How large a non-repeating amount must be to be left out as a one-off; null without a basis. */
   oneOffThresholds: Record<CashFlowDirection, number> | null;
   adjustments: readonly ForecastAdjustment[];
@@ -233,26 +237,12 @@ export interface CardModel {
   paidFrom: string | null;
 }
 
-/** What one category adds to the typical spending rate. */
-export interface TypicalSpendingCategory {
+/** What one category adds to a typical rate. */
+export interface TypicalCategory {
   label: string;
-  /** Per day, over the basis, net of refunds. */
+  /** Per day, net of refunds: over the basis, or over a spread payee's own months. */
   daily: number;
-  /** Every transaction it is made of, in the basis. */
-  entryIds: string[];
-}
-
-/** What one payee adds to a typical rate. */
-export interface TypicalPayee {
-  flow: CashFlowDirection;
-  /** The ledger's key for the payee. */
-  counterpartyKey: string;
-  label: string;
-  /** Per day, over the basis. */
-  daily: number;
-  /** Transactions in it only because the user counted them: they would have been one-offs. */
-  countedOneOffIds: string[];
-  /** Every transaction it is made of, in the basis. */
+  /** Every transaction it is made of: in the basis, or a spread payee's within its months. */
   entryIds: string[];
 }
 
@@ -325,39 +315,78 @@ interface LearnedFlows {
   dailyByAccount: Map<string, Record<CashFlowDirection, number>>;
   /** The part of each account's typical daily spending that is card interest charges. */
   interestDailyByAccount: Map<string, number>;
-  /** The named payees behind the typical rates, largest first. */
-  typicalPayees: TypicalPayee[];
-  /** Typical daily spending per category, one-offs left out, keyed by `labelKey`. */
-  spendingByCategory: Map<string, TypicalSpendingCategory>;
+  /** Each flow's typical daily rate per category, one-offs left out, keyed by `labelKey`. */
+  byCategory: Record<CashFlowDirection, Map<string, TypicalCategory>>;
+  /** Transactions in the typical rates only because the user counted them: they would have been one-offs. */
+  countedOneOffIds: Set<string>;
+  /** Transactions counted in the typical rates spread by the user's choice, to that choice's id. */
+  spreadEntries: Map<string, string>;
   /** How large a non-repeating amount must be to be left out as a one-off; null without a basis. */
   oneOffThresholds: Record<CashFlowDirection, number> | null;
+}
+
+/** The user's choices that change how the typical rates are learned. */
+interface TypicalChoices {
+  /** Transactions the user chose to count, however large. */
+  countedOneOffs?: ReadonlySet<string>;
+  /** Categories whose transactions feed no typical rate, by `categoryKey`. */
+  excludedCategories?: ReadonlySet<string>;
+  /** Payees whose amounts are spread over months of their own, by `payeeKey`. */
+  spreadPayees?: ReadonlyMap<string, ForecastAdjustment>;
+}
+
+/** The category a transaction counts under in a typical rate. */
+function typicalCategoryLabel(entry: Pick<CashFlowEntry, 'flow' | 'category' | 'interest'>): string {
+  return entry.flow === 'spending' ? spendingCategoryLabel(entry) : normalizeLabel(entry.category, 'Uncategorized');
 }
 
 /**
  * Learn recurring streams and typical daily rates from a set of entries:
  * streams on their schedule, everything else as a daily rate over the basis,
  * with large amounts from payees that do not repeat left out as one-offs.
+ *
+ * A payee the user spread counts differently: each of its amounts that no
+ * stream projects is spread over the months the user gave, for as long as it
+ * is that recent, and is never a one-off. A category the user left out feeds
+ * no typical rate, though a stream in it is still learned.
  */
 function learnFlows(
   entries: readonly CashFlowEntry[],
   dataThrough: CalendarDate,
   basisStart: CalendarDate | null,
   basisEndExclusive: CalendarDate,
-  /** Transactions the user chose to count, however large. */
-  countedOneOffs: ReadonlySet<string> = new Set()
+  choices: TypicalChoices = {}
 ): LearnedFlows {
+  const countedOneOffs = choices.countedOneOffs ?? new Set<string>();
+  const excludedCategories = choices.excludedCategories ?? new Set<string>();
+  const spreadPayees = choices.spreadPayees ?? new Map<string, ForecastAdjustment>();
   const streams = detectRecurringStreams(entries, dataThrough);
   const dailyByAccount = new Map<string, Record<CashFlowDirection, number>>();
   const interestDailyByAccount = new Map<string, number>();
-  const spendingByCategory = new Map<string, TypicalSpendingCategory>();
-  const empty = { streams, oneOffs: [], dailyByAccount, interestDailyByAccount, typicalPayees: [], spendingByCategory, oneOffThresholds: null };
+  const byCategory: Record<CashFlowDirection, Map<string, TypicalCategory>> = { income: new Map(), spending: new Map() };
+  const countedOneOffIds = new Set<string>();
+  const spreadEntries = new Map<string, string>();
+  const empty = { streams, oneOffs: [], dailyByAccount, interestDailyByAccount, byCategory, countedOneOffIds, spreadEntries, oneOffThresholds: null };
   if (!basisStart) return empty;
   const basisDays = daysBetween(basisStart, basisEndExclusive);
   if (basisDays <= 0) return empty;
 
   const inStream = new Set(streams.flatMap(stream => stream.entryIds));
+  const excluded = (entry: CashFlowEntry) =>
+    excludedCategories.has(categoryKey(entry.flow, labelKey(typicalCategoryLabel(entry))));
+  // A spread amount counts over its own months from its date, so it can be
+  // older than the basis and still count, and it is weighed by those months.
+  const spreadDaysOf = new Map<string, { days: number; by: string }>();
+  for (const entry of entries) {
+    if (inStream.has(entry.id) || entry.date >= basisEndExclusive || excluded(entry)) continue;
+    const spread = spreadOf(spreadPayees, entry.flow, entry);
+    if (!spread || spread.spreadMonths === null) continue;
+    const days = spreadDays(spread.spreadMonths);
+    if (daysBetween(entry.date, basisEndExclusive) < days) spreadDaysOf.set(entry.id, { days, by: spread.id });
+  }
   const basisEntries = entries.filter(entry => entry.date >= basisStart && entry.date < basisEndExclusive);
-  const residual = basisEntries.filter(entry => !inStream.has(entry.id));
+  const residual = basisEntries.filter(entry => !inStream.has(entry.id) && !excluded(entry)
+    && !spreadOf(spreadPayees, entry.flow, entry));
   const typicalWeek = typicalWeeklyTotals(residual, basisStart, basisEndExclusive);
   const oneOffThresholds: Record<CashFlowDirection, number> = {
     income: Math.max(ONE_OFF_FLOOR, ONE_OFF_TYPICAL_WEEKS * typicalWeek.income),
@@ -406,71 +435,61 @@ function learnFlows(
   // A one-off the user counted joins the typical rate; it is recorded only
   // while it would otherwise have been left out, so a counted one-off that
   // aged out of the basis, or whose payee now repeats, is not.
-  const countedIds = new Set(residual.filter(entry => countedOneOffs.has(entry.id) && looksOneOff(entry)).map(entry => entry.id));
-
-  const oneOffs = residual.filter(entry => looksOneOff(entry) && !countedIds.has(entry.id));
-  const oneOffIds = new Set(oneOffs.map(entry => entry.id));
-  const totalsByAccount = new Map<string, Record<CashFlowDirection, number>>();
-  const categoriesByAccount = new Map<string, Map<string, TypicalSpendingCategory>>();
-  const byPayee = new Map<string, TypicalPayee & { latest: CalendarDate }>();
   for (const entry of residual) {
-    if (oneOffIds.has(entry.id)) continue;
+    if (countedOneOffs.has(entry.id) && looksOneOff(entry)) countedOneOffIds.add(entry.id);
+  }
+
+  const oneOffs = residual.filter(entry => looksOneOff(entry) && !countedOneOffIds.has(entry.id));
+  const oneOffIds = new Set(oneOffs.map(entry => entry.id));
+  // Everything the typical rates count, each with what it adds a day.
+  const counted: Array<{ entry: CashFlowEntry; daily: number }> = [
+    ...residual.filter(entry => !oneOffIds.has(entry.id)).map(entry => ({ entry, daily: entry.amount / basisDays })),
+    ...entries.flatMap(entry => {
+      const spread = spreadDaysOf.get(entry.id);
+      if (!spread) return [];
+      spreadEntries.set(entry.id, spread.by);
+      return [{ entry, daily: entry.amount / spread.days }];
+    }),
+  ];
+  const totalsByAccount = new Map<string, Record<CashFlowDirection, number>>();
+  const categoriesByAccount = new Map<string, Record<CashFlowDirection, Map<string, TypicalCategory>>>();
+  for (const { entry, daily } of counted) {
     const account = totalsByAccount.get(entry.accountId) ?? { income: 0, spending: 0 };
-    account[entry.flow] += entry.amount;
+    account[entry.flow] += daily;
     totalsByAccount.set(entry.accountId, account);
     if (entry.interest && entry.flow === 'spending') {
-      interestDailyByAccount.set(entry.accountId, (interestDailyByAccount.get(entry.accountId) ?? 0) + entry.amount / basisDays);
+      interestDailyByAccount.set(entry.accountId, (interestDailyByAccount.get(entry.accountId) ?? 0) + daily);
     }
-    if (entry.flow === 'spending') {
-      const label = spendingCategoryLabel(entry);
-      const key = labelKey(label);
-      const categories = categoriesByAccount.get(entry.accountId) ?? new Map<string, TypicalSpendingCategory>();
-      const category = categories.get(key) ?? { label, daily: 0, entryIds: [] };
-      category.daily += entry.amount / basisDays;
-      category.entryIds.push(entry.id);
-      categories.set(key, category);
-      categoriesByAccount.set(entry.accountId, categories);
-    }
-    if (!entry.counterpartyKey) continue;
-    const key = payeeKey(entry.flow, entry.counterpartyKey);
-    const payee = byPayee.get(key) ?? {
-      flow: entry.flow, counterpartyKey: entry.counterpartyKey, label: entry.label, daily: 0, countedOneOffIds: [], entryIds: [], latest: entry.date,
-    };
-    payee.daily += entry.amount / basisDays;
-    if (countedIds.has(entry.id)) payee.countedOneOffIds.push(entry.id);
-    payee.entryIds.push(entry.id);
-    if (entry.date >= payee.latest) {
-      payee.latest = entry.date;
-      payee.label = entry.label;
-    }
-    byPayee.set(key, payee);
+    const label = typicalCategoryLabel(entry);
+    const key = labelKey(label);
+    const categories = categoriesByAccount.get(entry.accountId) ?? { income: new Map(), spending: new Map() };
+    const category = categories[entry.flow].get(key) ?? { label, daily: 0, entryIds: [] };
+    category.daily += daily;
+    category.entryIds.push(entry.id);
+    categories[entry.flow].set(key, category);
+    categoriesByAccount.set(entry.accountId, categories);
   }
   for (const [accountId, account] of totalsByAccount) {
     dailyByAccount.set(accountId, {
-      income: Math.max(0, account.income / basisDays),
-      spending: Math.max(0, account.spending / basisDays),
+      income: Math.max(0, account.income),
+      spending: Math.max(0, account.spending),
     });
   }
   // An account whose refunds outweighed its spending adds nothing to the rate,
   // so its transactions are behind no category either. The categories of the
   // rest add up to the rate.
   for (const [accountId, categories] of categoriesByAccount) {
-    if ((totalsByAccount.get(accountId)?.spending ?? 0) <= 0) continue;
-    for (const [key, part] of categories) {
-      const category = spendingByCategory.get(key) ?? { label: part.label, daily: 0, entryIds: [] };
-      category.daily += part.daily;
-      category.entryIds.push(...part.entryIds);
-      spendingByCategory.set(key, category);
+    for (const flow of ['income', 'spending'] as const) {
+      if ((totalsByAccount.get(accountId)?.[flow] ?? 0) <= 0) continue;
+      for (const [key, part] of categories[flow]) {
+        const category = byCategory[flow].get(key) ?? { label: part.label, daily: 0, entryIds: [] };
+        category.daily += part.daily;
+        category.entryIds.push(...part.entryIds);
+        byCategory[flow].set(key, category);
+      }
     }
   }
-  const typicalPayees = [...byPayee.values()]
-    .filter(payee => payee.daily > 0)
-    .sort((left, right) => right.daily - left.daily)
-    .map(payee => ({
-      flow: payee.flow, counterpartyKey: payee.counterpartyKey, label: payee.label, daily: payee.daily, countedOneOffIds: payee.countedOneOffIds,
-      entryIds: payee.entryIds,
-    }));
-  return { streams, oneOffs, dailyByAccount, interestDailyByAccount, typicalPayees, spendingByCategory, oneOffThresholds };
+  return { streams, oneOffs, dailyByAccount, interestDailyByAccount, byCategory, countedOneOffIds, spreadEntries, oneOffThresholds };
 }
 
 function sumDaily(dailyByAccount: ReadonlyMap<string, Record<CashFlowDirection, number>>, flow: CashFlowDirection): number {
@@ -649,7 +668,11 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
   // them as purchases on top of interestPostings.
   const interestEntryIds = new Set(observed.filter(entry => entry.interest).map(entry => entry.id));
 
-  const learned = learnFlows(entries, input.dataThrough, basisStart, forecastStart, adjustmentSets.includedOneOffs);
+  const learned = learnFlows(entries, input.dataThrough, basisStart, forecastStart, {
+    countedOneOffs: adjustmentSets.includedOneOffs,
+    excludedCategories: adjustmentSets.excludedCategories,
+    spreadPayees: adjustmentSets.spreadPayees,
+  });
   // A stopped stream the user kept is projected on its cadence like an active
   // one. The choice may name it by its key, or by a key its transactions had before.
   const entriesById = new Map(entries.map(entry => [entry.id, entry]));
@@ -826,6 +849,8 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       ...(movement.legacyCounterpartyKey && { legacyCounterpartyKey: movement.legacyCounterpartyKey }),
       label: movement.label,
       category: 'Transfer',
+      ...(movement.categoryCodes && { categoryCodes: movement.categoryCodes }),
+      ...(movement.userCategory && { userCategory: true }),
     }));
   const transferEntries = eligibleTransfers.filter(entry => !namesPayee(adjustmentSets.excludedTransfers, entry.flow, entry));
   const learnedTransfers = learnFlows(transferEntries, input.dataThrough, basisStart, forecastStart);
@@ -868,8 +893,9 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       monthlyExpenseOverride,
     },
     oneOffs: learned.oneOffs.sort((left, right) => Math.abs(right.amount) - Math.abs(left.amount)),
-    typicalPayees: learned.typicalPayees.filter(payee => (payee.flow === 'income' ? incomeSource : spendingSource) === 'transactions'),
-    typicalSpendingByCategory: learned.spendingByCategory,
+    typicalCategories: learned.byCategory,
+    countedOneOffIds: learned.countedOneOffIds,
+    spreadEntries: learned.spreadEntries,
     oneOffThresholds: learned.oneOffThresholds,
     adjustments,
     continuedStreams,
@@ -1053,23 +1079,13 @@ function spendingCategoryLabel(entry: Pick<CashFlowEntry, 'category' | 'interest
   return entry.interest ? CARD_INTEREST_CATEGORY : normalizeLabel(entry.category, 'Uncategorized');
 }
 
-/** One transaction behind a usual-spending category. */
-export interface SpendingCategoryTransaction {
-  id: string;
-  date: CalendarDate;
-  /** The payee or description the provider gave it. */
-  label: string;
-  /** Spending is positive, a refund negative. */
-  amount: number;
-}
-
 /**
  * Where part of a category's month comes from: a regular bill at its monthly
  * rate, the typical rate the basis spent in the category, or the card interest
  * the usual pace runs up, which no transaction is behind yet.
  */
 export type SpendingCategorySource =
-  | {
+  | ({
     kind: 'bill';
     streamId: string;
     label: string;
@@ -1077,22 +1093,17 @@ export type SpendingCategorySource =
     /** Each payment. */
     amount: number;
     monthly: number;
-    /** Latest first, at most ITEM_TRANSACTIONS_LISTED. */
-    transactions: SpendingCategoryTransaction[];
-    transactionCount: number;
-  }
-  | {
+  } & CashFlowItemTransactions)
+  | ({
     kind: 'typical';
     monthly: number;
-    /** What its transactions add up to over the basis, refunds netted. */
+    /** What its transactions add up to, refunds netted. */
     total: number;
+    /** The earliest of them, or the basis's first day when that is earlier. */
     from: CalendarDate;
     /** The basis's last day. */
     through: CalendarDate;
-    /** Latest first, at most CATEGORY_TRANSACTIONS_LISTED. */
-    transactions: SpendingCategoryTransaction[];
-    transactionCount: number;
-  }
+  } & CashFlowItemTransactions)
   | { kind: 'projected_interest'; monthly: number };
 
 export interface SpendingCategory {
@@ -1101,13 +1112,6 @@ export interface SpendingCategory {
   /** Largest first; their monthlies add up to the category's. */
   sources: SpendingCategorySource[];
 }
-
-/**
- * A typical-spending source lists at most this many transactions. The basis is
- * at most TYPICAL_BASIS_DAYS long, so this only trims a category bought from
- * more than once a day.
- */
-const CATEGORY_TRANSACTIONS_LISTED = 100;
 
 
 /**
@@ -1164,11 +1168,8 @@ export function expectedSpendingByCategory(model: CashFlowModel): SpendingCatego
     byKey.set(key, category);
   };
   const entriesById = new Map(model.ledger.entries.map(entry => [entry.id, entry]));
-  const listed = (ids: readonly string[], limit: number): SpendingCategoryTransaction[] => ids
-    .flatMap(id => entriesById.get(id) ?? [])
-    .sort((left, right) => right.date.localeCompare(left.date) || left.id.localeCompare(right.id))
-    .slice(0, limit)
-    .map(entry => ({ id: entry.id, date: entry.date, label: entry.label, amount: roundCents(entry.amount) }));
+  const entriesOf = (ids: readonly string[]) => ids.flatMap(id => entriesById.get(id) ?? []);
+  const describe = transactionDescriber(model);
 
   for (const stream of model.streams) {
     if (stream.flow !== 'spending' || stream.status !== 'active') continue;
@@ -1180,28 +1181,22 @@ export function expectedSpendingByCategory(model: CashFlowModel): SpendingCatego
       cadence: stream.cadence,
       amount: roundCents(stream.amount),
       monthly: streamMonthlyAmount(stream),
-      transactions: listed(stream.entryIds, ITEM_TRANSACTIONS_LISTED),
-      transactionCount: stream.entryIds.length,
+      ...itemTransactions(describe, entriesOf(stream.entryIds), streamRef(stream.id)),
     });
   }
 
-  // A category whose refunds outweighed its purchases has nothing to show, so
-  // the rest are scaled to the rate itself rather than summed.
-  const typicalMonthly = model.typical.dailySpending * DAYS_PER_MONTH;
-  const parts = [...model.typicalSpendingByCategory.values()].filter(part => part.daily > 0);
-  const partsDaily = parts.reduce((sum, part) => sum + part.daily, 0);
-  const typical = (monthly: number, entryIds: readonly string[], daily: number): SpendingCategorySource => ({
-    kind: 'typical',
-    monthly,
-    total: roundCents(daily * model.typical.basisDays),
-    from: model.typical.basisStart ?? model.forecastStart,
-    through: addDays(model.forecastStart, -1),
-    transactions: listed(entryIds, CATEGORY_TRANSACTIONS_LISTED),
-    transactionCount: entryIds.length,
-  });
-  // The categories add up to the rate, so with any rate there is a part above zero.
-  if (partsDaily > 0) {
-    for (const part of parts) add(part.label, typical(typicalMonthly * (part.daily / partsDaily), part.entryIds, part.daily));
+  const basisFirstDay = model.typical.basisStart ?? model.forecastStart;
+  for (const part of typicalCategoryParts(model, 'spending')) {
+    if (part.monthly <= 0) continue;
+    const entries = entriesOf(part.entryIds);
+    add(part.label, {
+      kind: 'typical',
+      monthly: part.monthly,
+      total: roundCents(entries.reduce((sum, entry) => sum + entry.amount, 0)),
+      from: entries.reduce((earliest, entry) => minDate(earliest, entry.date), basisFirstDay),
+      through: addDays(model.forecastStart, -1),
+      ...itemTransactions(describe, entries, categoryRef('spending', part.key)),
+    });
   }
 
   const interest = cardInterestTotal(model, model.forecastStart, addMonths(model.forecastStart, 12), false) / 12;
@@ -1373,37 +1368,144 @@ export interface CashFlowReportRequest {
 export interface CashFlowItemTransaction {
   id: string;
   date: CalendarDate;
+  /** The payee or description the provider gave it. */
+  label: string;
+  /** Income, spending or a transfer's size; a refund is negative spending. */
   amount: number;
   /** Null when the transaction has no category. */
   category: string | null;
+  /** Its category as the category picker names it; empty when it has none. */
+  categoryCodes: string[];
+  /** The user chose its category. */
+  userCategory: boolean;
+  /** The ledger's key for its payee, which an adjustment names it by; null when the provider named none. */
+  payeeKey: string | null;
+  /** In a typical rate only because the user counted it: that choice's id; otherwise null. */
+  countedBy: string | null;
+  /** In a typical rate spread over months the user chose: that choice's id; otherwise null. */
+  spreadBy: string | null;
 }
 
-/** The latest transactions behind an item, and how many there are in all. */
+/** The latest transactions behind an item, how many there are in all, and how to ask for every one. */
 export interface CashFlowItemTransactions {
   /** Latest first, at most ITEM_TRANSACTIONS_LISTED. */
   transactions: CashFlowItemTransaction[];
   transactionCount: number;
+  /** Names the list to `listCashFlowTransactions`, which returns all of it. */
+  transactionsRef: string;
 }
 
-/** An item lists at most this many of its transactions. */
+/**
+ * An item lists this many of its transactions in the report; the rest are
+ * one request away, so a long history does not ride along with every report.
+ */
 const ITEM_TRANSACTIONS_LISTED = 12;
+
+/** A transaction as the ledger or the transfer model holds it. */
+type TransactionSource = Pick<CashFlowEntry, 'id' | 'date' | 'amount' | 'label' | 'counterpartyKey' | 'categoryCodes' | 'userCategory'>
+  & { category?: string };
 
 function categoryOf(category: string | undefined): string | null {
   const value = category?.trim();
   return value && value !== 'Uncategorized' ? value : null;
 }
 
-function itemTransactions(items: ReadonlyArray<{ id: string; date: CalendarDate; amount: number; category?: string }>): CashFlowItemTransactions {
-  const latest = [...items].sort((left, right) => right.date.localeCompare(left.date) || left.id.localeCompare(right.id));
+/** Describes transactions as the page lists them, with the user's choices that hold each in a rate. */
+function transactionDescriber(model: CashFlowModel): (item: TransactionSource) => CashFlowItemTransaction {
+  const countedBy = new Map(model.adjustments
+    .filter(adjustment => adjustment.kind === 'include_one_off' && model.countedOneOffIds.has(adjustment.key))
+    .map(adjustment => [adjustment.key, adjustment.id]));
+  return item => ({
+    id: item.id,
+    date: item.date,
+    label: item.label,
+    amount: roundCents(item.amount),
+    category: categoryOf(item.category),
+    categoryCodes: item.categoryCodes ?? [],
+    userCategory: Boolean(item.userCategory),
+    payeeKey: item.counterpartyKey || null,
+    countedBy: countedBy.get(item.id) ?? null,
+    spreadBy: model.spreadEntries.get(item.id) ?? null,
+  });
+}
+
+function latestFirst<T extends { id: string; date: CalendarDate }>(items: readonly T[]): T[] {
+  return [...items].sort((left, right) => right.date.localeCompare(left.date) || left.id.localeCompare(right.id));
+}
+
+function itemTransactions(
+  describe: (item: TransactionSource) => CashFlowItemTransaction,
+  items: readonly TransactionSource[],
+  transactionsRef: string
+): CashFlowItemTransactions {
   return {
-    transactions: latest.slice(0, ITEM_TRANSACTIONS_LISTED).map(item => ({
-      id: item.id,
-      date: item.date,
-      amount: roundCents(item.amount),
-      category: categoryOf(item.category),
-    })),
+    transactions: latestFirst(items).slice(0, ITEM_TRANSACTIONS_LISTED).map(describe),
     transactionCount: items.length,
+    transactionsRef,
   };
+}
+
+// What `listCashFlowTransactions` is asked for: a regular item, a recurring
+// transfer, a typical rate's category, or what one of the user's choices is about.
+const streamRef = (id: string) => `stream:${id}`;
+const transferRef = (id: string) => `transfer:${id}`;
+const categoryRef = (flow: CashFlowDirection, key: string) => `category:${flow}:${key}`;
+const adjustmentRef = (id: string) => `adjustment:${id}`;
+
+/**
+ * Every transaction behind a list the report names by `transactionsRef`,
+ * latest first; null when the model has no such list.
+ */
+export function listCashFlowTransactions(model: CashFlowModel, ref: string): CashFlowItemTransaction[] | null {
+  const sources = transactionSources(model, ref);
+  return sources && latestFirst(sources).map(transactionDescriber(model));
+}
+
+function transactionSources(model: CashFlowModel, ref: string): TransactionSource[] | null {
+  const separator = ref.indexOf(':');
+  if (separator < 0) return null;
+  const kind = ref.slice(0, separator);
+  const rest = ref.slice(separator + 1);
+  const entriesById = new Map(model.ledger.entries.map(entry => [entry.id, entry]));
+  switch (kind) {
+    case 'stream': {
+      const stream = model.streams.find(item => item.id === rest);
+      return stream ? stream.entryIds.flatMap(id => entriesById.get(id) ?? []) : null;
+    }
+    case 'transfer': {
+      const stream = model.transfers.streams.find(item => item.id === rest);
+      if (!stream) return null;
+      const eligible = new Map(model.transfers.eligible.map(entry => [entry.id, entry]));
+      return stream.entryIds.flatMap(id => eligible.get(id) ?? []);
+    }
+    case 'category': {
+      const flowEnd = rest.indexOf(':');
+      const flow = rest.slice(0, flowEnd);
+      if (flowEnd < 0 || (flow !== 'income' && flow !== 'spending')) return null;
+      const category = model.typicalCategories[flow].get(rest.slice(flowEnd + 1));
+      return category ? category.entryIds.flatMap(id => entriesById.get(id) ?? []) : null;
+    }
+    case 'adjustment': {
+      const adjustment = model.adjustments.find(item => item.id === rest);
+      return adjustment ? adjustmentSources(model, adjustment) : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * A typical rate's categories with what each adds to it a month, largest
+ * first. One whose refunds outweighed its purchases adds nothing, so the rest
+ * are scaled to the rate itself rather than summed, and add up to it.
+ */
+function typicalCategoryParts(model: CashFlowModel, flow: CashFlowDirection) {
+  const monthlyRate = (flow === 'income' ? model.typical.dailyIncome : model.typical.dailySpending) * DAYS_PER_MONTH;
+  const parts = [...model.typicalCategories[flow]].map(([key, part]) => ({ key, ...part }));
+  const positive = parts.reduce((sum, part) => sum + Math.max(0, part.daily), 0);
+  return parts
+    .map(part => ({ ...part, monthly: positive > 0 && part.daily > 0 ? monthlyRate * (part.daily / positive) : 0 }))
+    .sort((left, right) => right.monthly - left.monthly || left.label.localeCompare(right.label));
 }
 
 export interface CashFlowRecurringSummary extends CashFlowItemTransactions {
@@ -1430,14 +1532,14 @@ export interface CashFlowRecurringSummary extends CashFlowItemTransactions {
   continuedBy: string | null;
 }
 
-/** A payee behind a typical rate, and what it adds to it a month. */
-export interface CashFlowTypicalPayeeSummary extends CashFlowItemTransactions {
+/** A category behind a typical rate, and what it adds to it a month. */
+export interface CashFlowTypicalCategorySummary extends CashFlowItemTransactions {
   flow: CashFlowDirection;
-  payeeKey: string;
+  /** The category's label key, which an adjustment names it by. */
+  key: string;
   label: string;
+  /** Scaled with the rest of its side's categories, so they add up to the typical rate. */
   monthlyAmount: number;
-  /** Transactions in it only because the user counted them, by transaction id. */
-  countedOneOffIds: string[];
 }
 
 export interface CashFlowAdjustmentSummary extends ForecastAdjustment, CashFlowItemTransactions {
@@ -1497,11 +1599,11 @@ export interface CashFlowReport {
   };
   recurring: CashFlowRecurringSummary[];
   /** Every one-off in the basis, largest first, so each can be counted. */
-  oneOffs: Array<{ id: string; date: CalendarDate; label: string; flow: CashFlowDirection; amount: number; category: string | null }>;
+  oneOffs: Array<CashFlowItemTransaction & { flow: CashFlowDirection }>;
   /** How large a non-repeating amount must be to be a one-off, by direction; null without a basis. */
   oneOffThresholds: Record<CashFlowDirection, number> | null;
-  /** Every payee behind the typical rates, largest first, for the sides read from transactions. */
-  typicalPayees: CashFlowTypicalPayeeSummary[];
+  /** Every category behind the typical rates, largest first, for the sides read from transactions. */
+  typicalCategories: CashFlowTypicalCategorySummary[];
   /** The user's choices about what the forecast counts. */
   adjustments: CashFlowAdjustmentSummary[];
   plannedEvents: CashFlowPlannedEventSummary[];
@@ -1723,7 +1825,8 @@ function positionSummary(
   const chosen = accounts.filter(account => accountIds.includes(account.id)).map(account => account.id);
   const covered = chosen.length > 0 ? chosen : accounts.map(account => account.id);
   const position = buildCashPosition(model, chosen);
-  const movements = new Map(model.ledger.movements.map(movement => [movement.id, movement]));
+  const eligible = new Map(model.transfers.eligible.map(entry => [entry.id, entry]));
+  const describe = transactionDescriber(model);
   const nextDates = new Map<string, CalendarDate>();
   for (const item of model.transfers.scheduled) {
     const existing = nextDates.get(item.streamId);
@@ -1742,10 +1845,7 @@ function positionSummary(
         amount: roundCents(stream.amount),
         direction: stream.flow === 'income' ? 'in' as const : 'out' as const,
         nextDate: nextDates.get(stream.id) ?? null,
-        ...itemTransactions(stream.entryIds.flatMap(id => {
-          const movement = movements.get(id);
-          return movement ? [{ id: movement.id, date: movement.date, amount: Math.abs(movement.amount) }] : [];
-        })),
+        ...itemTransactions(describe, stream.entryIds.flatMap(id => eligible.get(id) ?? []), transferRef(stream.id)),
       })),
   };
   if (!position.available) {
@@ -1856,39 +1956,57 @@ function customReportRange(
   return { from: start, toExclusive: maxDate(toExclusive, start) };
 }
 
+/**
+ * The transactions a choice is about: the counted one-off; a payee's in that
+ * direction, left out or spread; a payee's transfers in or out of a cash
+ * account; or what a category left out would have added to its rate.
+ */
+function adjustmentSources(model: CashFlowModel, adjustment: ForecastAdjustment): TransactionSource[] {
+  // A choice may name its payee by the key it has now or the key it had before.
+  const named = (item: { counterpartyKey: string; legacyCounterpartyKey?: string }) =>
+    item.counterpartyKey === adjustment.key || item.legacyCounterpartyKey === adjustment.key;
+  const observed = model.ledger.entries.filter(entry => entry.date <= model.dataThrough && entry.flow === adjustment.flow);
+  switch (adjustment.kind) {
+    case 'include_one_off':
+      return model.ledger.entries.filter(entry => entry.id === adjustment.key);
+    case 'exclude_transfer':
+      // Only movements the transfer model could learn from: a payment matched
+      // to a projected card was never a transfer, so the choice never touched it.
+      return model.transfers.eligible.filter(entry => entry.flow === adjustment.flow && named(entry));
+    case 'exclude_category': {
+      // What its rate would have counted: the basis, less what streams project.
+      const inStream = new Set(model.streams.flatMap(stream => stream.entryIds));
+      const basisStart = model.typical.basisStart;
+      return observed.filter(entry => basisStart !== null && entry.date >= basisStart && !inStream.has(entry.id)
+        && labelKey(typicalCategoryLabel(entry)) === adjustment.key);
+    }
+    case 'exclude_payee':
+    case 'spread_payee':
+    case 'continue_stream':
+      return observed.filter(named);
+  }
+}
+
 function summarizeAdjustments(model: CashFlowModel): CashFlowAdjustmentSummary[] {
-  const entries = new Map(model.ledger.entries.map(entry => [entry.id, entry]));
+  const describe = transactionDescriber(model);
   return model.adjustments.map(adjustment => {
-    const counted = adjustment.kind === 'include_one_off' ? entries.get(adjustment.key) : undefined;
-    // A choice may name its payee by the key it has now or the key it had before.
-    const named = (item: { counterpartyKey: string; legacyCounterpartyKey?: string }) =>
-      item.counterpartyKey === adjustment.key || item.legacyCounterpartyKey === adjustment.key;
-    // The transactions the change is about: the counted one, a payee's in that
-    // direction, or a payee's transfers in or out of a cash account.
-    const behind = adjustment.kind === 'include_one_off'
-      ? (counted ? [counted] : [])
-      : adjustment.kind === 'exclude_transfer'
-        // Only movements the transfer model could learn from: a payment matched
-        // to a projected card was never a transfer, so the choice never touched it.
-        ? model.transfers.eligible
-          .filter(entry => entry.flow === adjustment.flow && named(entry))
-          .map(entry => ({ id: entry.id, date: entry.date, amount: entry.amount }))
-        : model.ledger.entries.filter(entry =>
-          entry.date <= model.dataThrough && entry.flow === adjustment.flow && named(entry));
+    const sources = adjustmentSources(model, adjustment);
+    const counted = adjustment.kind === 'include_one_off' ? sources[0] : undefined;
     return {
       ...adjustment,
       date: counted?.date ?? null,
       amount: counted ? roundCents(counted.amount) : null,
-      ...itemTransactions(behind),
+      ...itemTransactions(describe, sources, adjustmentRef(adjustment.id)),
     };
   });
 }
 
 /**
  * The item an adjustment would change, if the user's data has it: a payee
- * with history in that direction, a current one-off, a stopped stream, or a
- * payee with transfers in or out of a cash account. Its label is what the
- * adjustment is stored under, so the server names the item, not the client.
+ * with history in that direction, a current one-off, a stopped stream, a
+ * payee with transfers in or out of a cash account, or a category that
+ * direction has. Its label is what the adjustment is stored under, so the
+ * server names the item, not the client.
  */
 export function forecastAdjustmentTarget(model: CashFlowModel, input: ForecastAdjustmentInput): { label: string } | null {
   const latestLabel = (items: ReadonlyArray<{ date: CalendarDate; label: string }>) =>
@@ -1896,8 +2014,14 @@ export function forecastAdjustmentTarget(model: CashFlowModel, input: ForecastAd
   const found = (label: string | null) => (label ? { label } : null);
   switch (input.kind) {
     case 'exclude_payee':
+    case 'spread_payee':
       return found(latestLabel(model.ledger.entries.filter(entry =>
         entry.date <= model.dataThrough && entry.flow === input.flow && entry.counterpartyKey === input.key)));
+    case 'exclude_category':
+      return found(model.ledger.entries
+        .filter(entry => entry.date <= model.dataThrough && entry.flow === input.flow)
+        .map(typicalCategoryLabel)
+        .find(label => labelKey(label) === input.key) ?? null);
     case 'include_one_off':
       return found(model.oneOffs.find(entry => entry.id === input.key && entry.flow === input.flow)?.label ?? null);
     case 'continue_stream':
@@ -1928,6 +2052,7 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
   const forecast = forecastTotals(model, range.from, range.toExclusive);
 
   const entriesById = new Map(model.ledger.entries.map(entry => [entry.id, entry]));
+  const describe = transactionDescriber(model);
   const scheduledByStream = new Map<string, CalendarDate>();
   for (const occurrence of model.scheduled) {
     const existing = scheduledByStream.get(occurrence.streamId);
@@ -1967,7 +2092,7 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
       monthlyExpenseOverride: model.typical.monthlyExpenseOverride,
     },
     recurring: model.streams.map(stream => ({
-      ...itemTransactions(stream.entryIds.flatMap(id => entriesById.get(id) ?? [])),
+      ...itemTransactions(describe, stream.entryIds.flatMap(id => entriesById.get(id) ?? []), streamRef(stream.id)),
       id: stream.id,
       payeeKey: stream.counterpartyKey,
       label: stream.label,
@@ -1985,27 +2110,19 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
       continuedByUser: model.continuedStreams.has(stream.id),
       continuedBy: model.continuedStreams.get(stream.id) ?? null,
     })),
-    oneOffs: model.oneOffs.map(entry => ({
-      category: categoryOf(entry.category),
-      id: entry.id,
-      date: entry.date,
-      label: entry.label,
-      flow: entry.flow,
-      amount: roundCents(entry.amount),
-    })),
+    oneOffs: model.oneOffs.map(entry => ({ ...describe(entry), flow: entry.flow })),
     oneOffThresholds: model.oneOffThresholds && {
       income: roundCents(model.oneOffThresholds.income),
       spending: roundCents(model.oneOffThresholds.spending),
     },
-    typicalPayees: (['income', 'spending'] as const).flatMap(flow => model.typicalPayees
-      .filter(payee => payee.flow === flow)
-      .map(payee => ({
+    typicalCategories: (['income', 'spending'] as const)
+      .filter(flow => (flow === 'income' ? model.typical.incomeSource : model.typical.spendingSource) === 'transactions')
+      .flatMap(flow => typicalCategoryParts(model, flow).map(part => ({
         flow,
-        payeeKey: payee.counterpartyKey,
-        label: payee.label,
-        monthlyAmount: roundCents(payee.daily * DAYS_PER_MONTH),
-        countedOneOffIds: payee.countedOneOffIds,
-        ...itemTransactions(payee.entryIds.flatMap(id => entriesById.get(id) ?? [])),
+        key: part.key,
+        label: part.label,
+        monthlyAmount: roundCents(part.monthly),
+        ...itemTransactions(describe, part.entryIds.flatMap(id => entriesById.get(id) ?? []), categoryRef(flow, part.key)),
       }))),
     adjustments: summarizeAdjustments(model),
     plannedEvents: model.plannedEvents.map(event => {
