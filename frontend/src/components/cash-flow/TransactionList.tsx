@@ -142,13 +142,18 @@ export default function TransactionList({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+  // An open list refetches when the report reloads; keep only the latest response.
+  const requestRef = useRef(0);
 
   const loadEvery = useCallback(async () => {
     if (!transactionsRef) return;
+    const requestId = ++requestRef.current;
     setLoading(true);
     setError('');
     try {
       const response = await sendCashFlowRequest(apiUrl, `/api/cash-flow/transactions?ref=${encodeURIComponent(transactionsRef)}`, 'GET');
+      // A newer fetch was started while this one was in flight; let it decide.
+      if (requestId !== requestRef.current) return;
       // Signed out: back through sign-in to this page, as the page itself does.
       if (response.status === 401) {
         router.push(loginUrlForCurrentPage());
@@ -162,9 +167,10 @@ export default function TransactionList({
       setEvery(Array.isArray(data.transactions) ? data.transactions : []);
       setExpanded(true);
     } catch {
+      if (requestId !== requestRef.current) return;
       setError('We couldn’t load them. Please try again.');
     } finally {
-      setLoading(false);
+      if (requestId === requestRef.current) setLoading(false);
     }
   }, [apiUrl, router, transactionsRef]);
 
