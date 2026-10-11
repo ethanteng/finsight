@@ -23,6 +23,7 @@ export const STATED_FIGURE_KEYS = [
   'partnerRetirementIncomeInflation',
   'partnerPlanThroughAge',
   'survivorAnnualSpending',
+  'partnerMarried',
 ] as const;
 
 export type StatedFigureKey = (typeof STATED_FIGURE_KEYS)[number];

@@ -15,13 +15,14 @@
 
 import type { FinancialContextSnapshot, RetirementHousehold } from './types';
 import type { RetirementIncomeOrigins } from './retirement-income';
-import { incomeOfStream } from '../services/household';
+import { incomeOfStream, type HouseholdIncomeKind } from '../services/household';
 import {
   describeHouseholdTimeline,
   describePartnerIncome,
+  describeSpousalIncome,
+  householdInputRequest,
   incomeEndClause,
   MISSING_PARTNER_AGE_CLAUSE,
-  partnerAgeInputRequest,
 } from './household-evidence';
 import type { InputRequest } from './input-request';
 import type { RetirementContributionOrigin } from './retirement-contributions';
@@ -79,17 +80,16 @@ function formatQuote(quote: string): string | null {
 }
 
 /**
- * The form for a projection that ran without a partner whose age nobody gave:
- * their age alone, the same form the stated plan and Coast FIRE carry. The
- * assumptions sentence asks in words too.
+ * The form for a projection that ran without something only the user can say
+ * about their partner: their age, when nobody gave it, or whether they are
+ * married, when that would change what Social Security pays. The same forms
+ * the stated plan and Coast FIRE carry; the assumptions sentence asks in
+ * words too.
  */
-export function retirementPartnerAgeRequest(
+export function retirementHouseholdRequest(
   snapshot: Pick<FinancialContextSnapshot, 'retirementAnalysis'>
 ): InputRequest | null {
-  const household = snapshot.retirementAnalysis?._household;
-  return household && 'missingAge' in household
-    ? partnerAgeInputRequest(RETIREMENT_CALCULATOR_ID, 'Am I on track for retirement?')
-    : null;
+  return householdInputRequest(snapshot.retirementAnalysis?._household, RETIREMENT_CALCULATOR_ID, 'Am I on track for retirement?');
 }
 
 /**
@@ -173,8 +173,11 @@ function describeIncome(
     ];
   }
   const savedNote = origins.savedAt ? ` (from Your numbers, saved ${savedOn(origins.savedAt)})` : '';
-  const parts = streams.map((stream) => {
+  // A survivor benefit is part of the couple's timeline, described there.
+  const listed = streams.filter((stream) => incomeOfStream(stream).kind !== 'survivor');
+  const parts = listed.map((stream) => {
     const { owner, kind } = incomeOfStream(stream);
+    if (partner && kind === 'spousal') return describeSpousalIncome(stream, partner);
     if (owner === 'partner' && partner) return describePartnerIncome(stream, partner);
     const until = incomeEndClause(stream, partner);
     if (kind === 'social_security') {
@@ -204,7 +207,7 @@ function describeHousehold(
   household: RetirementHousehold | undefined,
   spending: number | undefined,
   survivorSpending: { fromAge: number; annualAmount: number } | undefined,
-  incomeStreams: readonly { kind: 'social_security' | 'pension'; endAge?: number }[] | undefined
+  incomeStreams: readonly { kind: HouseholdIncomeKind; endAge?: number }[] | undefined
 ): string[] {
   if (!household || 'missingAge' in household) return [];
   return describeHouseholdTimeline(household, {

@@ -77,10 +77,9 @@ import {
   type ClaimingAdjustment,
 } from '../services/social-security-claiming';
 import {
-  applySurvivorRule,
+  householdIncomes,
   householdTimeline,
   partnerAgeMissing,
-  partnerIncomes,
   partnerSavableFigures,
   resolvePartner,
   survivorSpendingFor,
@@ -89,12 +88,14 @@ import {
 import {
   describeHouseholdTimeline,
   householdIncomeFactRows,
+  householdSocialSecurityFactRows,
   householdTimelineFactRows,
   incomeEndClause,
   describePartnerIncome,
+  describeSpousalIncome,
   MISSING_PARTNER_AGE_SENTENCE,
   partnerAgeAt,
-  partnerAgeInputRequest,
+  householdInputRequest,
   withPartnerAgeField,
   type PlannedHousehold,
 } from '../openai/household-evidence';
@@ -125,6 +126,7 @@ const COAST_FIRE_OVERRIDE_FIELDS = [
   'realReturnRatePercent',
   'withdrawalRatePercent',
   'annualContribution',
+  'lifeExpectancy',
 ] as const;
 
 export type CoastFireOverrideField = (typeof COAST_FIRE_OVERRIDE_FIELDS)[number];
@@ -187,6 +189,8 @@ export interface PlannedCoastFireOverrides {
   realReturnRatePercent?: number;
   withdrawalRatePercent?: number;
   annualContribution?: number;
+  /** The age to plan through: what incomes are valued over and the market-history test runs to. */
+  lifeExpectancy?: number;
   allocation?: QuickPlanAllocationId;
   retirementIncomeInflation?: IncomeInflation;
   sources: Partial<Record<CoastFireSourceField, string>>;
@@ -305,8 +309,6 @@ export interface CoastFireScenarioResult {
   household?: PlannedHousehold;
   /** Set when a partner's incomes are known but not their age, so they were left out. */
   missingPartnerAge?: true;
-  /** The user's own planning age, when it came from Your numbers. */
-  savedPlanThroughAge?: { value: number; savedAt: string };
 }
 
 export type { QuickPlanRunner };
@@ -363,6 +365,8 @@ const OVERRIDE_RANGES: Record<CoastFireOverrideField, { minimum: number; maximum
   realReturnRatePercent: { minimum: 0, maximum: 12 },
   withdrawalRatePercent: { minimum: 2, maximum: 8 },
   annualContribution: { minimum: 0, maximum: 10_000_000 },
+  // Where the stated plan and Your numbers keep a planning age.
+  lifeExpectancy: { minimum: 60, maximum: 110, integer: true },
 };
 
 /** The two fields carried in percentage points, where 5% is 5. */
@@ -511,6 +515,7 @@ const ASSUMPTION_LABELS: Record<CoastFireOverrideField, { label: string; unit: C
   realReturnRatePercent: { label: 'Annual growth after inflation', unit: 'percent' },
   withdrawalRatePercent: { label: 'Withdrawal rate', unit: 'percent' },
   annualContribution: { label: 'Annual contributions until savings can coast, in today\'s dollars', unit: 'usd' },
+  lifeExpectancy: { label: 'Age the plan runs through', unit: 'age' },
 };
 
 /** How a figure taken from Your numbers is named in the disclosure. */
@@ -522,6 +527,7 @@ const SAVED_PHRASES: Partial<Record<CoastFireOverrideField, (value: number) => s
   socialSecurityAnnual: (value) => `${money(value)} a year of Social Security`,
   socialSecurityStartAge: (value) => `Social Security from ${value}`,
   annualContribution: (value) => `investing ${money(value)} a year now`,
+  lifeExpectancy: (value) => `planning through age ${value}`,
 };
 
 /** In the user's terms, for the ask when a figure is missing. */
@@ -571,10 +577,12 @@ interface ResolvedCoastFireVariant {
   /** A partner to plan for as well, on this case's ages. */
   household?: PlannedHousehold;
   missingPartnerAge?: true;
+  /** When the user claims Social Security and whether their own benefit is known, for a spousal benefit. */
+  userSocialSecurity: { claimAge: number; known: boolean };
   /** The age the incomes are valued through: the household's horizon with a partner. */
   planThroughAge: number;
-  /** The user's own planning age, when it came from Your numbers. */
-  savedPlanThroughAge?: { value: number; savedAt: string };
+  /** The user's own planning age, when they said it or saved it; otherwise the convention. */
+  userPlanThroughAge?: number;
   /** What one survivor spends from the first death, when the user said. */
   survivorSpending?: { fromAge: number; annualAmount: number };
 }
@@ -758,6 +766,17 @@ function resolveVariant(
     if (pensionInflation && pensionInflation.origin !== 'default') {
       known.push({ key: 'retirementIncomeInflation', value: pensionInflation.value, origin: pensionInflation.origin });
     }
+    // The planning age is resolved after the figures that can be missing, so
+    // the form shows what the user said or saved for it here.
+    const statedHorizon = overrides.lifeExpectancy !== undefined && overrides.sources.lifeExpectancy
+      ? overrides.lifeExpectancy
+      : undefined;
+    const savedHorizonForForm = saved('planThroughAge');
+    if (statedHorizon !== undefined) {
+      known.push({ key: 'lifeExpectancy', value: statedHorizon, origin: 'user' });
+    } else if (savedHorizonForForm && (retirementAge === undefined || savedHorizonForForm.value > retirementAge)) {
+      known.push({ key: 'lifeExpectancy', value: savedHorizonForForm.value, origin: 'saved' });
+    }
     return { missing, missingFields, known };
   }
   const claiming = socialSecurityQuote
@@ -785,37 +804,69 @@ function resolveVariant(
       inflationAdjusted: pensionInflation?.value === 'rises_with_inflation',
     });
   }
-  // The market-history test's own horizon, which the incomes are valued
-  // through: the planning age saved in Your numbers when retirement does not
-  // already run past it, otherwise the convention. With a partner, until the
-  // later of the two planning ages, with their incomes beside the user's and
-  // the survivor rule applied to both.
+  // The age to plan through, which the incomes are valued over and the
+  // market-history test runs to: what the user said, then the one saved in
+  // Your numbers when retirement does not already run past it, then the
+  // convention. Always recorded as an assumption (including the default) so a
+  // comparison that only moves the horizon cannot label the baseline as
+  // "Planning through 0". With a partner, until the later of the two planning
+  // ages.
   const savedHorizon = saved('planThroughAge');
-  const savedPlanThroughAge = savedHorizon && savedHorizon.value > retirementAge!
-    ? { value: savedHorizon.value, savedAt: savedHorizon.savedAt }
-    : undefined;
-  const userPlanThroughAge = savedPlanThroughAge?.value ?? Math.max(DEFAULT_LIFE_EXPECTANCY, retirementAge! + 1);
+  const userPlanThroughAge = take(
+    'lifeExpectancy',
+    savedHorizon && savedHorizon.value > retirementAge!
+      ? savedHorizon
+      : { value: Math.max(DEFAULT_LIFE_EXPECTANCY, retirementAge! + 1), origin: 'default' }
+  )!;
+  // Stated or saved only: the convention must not change variant ids or force
+  // an explicit horizon onto the market-history request.
+  const namedPlanThroughAge = assumptions.find((assumption) =>
+    assumption.key === 'lifeExpectancy' && assumption.origin !== 'default'
+  )?.value;
+  // A spousal benefit needs to know when the user claims and whether their
+  // own benefit is known (a stated zero is), even with none of their own.
+  const userSocialSecurity = {
+    claimAge: socialSecurityStartAge ??
+      (overrides.socialSecurityStartAge !== undefined && overrides.sources.socialSecurityStartAge
+        ? overrides.socialSecurityStartAge
+        : saved('socialSecurityStartAge')?.value) ??
+      DEFAULT_SOCIAL_SECURITY_START_AGE,
+    known: assumptions.find((assumption) => assumption.key === 'socialSecurityAnnual')?.origin !== 'default',
+  };
   const partner = resolvePartner({
     stated: snapshot.statedPartner,
     statedFigures: snapshot.statedFigures,
     retirementAge: retirementAge!,
     currentAge: currentAge!,
+    ...(snapshot.userProfileValues?.householdStatus && { householdStatus: snapshot.userProfileValues.householdStatus }),
   });
-  const household: PlannedHousehold | undefined = partner && !('missingAge' in partner)
-    ? {
-      ...partner,
-      timeline: householdTimeline({ currentAge: currentAge!, userPlanThroughAge, partner: partner.plan }),
-    }
+  const resolvedPartner = partner && !('missingAge' in partner) ? partner : undefined;
+  const timeline = resolvedPartner
+    ? householdTimeline({ currentAge: currentAge!, userPlanThroughAge, partner: resolvedPartner.plan })
     : undefined;
-  const incomes: CoastFireIncome[] = household
-    ? applySurvivorRule(
-      [
-        ...ownIncomes.map((income) => ({ ...income, owner: 'user' as const })),
-        ...partnerIncomes(household.plan, household.timeline),
-      ],
-      household.timeline
-    )
-    : ownIncomes;
+  // With a partner, their incomes join the user's, each stopping with its
+  // holder, with whatever spousal and survivor benefits a marriage adds.
+  const couple = resolvedPartner && timeline
+    ? householdIncomes({
+      user: {
+        socialSecurity: {
+          ...(ownIncomes[0]?.kind === 'social_security' && {
+            benefit: { annualAmount: ownIncomes[0].annualAmount, startAge: ownIncomes[0].startAge },
+          }),
+          ...userSocialSecurity,
+        },
+        ...(ownIncomes.find((income) => income.kind === 'pension') && {
+          pension: ownIncomes.find((income) => income.kind === 'pension')!,
+        }),
+      },
+      household: { ...resolvedPartner, timeline },
+      currentAge: currentAge!,
+    })
+    : undefined;
+  const household: PlannedHousehold | undefined = resolvedPartner && timeline && couple
+    ? { ...resolvedPartner, timeline, socialSecurity: couple.socialSecurity }
+    : undefined;
+  const incomes: CoastFireIncome[] = couple?.incomes ?? ownIncomes;
   const survivorSpending = household ? survivorSpendingFor(household.plan, household.timeline) : undefined;
 
   return {
@@ -837,8 +888,9 @@ function resolveVariant(
     ...(claiming && { claiming }),
     ...(household && { household }),
     ...(partner && 'missingAge' in partner && { missingPartnerAge: true as const }),
+    userSocialSecurity,
     planThroughAge: household?.timeline.horizonAge ?? userPlanThroughAge,
-    ...(savedPlanThroughAge && { savedPlanThroughAge }),
+    ...(namedPlanThroughAge !== undefined && { userPlanThroughAge: namedPlanThroughAge }),
     ...(survivorSpending && { survivorSpending }),
   };
 }
@@ -922,6 +974,7 @@ function describeField(field: CoastFireOverrideField, value: number): string {
     case 'realReturnRatePercent': return `${rate(value)} growth after inflation`;
     case 'withdrawalRatePercent': return `a ${rate(value)} withdrawal rate`;
     case 'annualContribution': return `investing ${money(value)} a year`;
+    case 'lifeExpectancy': return `planning through ${value}`;
   }
 }
 
@@ -962,7 +1015,7 @@ function variantKey(variant: ResolvedCoastFireVariant): string {
     annualContribution: variant.annualContribution,
     allocation: variant.allocation.id,
     // Only when saved or with a partner, so any other case keeps its id.
-    ...(variant.savedPlanThroughAge && { savedPlanThroughAge: variant.savedPlanThroughAge.value }),
+    ...(variant.userPlanThroughAge !== undefined && { userPlanThroughAge: variant.userPlanThroughAge }),
     ...(variant.household && {
       partner: variant.household.plan,
       planThroughAge: variant.planThroughAge,
@@ -1025,8 +1078,13 @@ async function presetHistoricalTest(
       pensionInflationAdjusted: pension?.inflationAdjusted ?? false,
       allocation: variant.allocation.id,
       // The planning age the straight line valued incomes through.
-      ...(variant.savedPlanThroughAge && { lifeExpectancy: variant.savedPlanThroughAge.value }),
-    }, variant.household && { partner: variant.household.plan });
+      ...(variant.userPlanThroughAge !== undefined && { lifeExpectancy: variant.userPlanThroughAge }),
+    }, variant.household && {
+      partner: variant.household.plan,
+      origins: variant.household.origins,
+      ...(variant.household.married && { married: variant.household.married }),
+      userSocialSecurity: variant.userSocialSecurity,
+    });
     const evaluated = run.primary;
     if (!evaluated) return undefined;
     const mix = QUICKPLAN_ALLOCATIONS[run.inputs.allocation];
@@ -1138,6 +1196,11 @@ export async function runCoastFireScenario(
       const { currentAge, retirementAge, currentSavings, annualRetirementSpending, realReturnRate, withdrawalRate } = variant.inputs;
       // Valued through the market-history test's own horizon.
       const base = { currentAge, retirementAge, currentSavings, annualRetirementSpending, realReturnRate, withdrawalRate };
+      // A stated planning age the retirement would already run past is a
+      // figure the formula cannot use; say so rather than move it.
+      if (variant.userPlanThroughAge !== undefined && variant.userPlanThroughAge <= retirementAge) {
+        throw new CoastFireValidationError('The age to plan through must be after the retirement age.', 'lifeExpectancy');
+      }
       const metrics = calculateCoastFireWithIncome(base, variant.incomes, {
         planThroughAge: variant.planThroughAge,
         ...(variant.survivorSpending && { spendingChange: variant.survivorSpending }),
@@ -1178,7 +1241,6 @@ export async function runCoastFireScenario(
       ...(variant.claiming && { claiming: variant.claiming }),
       ...(variant.household && { household: variant.household }),
       ...(variant.missingPartnerAge && { missingPartnerAge: true as const }),
-      ...(variant.savedPlanThroughAge && { savedPlanThroughAge: variant.savedPlanThroughAge }),
     });
   }
 
@@ -1283,16 +1345,25 @@ export function coastFireScenarioCanonicalFacts(execution: CoastFireScenarioExec
       );
     }
     for (const income of m.incomes ?? []) {
-      // Counted at its own amount unless it is fixed or stops before the plan ends.
+      // Counted at its own amount unless it is fixed, stops before the plan
+      // ends, or is a survivor benefit spread over all of retirement.
       const ends = income.endAge !== undefined;
-      if ((income.inflationAdjusted && !ends) || !(income.levelAmount > 0)) continue;
+      if ((income.inflationAdjusted && !ends && income.kind !== 'survivor') || !(income.levelAmount > 0)) continue;
       const partner = income.owner === 'partner';
-      const name = income.kind === 'pension' ? 'pension' : income.inflationAdjusted ? 'Social Security' : 'income';
-      const whose = partner ? 'The partner\'s ' : '';
+      // A survivor benefit paid alone until the survivor's own starts is its own segment.
+      const bridging = income.kind === 'survivor' && ends;
+      const name = income.kind === 'pension'
+        ? 'pension'
+        : income.kind === 'spousal'
+          ? 'spousal benefit'
+          : income.kind === 'survivor'
+            ? bridging ? 'survivor benefit, before their own Social Security starts' : 'survivor benefit, above their own Social Security'
+            : income.inflationAdjusted ? 'Social Security' : 'income';
+      const whose = partner ? 'The partner\'s ' : income.kind === 'spousal' || income.kind === 'survivor' ? 'The user\'s ' : '';
       const what = income.inflationAdjusted ? `${whose}${name}` : `${whose}${partner ? 'fixed' : 'Fixed'} ${name}`;
       add(
         'scenario_calculation',
-        `${partner ? 'partner_' : ''}${income.kind}_counted_value`,
+        `${partner ? 'partner_' : ''}${income.kind}${bridging ? '_before_own' : ''}_counted_value`,
         `${what} counted as, in today's dollars a year: its level worth over retirement through age ${m.planThroughAge}` +
           (income.inflationAdjusted ? '' : ` if prices rise ${rate(m.inflationPercent ?? 0)} a year`) +
           (ends ? `, paid until the user's age ${income.endAge}` : ''),
@@ -1315,6 +1386,7 @@ export function coastFireScenarioCanonicalFacts(execution: CoastFireScenarioExec
       const streams = (m.incomes ?? []).map((income) => toStream(income));
       const rows = [
         ...householdIncomeFactRows(streams, scenario.household),
+        ...householdSocialSecurityFactRows(scenario.household),
         ...householdTimelineFactRows(scenario.household, m.spendingChange),
       ];
       for (const row of rows) add('scenario_input', row.suffix, row.label, row.value, row.unit);
@@ -1476,8 +1548,11 @@ function describeHistoricalTest(scenario: CoastFireScenarioResult): string {
   if (!test) return '';
   const m = scenario.metrics;
   const household = scenario.household;
-  const incomes = (m.incomes ?? []).map((income) => {
-    const name = income.kind === 'social_security' ? 'Social Security' : 'pension';
+  // A survivor benefit paid in two parts is one income.
+  const listed = (m.incomes ?? []).filter((income, index, all) =>
+    all.findIndex((other) => other.owner === income.owner && other.kind === income.kind) === index);
+  const incomes = listed.map((income) => {
+    const name = incomeName(income.kind);
     if (household && income.owner === 'partner') return `your partner's ${name} from ${partnerAgeAt(income.startAge, household)}`;
     if (household) return `your ${name} from ${income.startAge}`;
     return `${income.kind === 'social_security' ? 'Social Security' : 'the pension'} from ${income.startAge}`;
@@ -1526,6 +1601,12 @@ function describeIncomes(scenario: CoastFireScenarioResult): string {
     const stopsEarly = term.inflationAdjusted && term.endAge !== undefined && term.levelAmount > 0
       ? ` Since it stops then, I counted it as ${money(term.levelAmount)} a year: its average worth through age ${m.planThroughAge}.`
       : '';
+    // The survivor benefit is part of the couple's timeline, below.
+    if (term.kind === 'survivor') continue;
+    if (household && term.kind === 'spousal') {
+      sentences.push(`${capitalize(describeSpousalIncome(stream, household))}.${stopsEarly}`);
+      continue;
+    }
     if (household && term.owner === 'partner') {
       const clause = describePartnerIncome(stream, household);
       const fixed = !term.inflationAdjusted && term.levelAmount > 0
@@ -1555,19 +1636,37 @@ function describeIncomes(scenario: CoastFireScenarioResult): string {
         `prices rise, so I counted it as ${money(term.levelAmount)} a year in today's dollars: its average worth through age ` +
         `${m.planThroughAge} if prices rise ${rate(m.inflationPercent ?? 0)} a year.${startAssumed}${inflationAssumed}`);
   }
+  // What every survivor benefit, paid only from the first death, was counted as.
+  const survivorLevel = terms
+    .filter((term) => term.kind === 'survivor')
+    .reduce((sum, term) => sum + term.levelAmount, 0);
+  if (household && survivorLevel > 0) {
+    sentences.push(`Since the survivor benefit is paid only after the first death, I counted it as ${money(survivorLevel)} ` +
+      `a year: its average worth over retirement through age ${m.planThroughAge}.`);
+  }
   const gaps = terms
     .filter((term) => term.gapYears > 0)
     .map((term) => {
       const name = term.kind === 'social_security' ? 'Social Security' : 'the pension';
       const whose = !household ? name : term.owner === 'partner'
-        ? `your partner's ${term.kind === 'social_security' ? 'Social Security' : 'pension'}`
-        : `your ${term.kind === 'social_security' ? 'Social Security' : 'pension'}`;
+        ? `your partner's ${incomeName(term.kind)}`
+        : `your ${incomeName(term.kind)}`;
       return `${whose}'s share for the ${term.gapYears === 1 ? 'year' : `${term.gapYears} years`} before it starts`;
     });
   if ((m.bridgeReserve ?? 0) > 0 && gaps.length > 0) {
     sentences.push(`The target includes ${money(m.bridgeReserve!)} set aside at ${m.retirementAge} to pay ${joinList(gaps)}.`);
   }
   return ` ${sentences.join(' ')}`;
+}
+
+/** An income's name in a sentence, after "your" or "your partner's". */
+function incomeName(kind: CoastFireIncome['kind']): string {
+  switch (kind) {
+    case 'pension': return 'pension';
+    case 'spousal': return 'spousal benefit';
+    case 'survivor': return 'survivor benefit';
+    default: return 'Social Security';
+  }
 }
 
 /**
@@ -1670,9 +1769,6 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
         : undefined;
       return phrase ? [{ phrase, savedAt: assumption.savedAt! }] : [];
     }),
-    ...(primary.savedPlanThroughAge
-      ? [{ phrase: `planning through age ${primary.savedPlanThroughAge.value}`, savedAt: primary.savedPlanThroughAge.savedAt }]
-      : []),
     ...(savedMix?.origin === 'saved' && savedMix.savedAt
       ? [{ phrase: `the ${savedMix.label} preset`, savedAt: savedMix.savedAt }]
       : []),
@@ -1806,16 +1902,29 @@ const COAST_FIRE_INPUT_REQUEST: InputRequestSpec = {
       sentence: 'Use a {value} withdrawal rate.',
       defaultNote: `${DEFAULT_COAST_FIRE_WITHDRAWAL_RATE_PERCENT}% if left blank`,
     },
+    {
+      id: 'lifeExpectancy',
+      label: 'Plan through age',
+      kind: 'age',
+      ...OVERRIDE_RANGES.lifeExpectancy,
+      // The stated plan's own sentence, so both read back the same way.
+      sentence: 'Plan through age {value}.',
+      defaultNote: `${DEFAULT_LIFE_EXPECTANCY} if left blank`,
+    },
   ],
 };
 
 /** The form for a Coast FIRE run waiting on figures, or null for one that ran or failed otherwise. */
 export function coastFireInputRequest(execution: CoastFireScenarioExecution): InputRequest | null {
-  // A number worked out without the partner asks for their age alone.
+  // A number worked out without the partner asks for their age alone; one
+  // that could not count spousal or survivor benefits asks whether they are married.
   if (execution.status === 'completed') {
-    return execution.scenarios[0]?.missingPartnerAge
-      ? partnerAgeInputRequest(COAST_FIRE_CALCULATOR_ID, COAST_FIRE_INPUT_REQUEST.question)
-      : null;
+    const primary = execution.scenarios[0];
+    return householdInputRequest(
+      primary?.missingPartnerAge ? { missingAge: true } : primary?.household,
+      COAST_FIRE_CALCULATOR_ID,
+      COAST_FIRE_INPUT_REQUEST.question
+    );
   }
   if (!execution.missingFields?.length) return null;
   // Without an age there is no telling whether the conventional retirement
@@ -1856,6 +1965,7 @@ const SAVE_KEYS: Partial<Record<CoastFireOverrideField, SaveOfferKey>> = {
   socialSecurityAnnual: 'socialSecurityAnnual',
   socialSecurityStartAge: 'socialSecurityStartAge',
   annualContribution: 'annualContribution',
+  lifeExpectancy: 'planThroughAge',
   currentSavings: 'investedBalance',
 };
 
@@ -1913,6 +2023,7 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'real_return_rate_percent', label: 'Growth after inflation', description: 'Percentage points; 5% is 5.', valueType: 'percentage', minimum: 0, maximum: 12 },
     { id: 'withdrawal_rate_percent', label: 'Withdrawal rate', description: 'Percentage points; 4% is 4.', valueType: 'percentage', minimum: 2, maximum: 8 },
     { id: 'annual_contribution', label: 'Annual contributions', description: 'What the user invests each year now; used to find when savings can coast.', valueType: 'currency', minimum: 0, maximum: 10_000_000 },
+    { id: 'life_expectancy', label: 'Planning horizon age', description: 'The age incomes are valued through and the market-history test runs to.', valueType: 'age', minimum: 60, maximum: 110 },
     { id: 'allocation', label: 'Preset asset mix', description: 'The mix for the market-history test that runs while holdings cannot be: conservative, balanced, or growth.', valueType: 'enum', options: ['conservative', 'balanced', 'growth'] },
   ],
   defaults: [
@@ -1925,6 +2036,7 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'social_security_start_age', value: DEFAULT_SOCIAL_SECURITY_START_AGE, description: 'Used only when a benefit is stated without a start age.' },
     { id: 'annual_contribution', value: 0, description: 'No contribution path unless the user states what they invest.' },
     { id: 'allocation', value: DEFAULT_ALLOCATION_ID, description: 'The public retirement calculator\'s default preset, for the market-history test.' },
+    { id: 'life_expectancy', value: DEFAULT_LIFE_EXPECTANCY, description: 'Planning horizon when none is stated or saved.' },
   ],
   outputs: [
     { id: 'retirement_target', label: 'Portfolio needed at retirement', unit: 'usd', scope: 'variant', description: 'Spending not covered once all retirement income has started, divided by the withdrawal rate, plus a reserve for the years before income starts.' },
@@ -1939,7 +2051,7 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
   ],
   planner: {
     jsonSchema: COAST_FIRE_SCENARIO_PLAN_JSON_SCHEMA,
-    instructions: `When the user asks whether they have reached Coast FIRE, what their Coast FIRE number is, when they will reach Coast FIRE, or changes an input of a Coast FIRE answer earlier in this decision, set requested=true. Coast FIRE means having enough invested today that growth alone, with no further contributions, reaches the retirement target by the retirement age. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, currentSavings (invested retirement savings today), annualRetirementSpending (annual spending once retired, in today's dollars), annualRetirementIncome (a pension, annuity or other income in retirement that is not Social Security, per year), retirementIncomeStartAge (when that income starts), retirementIncomeInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), socialSecurityAnnual and socialSecurityStartAge (Social Security only; socialSecurityStartAge is when the user claims it), socialSecurityAmountAge (only when the user says which claiming age their Social Security figure is for, such as a statement showing $2,500 a month at 67; otherwise null), realReturnRatePercent (growth after inflation in percentage points: 5% is 5, never 0.05), withdrawalRatePercent (percentage points: 4% is 4), and annualContribution (what the user invests per year now; only used to find when they reach Coast FIRE). Until holdings are linked (or while none of the linked ones can be simulated), application code also runs the savings through market history on a preset mix: set allocation to conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets, and otherwise to unspecified with a null source. When the user gives a range for one value, put the low end in primary and only the high end in comparison. When the newest message changes an input of the earlier Coast FIRE case, put the earlier case in primary and only the changed values in comparison; for claiming Social Security at another age, that is only socialSecurityStartAge, never a new amount, because application code applies Social Security's own claiming rules to the benefit. A spouse's or partner's age, Social Security, pension or planning age is never one of these fields; it belongs in the retirement inputs' partner fields, which application code reads for this calculation too. Never estimate or supply typical values; application code applies disclosed defaults and asks for anything else missing, so request the calculation even when figures are missing. A Coast FIRE question does not by itself request any other calculator. The overrides object and every field and source are always present; use null for absent values. When there is no Coast FIRE question, set requested=false, allocation=unspecified, retirementIncomeInflation=unspecified, and null for every other value and every source in both variants.`,
+    instructions: `When the user asks whether they have reached Coast FIRE, what their Coast FIRE number is, when they will reach Coast FIRE, or changes an input of a Coast FIRE answer earlier in this decision, set requested=true. Coast FIRE means having enough invested today that growth alone, with no further contributions, reaches the retirement target by the retirement age. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, currentSavings (invested retirement savings today), annualRetirementSpending (annual spending once retired, in today's dollars), annualRetirementIncome (a pension, annuity or other income in retirement that is not Social Security, per year), retirementIncomeStartAge (when that income starts), retirementIncomeInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), socialSecurityAnnual and socialSecurityStartAge (Social Security only; socialSecurityStartAge is when the user claims it), socialSecurityAmountAge (only when the user says which claiming age their Social Security figure is for, such as a statement showing $2,500 a month at 67; otherwise null), realReturnRatePercent (growth after inflation in percentage points: 5% is 5, never 0.05), withdrawalRatePercent (percentage points: 4% is 4), annualContribution (what the user invests per year now; only used to find when they reach Coast FIRE), and lifeExpectancy (the age the user wants their plan to run through, only when they say one). Until holdings are linked (or while none of the linked ones can be simulated), application code also runs the savings through market history on a preset mix: set allocation to conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets, and otherwise to unspecified with a null source. When the user gives a range for one value, put the low end in primary and only the high end in comparison. When the newest message changes an input of the earlier Coast FIRE case, put the earlier case in primary and only the changed values in comparison; for claiming Social Security at another age, that is only socialSecurityStartAge, never a new amount, because application code applies Social Security's own claiming rules to the benefit. A spouse's or partner's age, Social Security, pension or planning age is never one of these fields; it belongs in the retirement inputs' partner fields, which application code reads for this calculation too. Never estimate or supply typical values; application code applies disclosed defaults and asks for anything else missing, so request the calculation even when figures are missing. A Coast FIRE question does not by itself request any other calculator. The overrides object and every field and source are always present; use null for absent values. When there is no Coast FIRE question, set requested=false, allocation=unspecified, retirementIncomeInflation=unspecified, and null for every other value and every source in both variants.`,
     parsePlan: parseCoastFireScenarioPlan,
   },
   execution: {

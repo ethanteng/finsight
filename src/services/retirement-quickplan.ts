@@ -28,8 +28,11 @@ import {
   householdIncomeStreams,
   householdTimeline,
   survivorSpendingFor,
+  type HouseholdSocialSecurity,
   type HouseholdTimeline,
+  type Marriage,
   type PartnerPlan,
+  type ResolvedPartner,
 } from './household';
 
 export const RETIREMENT_QUICKPLAN_VERSION = 1 as const;
@@ -285,12 +288,14 @@ export interface RetirementQuickPlanResult {
   limitations: string[];
   /**
    * Present when the run planned for a partner as well: the joint timeline,
-   * every income it counted (the partner's on the user's ages, with the
-   * survivor rule's end ages), and the survivor's spending when stated.
+   * every income it counted (the partner's on the user's ages, each with the
+   * age it stops, and any spousal or survivor benefit), what Social Security
+   * pays the couple, and the survivor's spending when stated.
    */
   household?: {
     timeline: HouseholdTimeline;
     incomeStreams: RetirementIncomeStream[];
+    socialSecurity: HouseholdSocialSecurity;
     survivorSpending?: { fromAge: number; annualAmount: number };
   };
 }
@@ -302,6 +307,15 @@ export interface RetirementQuickPlanResult {
  */
 export interface QuickPlanHousehold {
   partner: PartnerPlan;
+  /** Where each partner figure came from: whether their own benefit is known. */
+  origins?: ResolvedPartner['origins'];
+  /** Whether the couple is married; unknown, no spousal or survivor benefit is counted. */
+  married?: Marriage;
+  /**
+   * When the user claims and whether their own benefit is known, for a
+   * spousal benefit; else the inputs' start age, known when it is above zero.
+   */
+  userSocialSecurity?: { claimAge: number; known: boolean };
 }
 
 /** Runs a quick plan. Ask Linc's calculators take one so their tests can stand in for the engine. */
@@ -751,15 +765,27 @@ async function computeRetirementQuickPlan(
   const { holdings, securities } = buildSyntheticPortfolio(allocation, inputs.investableAssets);
 
   // With a partner the plan runs until the later of the two reaches their
-  // planning age, on both incomes, and the survivor keeps the larger benefit.
-  // `lifeExpectancy` stays the user's own.
+  // planning age, on both incomes and whatever spousal and survivor benefits
+  // a marriage adds. `lifeExpectancy` stays the user's own.
   const timeline = household
     ? householdTimeline({ currentAge: inputs.currentAge, userPlanThroughAge: inputs.lifeExpectancy, partner: household.partner })
     : undefined;
   const horizon = timeline?.horizonAge ?? inputs.lifeExpectancy;
-  const incomeStreams = household && timeline
-    ? householdIncomeStreams(quickPlanIncomeStreams(inputs), household.partner, timeline)
-    : quickPlanIncomeStreams(inputs);
+  const householdRun = household && timeline
+    ? householdIncomeStreams(quickPlanIncomeStreams(inputs), {
+      plan: household.partner,
+      ...(household.origins && { origins: household.origins }),
+      ...(household.married && { married: household.married }),
+      timeline,
+    }, {
+      currentAge: inputs.currentAge,
+      userSocialSecurity: household.userSocialSecurity ?? {
+        claimAge: inputs.socialSecurityStartAge,
+        known: inputs.socialSecurityAnnual > 0,
+      },
+    })
+    : undefined;
+  const incomeStreams = householdRun?.streams ?? quickPlanIncomeStreams(inputs);
   // A survivor's spending is a share of a stated plan; a `rates` run has none.
   const survivorSpending = household && timeline && mode === 'plan'
     ? survivorSpendingFor(household.partner, timeline)
@@ -904,8 +930,13 @@ async function computeRetirementQuickPlan(
     sustainableSpendingRates,
     assumptions: primaryAnalysis.dataQuality.assumptions,
     limitations: buildLimitations(inputs, allocation, history),
-    ...(timeline && {
-      household: { timeline, incomeStreams, ...(survivorSpending && { survivorSpending }) },
+    ...(timeline && householdRun && {
+      household: {
+        timeline,
+        incomeStreams,
+        socialSecurity: householdRun.socialSecurity,
+        ...(survivorSpending && { survivorSpending }),
+      },
     }),
   };
 }
@@ -951,7 +982,9 @@ export async function runRetirementQuickPlan(
     inputs.pensionInflationAdjusted,
     inputs.lifeExpectancy,
     inputs.allocation,
-    household ? household.partner : null,
+    household
+      ? [household.partner, household.origins?.socialSecurityAnnual ?? null, household.married?.value ?? null, household.userSocialSecurity ?? null]
+      : null,
   ]);
 
   const hit = planCache.get(key);

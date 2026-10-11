@@ -31,6 +31,7 @@ import {
   QuickPlanValidationError,
   runRetirementQuickPlan,
   type QuickPlanAllocationId,
+  type QuickPlanHousehold,
   type QuickPlanRunner,
   type RetirementQuickPlanRequest,
   type RetirementQuickPlanResult,
@@ -73,11 +74,13 @@ import {
 import {
   describeHouseholdTimeline,
   describePartnerIncome,
+  describeSpousalIncome,
   householdIncomeFactRows,
+  householdSocialSecurityFactRows,
   householdTimelineFactRows,
   MISSING_PARTNER_AGE_SENTENCE,
   partnerAgeAt,
-  partnerAgeInputRequest,
+  householdInputRequest,
   withPartnerAgeField,
   type PlannedHousehold,
 } from '../openai/household-evidence';
@@ -468,6 +471,8 @@ interface ResolvedVariant {
   /** A partner to plan for as well, on this case's ages. */
   household?: PlannedHousehold;
   missingPartnerAge?: true;
+  /** When the user claims Social Security and whether their own benefit is known, for a spousal benefit. */
+  userSocialSecurity: { claimAge: number; known: boolean };
 }
 
 /**
@@ -748,14 +753,26 @@ function resolveVariant(
   )!;
 
   // A partner, the same in every case, timed on this case's ages: their
-  // incomes, a plan that runs until the later of the two planning ages, and
-  // the survivor years. Without their age their incomes cannot be timed.
+  // incomes, a plan that runs until the later of the two planning ages, the
+  // survivor years, and, married, spousal and survivor benefits. Without
+  // their age their incomes cannot be timed.
   const partner = resolvePartner({
     stated: snapshot.statedPartner,
     statedFigures: snapshot.statedFigures,
     retirementAge,
     currentAge: currentAge!,
+    ...(snapshot.userProfileValues?.householdStatus && { householdStatus: snapshot.userProfileValues.householdStatus }),
   });
+  // A spousal benefit needs to know when the user claims and whether their
+  // own benefit is known (a stated zero is), even with none of their own.
+  const userSocialSecurity = {
+    claimAge: statedSocialSecurity > 0
+      ? socialSecurityStartAge
+      : (overrides.socialSecurityStartAge !== undefined && overrides.sources.socialSecurityStartAge
+        ? overrides.socialSecurityStartAge
+        : saved('socialSecurityStartAge')?.value) ?? DEFAULT_SOCIAL_SECURITY_START_AGE,
+    known: assumptions.find((assumption) => assumption.key === 'socialSecurityAnnual')?.origin !== 'default',
+  };
   const household: PlannedHousehold | undefined = partner && !('missingAge' in partner)
     ? {
       ...partner,
@@ -783,6 +800,7 @@ function resolveVariant(
     ...(claiming && { claiming }),
     ...(household && { household }),
     ...(partner && 'missingAge' in partner && { missingPartnerAge: true as const }),
+    userSocialSecurity,
   };
 }
 
@@ -856,7 +874,26 @@ function variantLabel(own: ResolvedVariant, peer: ResolvedVariant | undefined): 
 
 /** What a run depends on: the request, and the partner when there is one. */
 function runInputs(variant: ResolvedVariant): Record<string, unknown> {
-  return { ...variant.request, ...(variant.household && { partner: variant.household.plan }) };
+  return {
+    ...variant.request,
+    ...(variant.household && {
+      partner: variant.household.plan,
+      married: variant.household.married?.value ?? null,
+      userSocialSecurity: variant.userSocialSecurity,
+    }),
+  };
+}
+
+/** The household as the quick plan takes it. */
+function quickPlanHousehold(variant: ResolvedVariant): QuickPlanHousehold | undefined {
+  const household = variant.household;
+  if (!household) return undefined;
+  return {
+    partner: household.plan,
+    origins: household.origins,
+    ...(household.married && { married: household.married }),
+    userSocialSecurity: variant.userSocialSecurity,
+  };
 }
 
 function requestKey(variant: ResolvedVariant): string {
@@ -952,6 +989,7 @@ function toResult(
       household: {
         ...variant.household,
         timeline: run.household.timeline,
+        socialSecurity: run.household.socialSecurity,
         incomeStreams: run.household.incomeStreams,
         ...(run.household.survivorSpending && { survivorSpending: run.household.survivorSpending }),
       },
@@ -1023,10 +1061,7 @@ export async function runStatedRetirementPlan(
   let comparisonUnavailableReason: string | undefined;
   for (const [index, variant] of variants.entries()) {
     try {
-      const run = await runQuickPlan(
-        variant.request as RetirementQuickPlanRequest,
-        variant.household && { partner: variant.household.plan }
-      );
+      const run = await runQuickPlan(variant.request as RetirementQuickPlanRequest, quickPlanHousehold(variant));
       const peer = variants[index === 0 ? 1 : 0];
       scenarios.push(toResult(variant, variantLabel(variant, peer), run, index === 0));
     } catch (error) {
@@ -1139,6 +1174,7 @@ export function statedRetirementPlanCanonicalFacts(execution: StatedRetirementPl
     if (scenario.household) {
       const rows = [
         ...householdIncomeFactRows(scenario.household.incomeStreams, scenario.household),
+        ...householdSocialSecurityFactRows(scenario.household),
         ...householdTimelineFactRows(scenario.household, scenario.household.survivorSpending),
       ];
       for (const row of rows) add('scenario_input', row.suffix, row.label, row.value, row.unit);
@@ -1240,12 +1276,15 @@ function describeIncomeGaps(
   gap(inputs.pensionAnnual, inputs.pensionStartAge, household ? 'your pension' : 'the pension');
   for (const stream of household?.incomeStreams ?? []) {
     const { owner, kind } = incomeOfStream(stream);
-    if (owner !== 'partner') continue;
+    // The user's own are above; a survivor benefit replaces one that stops
+    // rather than starting late.
+    if (kind === 'survivor' || (owner === 'user' && kind !== 'spousal')) continue;
+    const name = kind === 'pension' ? 'pension' : kind === 'spousal' ? 'spousal benefit' : 'Social Security';
     gap(
       stream.annualAmount,
       stream.startAge,
-      kind === 'pension' ? 'your partner\'s pension' : 'your partner\'s Social Security',
-      partnerAgeAt(stream.startAge, household!)
+      owner === 'partner' ? `your partner's ${name}` : `your ${name}`,
+      owner === 'partner' ? partnerAgeAt(stream.startAge, household!) : String(stream.startAge)
     );
   }
   return gaps.length > 0 ? ` The portfolio covers ${joinList(gaps)}.` : '';
@@ -1260,9 +1299,16 @@ function describeHousehold(scenario: StatedRetirementPlanResult): string {
   const household = scenario.household;
   if (!household) return '';
   const clauses = [
+    // The partner's incomes and either one's spousal benefit; a survivor
+    // benefit is part of the timeline.
     ...household.incomeStreams
-      .filter((stream) => incomeOfStream(stream).owner === 'partner')
-      .map((stream) => describePartnerIncome(stream, household)),
+      .filter((stream) => {
+        const { owner, kind } = incomeOfStream(stream);
+        return kind !== 'survivor' && (owner === 'partner' || kind === 'spousal');
+      })
+      .map((stream) => incomeOfStream(stream).kind === 'spousal'
+        ? describeSpousalIncome(stream, household)
+        : describePartnerIncome(stream, household)),
     ...describeHouseholdTimeline(household, {
       ...(scenario.mode === 'plan' && { annual: scenario.inputs.annualSpending }),
       ...(household.survivorSpending && { survivor: household.survivorSpending }),
@@ -1273,7 +1319,10 @@ function describeHousehold(scenario: StatedRetirementPlanResult): string {
   ];
   // When the user's own income stops, said once beside theirs.
   const ownEnds = household.incomeStreams
-    .filter((stream) => incomeOfStream(stream).owner === 'user' && stream.endAge !== undefined)
+    .filter((stream) => {
+      const { owner, kind } = incomeOfStream(stream);
+      return owner === 'user' && (kind === 'social_security' || kind === 'pension') && stream.endAge !== undefined;
+    })
     .map((stream) => `your ${incomeOfStream(stream).kind === 'pension' ? 'pension' : 'Social Security'} stops at ${stream.endAge}`);
   if (ownEnds.length > 0) clauses.push(joinList(ownEnds));
   return clauses.map((clause) => ` ${capitalize(clause)}.`).join('');
@@ -1517,11 +1566,15 @@ const STATED_RETIREMENT_PLAN_INPUT_REQUEST: InputRequestSpec = {
 
 /** The form for a stated plan waiting on figures, or null for one that ran or failed otherwise. */
 export function statedRetirementPlanInputRequest(execution: StatedRetirementPlanExecution): InputRequest | null {
-  // A plan that ran without the partner asks for their age alone.
+  // A plan that ran without the partner asks for their age alone; one that
+  // could not count spousal or survivor benefits asks whether they are married.
   if (execution.status === 'completed') {
-    return execution.scenarios[0]?.missingPartnerAge
-      ? partnerAgeInputRequest(STATED_RETIREMENT_PLAN_CALCULATOR_ID, STATED_RETIREMENT_PLAN_INPUT_REQUEST.question)
-      : null;
+    const primary = execution.scenarios[0];
+    return householdInputRequest(
+      primary?.missingPartnerAge ? { missingAge: true } : primary?.household,
+      STATED_RETIREMENT_PLAN_CALCULATOR_ID,
+      STATED_RETIREMENT_PLAN_INPUT_REQUEST.question
+    );
   }
   if (!execution.missingFields?.length) return null;
   const request = buildInputRequest(

@@ -100,5 +100,23 @@ describe('validateExtractedInputs', () => {
     } as any);
     expect(statedPartnerOf(baseline)).toEqual(statedPartnerOf(result));
   });
+
+  it('reads whether the couple is married only when the user said', () => {
+    const married = validateExtractedInputs({ ...noSources, partnerAge: 55, partnerMarried: 'yes', sources: { partnerMarried: 'my wife' } });
+    expect(married.partnerMarried).toBe(true);
+    expect(married.sources.partnerMarried).toBe('my wife');
+    expect(statedPartnerOf(married)).toEqual({ age: 55, married: true });
+    expect(validateExtractedInputs({ ...noSources, partnerMarried: 'no' }).partnerMarried).toBe(false);
+    // "Partner" alone does not say.
+    expect(validateExtractedInputs({ ...noSources, partnerMarried: 'unspecified' }).partnerMarried).toBeUndefined();
+    expect(validateExtractedInputs({ ...noSources, partnerMarried: true }).partnerMarried).toBeUndefined();
+
+    // A what-if on the user's plan keeps it in the baseline.
+    const baseline = retirementInputsForBaseline(married, {
+      requested: true,
+      primary: { type: 'historical_cpi', overrides: { retirementAge: 62, sources: { retirementAge: 'retire at 62' } } },
+    } as any);
+    expect(baseline?.partnerMarried).toBe(true);
+  });
 });
 

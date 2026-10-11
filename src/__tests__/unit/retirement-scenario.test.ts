@@ -163,7 +163,7 @@ describe('retirement scenario runner', () => {
   });
 
   describe('with a partner', () => {
-    /** The user 50, their partner 48 with the larger benefit: the plan runs to the user's 97. */
+    /** The user 50, their married partner 48 with the larger benefit: the plan runs to the user's 97. */
     function coupleSnapshot() {
       const data = snapshot();
       const plan = { age: 48, planThroughAge: 95, socialSecurity: { annualAmount: 32_000, startAge: 67, quote: { amount: 32_000, age: 67 } } };
@@ -178,12 +178,13 @@ describe('retirement scenario runner', () => {
       data.retirementAnalysis._household = {
         plan,
         origins: { age: 'stated', socialSecurityAnnual: 'stated', socialSecurityStartAge: 'default', planThroughAge: 'default' },
+        married: { value: true, origin: 'stated' },
         timeline,
       };
       return data;
     }
 
-    it('keeps the larger benefit for the survivor when claiming later makes the user\'s the larger', async () => {
+    it('pays the survivor the user\'s benefit when claiming later makes it the larger', async () => {
       const analyzer = jest.fn(async () => analysis(0.85));
       await runRetirementScenario(coupleSnapshot(), {
         requested: true,
@@ -196,8 +197,10 @@ describe('retirement scenario runner', () => {
       const input = (analyzer.mock.calls[0] as any[])[0];
       expect(input.lifeExpectancy).toBe(97);
       expect(input.incomeStreams).toEqual([
-        { label: 'Social Security', annualAmount: 37_200, startAge: 70, inflationAdjusted: true },
-        { label: 'your partner\'s Social Security', annualAmount: 32_000, startAge: 69, inflationAdjusted: true, endAge: 95 },
+        { label: 'Social Security', annualAmount: 37_200, startAge: 70, inflationAdjusted: true, endAge: 95 },
+        { label: 'your partner\'s Social Security', annualAmount: 32_000, startAge: 69, inflationAdjusted: true },
+        // The user's $37,200 is now the larger: the partner is paid $5,200 above their own.
+        { label: 'your partner\'s survivor benefit on your record', annualAmount: 5_200, startAge: 95, inflationAdjusted: true },
       ]);
     });
 
@@ -249,8 +252,10 @@ describe('retirement scenario runner', () => {
       // The partner reaches 95 at the user's 97 now, before the user reaches 100.
       expect(input.lifeExpectancy).toBe(100);
       expect(input.incomeStreams).toEqual([
-        { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true, endAge: 97 },
-        { label: 'your partner\'s Social Security', annualAmount: 32_000, startAge: 69, inflationAdjusted: true },
+        { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
+        { label: 'your partner\'s Social Security', annualAmount: 32_000, startAge: 69, inflationAdjusted: true, endAge: 97 },
+        // The user outlives the partner and is paid their $32,000: $2,000 above their own.
+        { label: 'survivor benefit on your partner\'s record', annualAmount: 2_000, startAge: 97, inflationAdjusted: true },
       ]);
     });
 

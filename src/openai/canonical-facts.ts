@@ -5,7 +5,7 @@ import { isProviderIdentifierLabel } from '../services/holding-label';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 import { incomeOfStream } from '../services/household';
-import { householdIncomeFactRows, householdTimelineFactRows } from './household-evidence';
+import { householdIncomeFactRows, householdSocialSecurityFactRows, householdTimelineFactRows } from './household-evidence';
 import { questionMentionsSecurity } from './security-question-match';
 import {
   STATED_FIGURE_DEFINITIONS,
@@ -811,9 +811,10 @@ export function buildCanonicalFactPack(
       : undefined;
     for (const stream of projectionIncome) {
       const { owner, kind } = incomeOfStream(stream);
-      // The partner's incomes, and every income's end, are the household's facts below.
-      // Skip even when `_household` is absent so a partner stream is never labeled as the user's.
-      if (owner === 'partner') continue;
+      // The partner's incomes, every income's end, and spousal and survivor
+      // benefits are the household's facts below. Skip even when `_household`
+      // is absent so a partner stream is never labeled as the user's.
+      if (owner === 'partner' || kind === 'spousal' || kind === 'survivor') continue;
       const pension = kind === 'pension';
       const key = pension ? 'retirement_pension' : 'retirement_social_security';
       const claiming = pension ? undefined : incomeOrigins?.socialSecurity?.claiming;
@@ -851,6 +852,7 @@ export function buildCanonicalFactPack(
     if (household) {
       const rows = [
         ...householdIncomeFactRows(projectionIncome, household),
+        ...householdSocialSecurityFactRows(household),
         ...householdTimelineFactRows(household, retirement._storedInputParams?.survivorSpending),
       ];
       for (const row of rows) {
