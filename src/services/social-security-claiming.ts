@@ -14,8 +14,9 @@
  * - Claiming after FRA adds delayed retirement credits of 8% a year (2/3 of 1%
  *   a month), up to 70; nothing more is earned after that.
  *
- * Only the worker's own retirement benefit: spousal and survivor benefits
- * follow other rules and are not modeled.
+ * Only the worker's own retirement benefit: spousal benefits follow other
+ * rules and are not modeled. A couple's survivor keeps the larger of their two
+ * benefits (`household.ts`).
  */
 
 import type { SavableFigure } from '../openai/save-offer';
@@ -152,10 +153,16 @@ function money(value: number): string {
 }
 
 /** The same, as a clause inside a list of assumptions. */
-export function describeClaimingAdjustmentBriefly(adjustment: ClaimingAdjustment): string {
-  return `the ${money(adjustment.fromAmount)} a year you gave for claiming at ${adjustment.fromAge}, moved to ` +
+export function describeClaimingAdjustmentBriefly(
+  adjustment: ClaimingAdjustment,
+  /** Whose benefit it is: the user's own, or their partner's. */
+  whose: 'user' | 'partner' = 'user'
+): string {
+  const gave = whose === 'partner' ? 'you gave for them' : 'you gave';
+  const age = whose === 'partner' ? 'their age' : 'your age';
+  return `the ${money(adjustment.fromAmount)} a year ${gave} for claiming at ${adjustment.fromAge}, moved to ` +
     `${adjustment.toAge} by Social Security's own rules, with full retirement age ` +
-    `${describeFullRetirementAge(adjustment.fullRetirementAge)} from your age`;
+    `${describeFullRetirementAge(adjustment.fullRetirementAge)} from ${age}`;
 }
 
 /**

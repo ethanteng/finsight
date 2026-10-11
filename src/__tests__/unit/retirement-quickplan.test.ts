@@ -95,6 +95,18 @@ describe('withdrawal simulator income offset', () => {
     expect(outcome.finalValue).toBeCloseTo(100_000, 6);
   });
 
+  it('spends the survivor\'s amount from the month the first of a couple dies', () => {
+    const mapping = cashOnlyMapping();
+    // $12k a year for the couple, then three quarters of it from month 12.
+    const outcome = simulateWithdrawals(mapping, 100_000, flatSequence(24), 12_000, {
+      spendingChange: { startMonth: 12, factor: 0.75 },
+    });
+    expect(outcome.finalValue).toBeCloseTo(100_000 - 12_000 - 9_000, 6);
+    expect(() => simulateWithdrawals(mapping, 100_000, flatSequence(12), 12_000, {
+      spendingChange: { startMonth: 0, factor: -1 },
+    })).toThrow(/spending change/);
+  });
+
   it('rejects a negative or non-finite income offset', () => {
     const mapping = cashOnlyMapping();
     expect(() =>

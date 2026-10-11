@@ -5,6 +5,7 @@
  */
 
 import { INCOME_INFLATION_OPTIONS, type IncomeInflation } from '../services/stated-figures';
+import type { StatedPartner } from '../services/household';
 
 export interface RetirementInputTurn {
   question: string;
@@ -28,8 +29,19 @@ export interface ExtractedRetirementInputs {
   pensionAnnual?: number;
   pensionStartAge?: number;
   pensionInflation?: IncomeInflation;
+  /** A spouse or partner: their age today and their own incomes, on their own ages. */
+  partnerAge?: number;
+  partnerSocialSecurityAnnual?: number;
+  partnerSocialSecurityStartAge?: number;
+  partnerSocialSecurityAmountAge?: number;
+  partnerPensionAnnual?: number;
+  partnerPensionStartAge?: number;
+  partnerPensionInflation?: IncomeInflation;
+  partnerPlanThroughAge?: number;
+  /** What one survivor would spend a year, in today's dollars. */
+  survivorAnnualSpending?: number;
   /** The words each value came from, for the answer to cite and Show the Math to display. */
-  sources: Partial<Record<ExtractedField | 'pensionInflation', string>>;
+  sources: Partial<Record<ExtractedField | 'pensionInflation' | 'partnerPensionInflation', string>>;
 }
 
 type ExtractedField =
@@ -43,7 +55,15 @@ type ExtractedField =
   | 'socialSecurityAmountAge'
   | 'annualContributionAmount'
   | 'pensionAnnual'
-  | 'pensionStartAge';
+  | 'pensionStartAge'
+  | 'partnerAge'
+  | 'partnerSocialSecurityAnnual'
+  | 'partnerSocialSecurityStartAge'
+  | 'partnerSocialSecurityAmountAge'
+  | 'partnerPensionAnnual'
+  | 'partnerPensionStartAge'
+  | 'partnerPlanThroughAge'
+  | 'survivorAnnualSpending';
 
 const FIELDS: ExtractedField[] = [
   'currentAge',
@@ -57,6 +77,14 @@ const FIELDS: ExtractedField[] = [
   'annualContributionAmount',
   'pensionAnnual',
   'pensionStartAge',
+  'partnerAge',
+  'partnerSocialSecurityAnnual',
+  'partnerSocialSecurityStartAge',
+  'partnerSocialSecurityAmountAge',
+  'partnerPensionAnnual',
+  'partnerPensionStartAge',
+  'partnerPlanThroughAge',
+  'survivorAnnualSpending',
 ];
 
 /**
@@ -84,6 +112,15 @@ const RANGES: Record<ExtractedField, { min: number; max: number; integer: boolea
   annualContributionAmount: { min: 0, max: 100_000_000, integer: false },
   pensionAnnual: { min: 0, max: 10_000_000, integer: false },
   pensionStartAge: { min: 30, max: 95, integer: true },
+  // Where Your numbers keeps the same figures.
+  partnerAge: { min: 18, max: 90, integer: true },
+  partnerSocialSecurityAnnual: { min: 0, max: 250_000, integer: false },
+  partnerSocialSecurityStartAge: { min: 50, max: 80, integer: true },
+  partnerSocialSecurityAmountAge: { min: 62, max: 70, integer: true },
+  partnerPensionAnnual: { min: 0, max: 10_000_000, integer: false },
+  partnerPensionStartAge: { min: 30, max: 95, integer: true },
+  partnerPlanThroughAge: { min: 60, max: 110, integer: true },
+  survivorAnnualSpending: { min: 1_000, max: 10_000_000, integer: false },
 };
 
 /** Drop anything outside the range a real plan occupies; keep the rest. */
@@ -102,11 +139,13 @@ export function validateExtractedInputs(raw: unknown): ExtractedRetirementInputs
     const source = rawSources[field];
     if (typeof source === 'string' && source.trim()) result.sources[field] = source.trim();
   }
-  const inflation = record.pensionInflation;
-  if (typeof inflation === 'string' && (INCOME_INFLATION_OPTIONS as readonly string[]).includes(inflation)) {
-    result.pensionInflation = inflation as IncomeInflation;
-    const source = rawSources.pensionInflation;
-    if (typeof source === 'string' && source.trim()) result.sources.pensionInflation = source.trim();
+  for (const field of ['pensionInflation', 'partnerPensionInflation'] as const) {
+    const inflation = record[field];
+    if (typeof inflation === 'string' && (INCOME_INFLATION_OPTIONS as readonly string[]).includes(inflation)) {
+      result[field] = inflation as IncomeInflation;
+      const source = rawSources[field];
+      if (typeof source === 'string' && source.trim()) result.sources[field] = source.trim();
+    }
   }
 
   // Withdrawals start at retirement unless the conversation said otherwise.
@@ -114,4 +153,22 @@ export function validateExtractedInputs(raw: unknown): ExtractedRetirementInputs
     result.withdrawalStartAge = result.retirementAge;
   }
   return result;
+}
+
+/** What the user said about a partner in this decision, or undefined when nothing. */
+export function statedPartnerOf(inputs: ExtractedRetirementInputs | undefined): StatedPartner | undefined {
+  if (!inputs) return undefined;
+  const partner: StatedPartner = {
+    age: inputs.partnerAge,
+    socialSecurityAnnual: inputs.partnerSocialSecurityAnnual,
+    socialSecurityStartAge: inputs.partnerSocialSecurityStartAge,
+    socialSecurityAmountAge: inputs.partnerSocialSecurityAmountAge,
+    pensionAnnual: inputs.partnerPensionAnnual,
+    pensionStartAge: inputs.partnerPensionStartAge,
+    pensionInflation: inputs.partnerPensionInflation,
+    planThroughAge: inputs.partnerPlanThroughAge,
+    survivorAnnualSpending: inputs.survivorAnnualSpending,
+  };
+  const said = Object.fromEntries(Object.entries(partner).filter(([, value]) => value !== undefined)) as StatedPartner;
+  return Object.keys(said).length > 0 ? said : undefined;
 }

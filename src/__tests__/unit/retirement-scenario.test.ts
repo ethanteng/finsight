@@ -7,6 +7,7 @@ import {
   runRetirementScenario,
 } from '../../scenarios/retirement-scenario';
 import type { RetirementAnalysisOutput } from '../../retirement-analytics';
+import { householdTimeline } from '../../services/household';
 
 function analysis(survivalRate = 0.8): RetirementAnalysisOutput {
   return {
@@ -159,6 +160,65 @@ describe('retirement scenario runner', () => {
       { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true },
       { label: 'pension or other income', annualAmount: 20_000, startAge: 55, inflationAdjusted: false },
     ]);
+  });
+
+  describe('with a partner', () => {
+    /** The user 50, their partner 48 with the larger benefit: the plan runs to the user's 97. */
+    function coupleSnapshot() {
+      const data = snapshot();
+      const plan = { age: 48, planThroughAge: 95, socialSecurity: { annualAmount: 32_000, startAge: 67, quote: { amount: 32_000, age: 67 } } };
+      const timeline = householdTimeline({ currentAge: 50, userPlanThroughAge: 95, partner: plan });
+      Object.assign(data.retirementAnalysis._storedInputParams, {
+        lifeExpectancy: 97,
+        incomeStreams: [
+          { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true, endAge: 95 },
+          { label: 'your partner\'s Social Security', annualAmount: 32_000, startAge: 69, inflationAdjusted: true },
+        ],
+      });
+      data.retirementAnalysis._household = {
+        plan,
+        origins: { age: 'stated', socialSecurityAnnual: 'stated', socialSecurityStartAge: 'default', planThroughAge: 'default' },
+        timeline,
+      };
+      return data;
+    }
+
+    it('keeps the larger benefit for the survivor when claiming later makes the user\'s the larger', async () => {
+      const analyzer = jest.fn(async () => analysis(0.85));
+      await runRetirementScenario(coupleSnapshot(), {
+        requested: true,
+        primary: {
+          type: 'historical_cpi',
+          overrides: { socialSecurityStartAge: 70, sources: { socialSecurityStartAge: 'claim at 70' } },
+        },
+      }, analyzer);
+
+      const input = (analyzer.mock.calls[0] as any[])[0];
+      expect(input.lifeExpectancy).toBe(97);
+      expect(input.incomeStreams).toEqual([
+        { label: 'Social Security', annualAmount: 37_200, startAge: 70, inflationAdjusted: true },
+        { label: 'your partner\'s Social Security', annualAmount: 32_000, startAge: 69, inflationAdjusted: true, endAge: 95 },
+      ]);
+    });
+
+    it('moves the user\'s own planning age, and the household\'s horizon with it', async () => {
+      const analyzer = jest.fn(async () => analysis(0.85));
+      await runRetirementScenario(coupleSnapshot(), {
+        requested: true,
+        primary: {
+          type: 'historical_cpi',
+          overrides: { lifeExpectancy: 100, sources: { lifeExpectancy: 'if I live to 100' } },
+        },
+      }, analyzer);
+
+      const input = (analyzer.mock.calls[0] as any[])[0];
+      // The partner reaches 95 at the user's 97 now, before the user reaches 100.
+      expect(input.lifeExpectancy).toBe(100);
+      expect(input.incomeStreams).toEqual([
+        { label: 'Social Security', annualAmount: 30_000, startAge: 67, inflationAdjusted: true, endAge: 97 },
+        { label: 'your partner\'s Social Security', annualAmount: 32_000, startAge: 69, inflationAdjusted: true },
+      ]);
+    });
   });
 
   it('claims the baseline\'s Social Security at another age by Social Security\'s rules', async () => {

@@ -4,7 +4,8 @@ import { mergeLabelKeyedTotals } from '../services/label-normalization';
 import { isProviderIdentifierLabel } from '../services/holding-label';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
-import { PENSION_LABEL } from './retirement-income';
+import { incomeOfStream } from '../services/household';
+import { householdIncomeFactRows, householdTimelineFactRows } from './household-evidence';
 import { questionMentionsSecurity } from './security-question-match';
 import {
   STATED_FIGURE_DEFINITIONS,
@@ -805,8 +806,14 @@ export function buildCanonicalFactPack(
     // what they are.
     const projectionIncome = retirement._storedInputParams?.incomeStreams ?? [];
     const incomeOrigins = retirement._incomeOrigins;
+    const household = retirement._household && !('missingAge' in retirement._household)
+      ? retirement._household
+      : undefined;
     for (const stream of projectionIncome) {
-      const pension = stream.label === PENSION_LABEL;
+      const { owner, kind } = incomeOfStream(stream);
+      // The partner's incomes, and every income's end, are the household's facts below.
+      if (owner === 'partner' && household) continue;
+      const pension = kind === 'pension';
       const key = pension ? 'retirement_pension' : 'retirement_social_security';
       const claiming = pension ? undefined : incomeOrigins?.socialSecurity?.claiming;
       const amountLabel = !pension
@@ -838,6 +845,16 @@ export function buildCanonicalFactPack(
         'age',
         `retirementAnalysis.inputs.incomeStreams.${key}.startAge`
       );
+    }
+    // A partner's incomes, when each income stops, and the couple's timeline.
+    if (household) {
+      const rows = [
+        ...householdIncomeFactRows(projectionIncome, household),
+        ...householdTimelineFactRows(household, retirement._storedInputParams?.survivorSpending),
+      ];
+      for (const row of rows) {
+        addSnapshotFact(`retirement_${row.suffix}`, `${row.label} in the retirement projection`, row.value, row.unit, `retirementAnalysis.household.${row.suffix}`);
+      }
     }
     // What goes in each year until withdrawals begin, labelled with where it
     // came from. A linked figure is a typical month's, so its totals are

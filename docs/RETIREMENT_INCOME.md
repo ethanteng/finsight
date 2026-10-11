@@ -45,7 +45,7 @@ A Social Security benefit belongs to an age: claimed earlier it pays less, claim
 - **Full retirement age** comes from the birth year the user's current age implies: 66 for 1943–1954, rising two months a year to 67 for 1960 and later. Around a birthday that birth year can be a year off. That only matters for someone born 1955–1960, and only by two months.
 - **Claiming early** costs 5/9 of 1% a month for the first 36 months before full retirement age and 5/12 of 1% a month beyond that, back to 62.
 - **Claiming late** earns 2/3 of 1% a month after full retirement age, up to 70.
-- **Not modeled.** Spousal and survivor benefits follow other rules.
+- **Not modeled.** Spousal benefits follow other rules. A couple's survivor keeps the larger of their two benefits (`docs/RETIREMENT_HOUSEHOLD.md`).
 
 At a full retirement age of 67, $30,000 a year becomes $21,000 at 62 and $37,200 at 70.
 
@@ -72,6 +72,6 @@ A comparison that states its own amount, or the age its figure is for, is taken 
 
 ## Not yet
 
-- **Couples.** A spouse's benefit and survivor benefits are not modeled.
+- **Spousal benefits.** A partner's own Social Security and pension are counted, with the joint horizon and the survivor years (`docs/RETIREMENT_HOUSEHOLD.md`). A spousal benefit, paid on the other's record, is not.
 - **Earnings history.** The benefit is what the user states, or what they saved. Nothing estimates it from earnings.
 - **Other holdings what-ifs on income.** A holdings-based what-if can move the claiming age. It cannot change a benefit's amount or the pension.

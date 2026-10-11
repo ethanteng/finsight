@@ -54,6 +54,14 @@ const LABELS: Record<SaveOfferKey, string> = {
   socialSecurityStartAge: 'Social Security starts at',
   planThroughAge: 'Plan through age',
   allocation: 'Preset mix',
+  partnerAge: 'Your partner\'s age',
+  partnerSocialSecurityAnnual: 'Your partner\'s Social Security',
+  partnerSocialSecurityStartAge: 'Your partner claims Social Security at',
+  partnerRetirementIncome: 'Your partner\'s pension or other income',
+  partnerRetirementIncomeStartAge: 'Your partner\'s pension starts at',
+  partnerRetirementIncomeInflation: 'Your partner\'s pension rises with inflation',
+  partnerPlanThroughAge: 'Plan through your partner\'s age',
+  survivorAnnualSpending: 'What one of you would spend alone',
   investedBalance: 'Invested today',
 };
 
@@ -70,6 +78,10 @@ const AGE_KEYS: ReadonlySet<SaveOfferKey> = new Set([
   'retirementIncomeStartAge',
   'socialSecurityStartAge',
   'planThroughAge',
+  'partnerAge',
+  'partnerSocialSecurityStartAge',
+  'partnerRetirementIncomeStartAge',
+  'partnerPlanThroughAge',
 ]);
 
 function display(key: SaveOfferKey, value: number | string): string {

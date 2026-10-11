@@ -97,4 +97,32 @@ describe('Coast FIRE with income on its own schedule', () => {
     expect(result.bridgeReserve).toBe(0);
     expect(result.portfolioSpendingNeed).toBe(60_000);
   });
+
+  it('counts an income that stops before the plan ends at the level worth of the years it pays', () => {
+    // Zero real return: every year weighs the same, so the level amount is the
+    // share of the plan's years it is paid in.
+    const result = calculateCoastFireWithIncome(
+      { ...BASE, realReturnRate: 0 },
+      [{ owner: 'partner', kind: 'social_security', annualAmount: 20_000, startAge: 55, inflationAdjusted: true, endAge: 85 }],
+      { planThroughAge: 95 }
+    );
+    // Paid 30 of the 40 years from 55 to 95.
+    expect(result.incomes[0].levelAmount).toBeCloseTo(15_000, 6);
+    expect(result.portfolioSpendingNeed).toBeCloseTo(45_000, 6);
+    expect(result.inflationPercent).toBeUndefined();
+  });
+
+  it('counts a survivor\'s lower spending as the level spending with the same value', () => {
+    const result = calculateCoastFireWithIncome(
+      { ...BASE, realReturnRate: 0 },
+      [],
+      { planThroughAge: 95, spendingChange: { fromAge: 75, annualAmount: 40_000 } }
+    );
+    // $60,000 for the 20 years from 55 to 75, then $40,000 for 20: $50,000 level.
+    expect(result.levelSpending).toBeCloseTo(50_000, 6);
+    expect(result.spendingChange).toEqual({ fromAge: 75, annualAmount: 40_000 });
+    expect(result.annualRetirementSpending).toBe(60_000);
+    expect(result.retirementTarget).toBeCloseTo(50_000 / 0.04, 6);
+  });
 });
+

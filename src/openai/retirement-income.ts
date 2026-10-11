@@ -10,6 +10,7 @@
  */
 
 import type { RetirementIncomeStream } from '../retirement-analytics/types';
+import { PARTNER_PENSION_LABEL, PENSION_LABEL, SOCIAL_SECURITY_LABEL } from '../services/household';
 import {
   benefitAtClaimingAge,
   socialSecurityQuoteAge,
@@ -26,8 +27,7 @@ import {
 /** Social Security's start when none is named: the full retirement age for anyone born after 1959. */
 export const DEFAULT_PROJECTION_SOCIAL_SECURITY_START_AGE = 67;
 
-export const SOCIAL_SECURITY_LABEL = 'Social Security';
-export const PENSION_LABEL = 'pension or other income';
+export { SOCIAL_SECURITY_LABEL, PENSION_LABEL };
 
 /** Where a term came from: this decision, Your numbers, or a named default. */
 export type IncomeTermOrigin = 'stated' | 'saved' | 'default';
@@ -160,10 +160,17 @@ export function resolveRetirementIncome(args: {
 export function incomeForRetirementAge(
   streams: readonly RetirementIncomeStream[],
   origins: RetirementIncomeOrigins | undefined,
-  retirementAge: number | null
+  retirementAge: number | null,
+  /** Whether the partner's pension start was only ever the household's retirement. */
+  partnerPensionStartsAtRetirement = false
 ): RetirementIncomeStream[] {
-  if (retirementAge === null || origins?.pension?.startAge !== 'default') return [...streams];
-  return streams.map((stream) => stream.label === PENSION_LABEL ? { ...stream, startAge: retirementAge } : stream);
+  if (retirementAge === null) return [...streams];
+  return streams.map((stream) =>
+    (stream.label === PENSION_LABEL && origins?.pension?.startAge === 'default') ||
+    (stream.label === PARTNER_PENSION_LABEL && partnerPensionStartsAtRetirement)
+      ? { ...stream, startAge: retirementAge }
+      : stream
+  );
 }
 
 /**

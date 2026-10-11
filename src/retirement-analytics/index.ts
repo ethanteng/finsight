@@ -198,6 +198,19 @@ export async function analyzeRetirementPortfolio(
     indexed: stream.inflationAdjusted !== false,
   }));
 
+  // Spending after the first death, as a share of what the couple spends, so
+  // it follows whatever path the withdrawal policy gives the couple's amount.
+  const survivorSpending = input.survivorSpending;
+  if (survivorSpending && (
+    !Number.isFinite(survivorSpending.annualAmount) || survivorSpending.annualAmount < 0 ||
+    !Number.isFinite(survivorSpending.fromAge)
+  )) {
+    throw new Error('Survivor spending must be a finite, non-negative amount from a finite age');
+  }
+  const spendingChange = survivorSpending && input.annualWithdrawalAmount > 0
+    ? { startMonth: monthsFromNow(survivorSpending.fromAge), factor: survivorSpending.annualAmount / input.annualWithdrawalAmount }
+    : undefined;
+
   // Model the full path from today through life expectancy, including explicit
   // pre-withdrawal contributions when the scenario supplies them.
   const timeline = buildRetirementTimeline(input);
@@ -221,6 +234,12 @@ export async function analyzeRetirementPortfolio(
         ? `${amount} a year of ${what} in today's dollars is paid ${period} and rises with each historical sequence's CPI`
         : `${amount} a year of ${what} is paid ${period} as a fixed dollar amount, so each historical sequence's inflation erodes it, including before it starts`) +
       '; it reduces that month\'s portfolio withdrawal, and income above that month\'s spending is not reinvested'
+    );
+  }
+  if (survivorSpending && spendingChange) {
+    assumptions.push(
+      `From age ${survivorSpending.fromAge}, spending is $${Math.round(survivorSpending.annualAmount).toLocaleString('en-US')} ` +
+      'a year in today\'s dollars, what one survivor spends, in place of the couple\'s amount'
     );
   }
 
@@ -279,7 +298,7 @@ export async function analyzeRetirementPortfolio(
       modeledValue,
       sequence,
       input.annualWithdrawalAmount,
-      { withdrawalDelayMonths, withdrawalPolicy, annualContributionAmount, incomeStreams }
+      { withdrawalDelayMonths, withdrawalPolicy, annualContributionAmount, incomeStreams, ...(spendingChange && { spendingChange }) }
     )
   );
 

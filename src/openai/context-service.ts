@@ -3,7 +3,7 @@ import { UserTier } from '../data/types';
 import { dataOrchestrator } from '../data/orchestrator';
 import { Account, Transaction, UnifiedFinancialData, HomeData } from '../services/financial-data-service';
 import { TokenStatus } from '../services/token-validation-service';
-import { QuestionNeeds, FinancialContextSnapshot, TransactionSummaryItem, InvestmentSnapshot } from './types';
+import { QuestionNeeds, FinancialContextSnapshot, TransactionSummaryItem, InvestmentSnapshot, type RetirementHousehold } from './types';
 import { buildAccountSummaries } from './account-summary';
 import { incomeLinked, linkedDataFromSnapshot, NOTHING_LINKED, spendingLinked } from './linked-data';
 import {
@@ -25,13 +25,19 @@ import {
 import { generateDisclaimers, calculateConfidenceCeiling } from '../retirement-analytics/interpretation/uncertainty-quantifier';
 import type { DataQualityReport } from '../retirement-analytics/types';
 import { RETIREMENT_ANALYSIS_VERSION } from '../retirement-analytics/version';
-import type { ExtractedRetirementInputs } from './retirement-input-extraction';
+import { statedPartnerOf, type ExtractedRetirementInputs } from './retirement-input-extraction';
 import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-types';
 import { compactSearchQueryEvidence } from '../data/search-types';
 import type { SearchContext } from '../data/orchestrator';
 import type { PersonalContextValues } from '../profile/personal-context';
 import { parseStatedFigures, savedNumber, type StatedFigures } from '../services/stated-figures';
 import { resolveRetirementIncome, sameIncomeStreams, type RetirementIncomeOrigins } from './retirement-income';
+import {
+  householdIncomeStreams,
+  householdTimeline,
+  resolvePartner,
+  survivorSpendingFor,
+} from '../services/household';
 import {
   accountsWithErrors,
   linkedContributions,
@@ -611,6 +617,9 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     ...(userOverrides.statedFigures && Object.keys(userOverrides.statedFigures).length > 0 && {
       statedFigures: userOverrides.statedFigures,
     }),
+    // Every retirement calculator plans for the same partner, so it is read
+    // once from the planner rather than by each calculator's own fields.
+    ...(statedPartnerOf(plannedRetirementInputs) && { statedPartner: statedPartnerOf(plannedRetirementInputs) }),
     homeValueSummary,
     homeValueData,
     financialSummary: financialSummary || undefined,
@@ -903,6 +912,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
   let assumedInputs: AssumedRetirementInputs = {};
   let incomeOrigins: RetirementIncomeOrigins | undefined = undefined;
   let contributionOrigin: RetirementContributionOrigin | undefined = undefined;
+  let household: RetirementHousehold | undefined = undefined;
   const withSources = (analysis: RetirementAnalysis): RetirementAnalysisResolution => {
     const covered = withCoverage(analysis);
     const assumed = Object.keys(assumedInputs).length > 0 ? { _assumedInputs: assumedInputs } : {};
@@ -913,6 +923,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         ...assumed,
         ...(incomeOrigins && { _incomeOrigins: incomeOrigins }),
         ...(contributionOrigin && { _contributionOrigin: contributionOrigin }),
+        ...(household && { _household: household }),
       },
     };
   };
@@ -955,6 +966,10 @@ async function fetchOrCreateRetirementAnalysis(args: {
   const savedSpending = savedNumber(statedFigures, 'annualRetirementSpending')?.value;
   const storedInputForResolution = {
     ...withoutStoredAssumptions(storedInput, storedAssumptions),
+    // With a partner the run's horizon is the household's, which can run past
+    // the user's own planning age; the user's own is stored beside it, and that
+    // is what a later run reads back, or the horizon would grow with every run.
+    ...(typeof storedInput.userPlanThroughAge === 'number' && { lifeExpectancy: storedInput.userPlanThroughAge }),
     ...(savedSpending !== undefined && { annualWithdrawalAmount: savedSpending }),
   };
   const { getHistoricalDatasetVersion } = await import('../retirement-analytics/engine/historical-data-loader');
@@ -1024,8 +1039,37 @@ async function fetchOrCreateRetirementAnalysis(args: {
     currentAge,
   });
   incomeOrigins = income.origins;
+
+  // A partner: their incomes on the user's ages, the plan run until the
+  // younger of them reaches their planning age, and the survivor keeping the
+  // larger Social Security benefit. Without their age their incomes cannot
+  // be timed, and the answer asks for it.
+  const resolvedPartner = resolvePartner({
+    stated: statedPartnerOf(extracted),
+    statedFigures,
+    retirementAge: retirementAge ?? currentAge,
+    currentAge,
+  });
+  const partner = resolvedPartner && !('missingAge' in resolvedPartner) ? resolvedPartner : undefined;
+  const timeline = partner
+    ? householdTimeline({ currentAge, userPlanThroughAge: lifeExpectancy, partner: partner.plan })
+    : undefined;
+  const projectionIncome = partner && timeline
+    ? householdIncomeStreams(income.streams, partner.plan, timeline)
+    : income.streams;
+  const planHorizon = timeline?.horizonAge ?? lifeExpectancy;
+  const survivorSpending = partner && timeline ? survivorSpendingFor(partner.plan, timeline) : undefined;
+  household = resolvedPartner
+    ? 'missingAge' in resolvedPartner
+      ? { missingAge: true }
+      : { ...resolvedPartner, timeline: timeline! }
+    : undefined;
+
   const storedIncome = Array.isArray(storedAnalysisInput.incomeStreams) ? storedAnalysisInput.incomeStreams : [];
-  const sameIncome = sameIncomeStreams(storedIncome, income.streams);
+  const sameIncome = sameIncomeStreams(storedIncome, projectionIncome);
+  const storedSurvivorSpending = storedAnalysisInput.survivorSpending as { fromAge?: number; annualAmount?: number } | undefined;
+  const sameSurvivorSpending = (storedSurvivorSpending?.fromAge ?? null) === (survivorSpending?.fromAge ?? null) &&
+    (storedSurvivorSpending?.annualAmount ?? null) === (survivorSpending?.annualAmount ?? null);
 
   // What goes in each year until withdrawals begin: what the user said here,
   // then Your numbers, then what the linked accounts receive in a typical
@@ -1061,8 +1105,9 @@ async function fetchOrCreateRetirementAnalysis(args: {
       storedInput.retirementAge === retirementAge &&
       storedInput.annualWithdrawalAmount === annualWithdrawalAmount &&
       storedInput.withdrawalStartAge === withdrawalStartAge &&
-      (storedInput.lifeExpectancy ?? 95) === lifeExpectancy &&
+      (storedInput.lifeExpectancy ?? 95) === planHorizon &&
       sameIncome &&
+      sameSurvivorSpending &&
       (storedInput.annualContributionAmount ?? 0) === contribution.annualAmount &&
       sameAssumptions(storedAssumptions, persistableAssumptions(assumed)) &&
       storedAnalysisInput.analysisVersion === RETIREMENT_ANALYSIS_VERSION &&
@@ -1151,10 +1196,13 @@ async function fetchOrCreateRetirementAnalysis(args: {
       asOfDate: effectiveAsOfDate,
       currentAge,
       retirementAge,
-      lifeExpectancy,
+      // The household's horizon; the user's own planning age beside it.
+      lifeExpectancy: planHorizon,
+      userPlanThroughAge: lifeExpectancy,
       annualWithdrawalAmount,
       withdrawalStartAge,
-      incomeStreams: income.streams,
+      incomeStreams: projectionIncome,
+      ...(survivorSpending && { survivorSpending }),
       annualContributionAmount: contribution.annualAmount,
       // Which of these were assumed, so a later run never reads them back as
       // the user's plan. A figure from an earlier conversation is theirs and
@@ -1194,6 +1242,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         lifeExpectancy: analysisInput.lifeExpectancy,
         incomeStreams: analysisInput.incomeStreams,
         annualContributionAmount: analysisInput.annualContributionAmount,
+        ...(survivorSpending && { survivorSpending }),
       };
       // No `_evidence`: that cites a stored record, and this one is not stored.
       return withSources(degradedResult);
@@ -1236,6 +1285,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       lifeExpectancy: analysisInput.lifeExpectancy,
       incomeStreams: analysisInput.incomeStreams,
       annualContributionAmount: analysisInput.annualContributionAmount,
+      ...(survivorSpending && { survivorSpending }),
     };
     resultWithInputs._evidence = {
       recordId: createdAnalysis.id,
