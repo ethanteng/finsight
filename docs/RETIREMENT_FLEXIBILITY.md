@@ -40,14 +40,14 @@ The returns-only trigger cuts only in genuinely bad markets, and buys almost not
 2. **Your numbers.** `spendingCutPercent`, a whole percent from 0 to 75.
 3. **Otherwise, the comparison.** Nothing is assumed: the plan keeps fixed spending and a 20% cut runs beside it (`COMPARISON_SPENDING_CUT`).
 
-A stated or saved zero, or an essential floor at or above the plan's spending, means no cut and no comparison. A cut of more than 75% of spending is a misreading: it is dropped and the next source applies. A plan with no spending level (the stated plan's `rates` mode) has nothing to cut.
+A stated or saved zero, or an essential floor at or above the plan's spending, means no cut and no comparison. A cut of more than 75% of spending is a misreading: it is dropped and the next source applies, and the resolution is marked `ignoredStated` so the answer says so ("I did not use the spending cut you described: it comes to more than 75% of the plan's spending, which I took as a misreading.") before what it ran instead. A plan with no spending level (the stated plan's `rates` mode) has nothing to cut.
 
 ## Each calculator
 
 - **Holdings-based projection** (`src/openai/context-service.ts`). The run takes the user's cut, or the comparison. Both are part of the stored input and the seven-day cache match, and the analysis version is 12, so a run cached before this change recomputes. The resolution rides on the analysis as `_spendingFlexibility`.
   - **What-ifs** (`src/scenarios/retirement-scenario.ts`) keep the user's cut and never run the comparison.
 - **Stated plan** (`src/scenarios/stated-retirement-plan-scenario.ts`, `src/services/retirement-quickplan.ts`). The quick plan takes the cut as an optional third argument. The user's cut runs in every case and alternative; the comparison runs beside the main case only. The public calculator never sends one.
-- **Coast FIRE** does not model it: its number is a straight line, and its market-history test runs fixed spending.
+- **Coast FIRE** (`src/scenarios/coast-fire-scenario.ts`). The straight-line number spends in full every year, and the answer says so whenever the user's cut ran. The market-history test runs the cut on the quick plan's third argument: the user's cut in every case's test, which its survival rate then includes, or the comparison beside the main case's test only. The cut is part of the test key and of a case's id when the user gave one, so a cached or deduplicated test is never reused across cuts. The planner's Coast FIRE instructions point the cut to the retirement inputs, where `snapshot.statedSpendingCut` comes from.
 
 ## In the answer
 
@@ -57,9 +57,9 @@ The wording is shared (`src/openai/spending-flexibility-evidence.ts`):
 - **The comparison** is its own sentence after the assumptions: what the plan would last in with a 20% cut against fixed spending, how often and how long it would have cut, and an invitation to give their own number. It is left out when fixed spending already lasts in every sequence.
 - **No cut** is stated as such.
 
-The facts publish the cut and what it did, `spending_cut_*` for the user's and `flexible_comparison_*` for the comparison, each with the calculator's prefix. The comparison's survival rate is its own fact, labelled as a comparison the user has not chosen, so it is never mistaken for the plan's.
+The facts publish the cut and what it did, `spending_cut_*` for the user's and `flexible_comparison_*` for the comparison, each with the calculator's prefix (Coast FIRE's with `history_`, beside its other market-history facts, whose survival labels then name the cut). The comparison's survival rate is its own fact, labelled as a comparison the user has not chosen, so it is never mistaken for the plan's.
 
-"Use these next time?" offers a cut the user stated, as a whole percent.
+"Use these next time?" offers a cut the user stated, as a whole percent, from the stated plan or, once its market-history test has run on it, Coast FIRE.
 
 ## Not yet
 
@@ -67,4 +67,4 @@ The facts publish the cut and what it did, `spending_cut_*` for the user's and `
 - **Essential and discretionary spending** as separate lines. The cut is one share of the total.
 - **A what-if on the cut itself** ("what if we could cut 30%?") has no override field. The newest figure the user gives is the plan's.
 - **The sustainable-spending range** (the quick plan's `sustainableSpending`, the holdings `historicalWithdrawalRates`) is solved on fixed spending.
-- **Coast FIRE**, above.
+- **Coast FIRE's number itself**, a straight line, plans on full spending.

@@ -633,6 +633,40 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
   });
   const claimingSummary = claiming.structuredResponse.summary;
   const claimingFacts = claiming.showTheMathData!.evidenceManifest.facts;
+
+  // "What if my wife claims at 70?": her benefit moves by the same rules, at
+  // her own age, in a comparison beside the plan as it stands.
+  const partnerClaimingVariant = (values: Record<string, number>) => ({
+    overrides: {
+      ...Object.fromEntries([...coastFields, 'partnerSocialSecurityStartAge'].map(field => [field, values[field] ?? null])),
+      sources: Object.fromEntries([...coastFields, 'partnerSocialSecurityStartAge'].map(field => [
+        field,
+        values[field] !== undefined ? (field === 'partnerSocialSecurityStartAge' ? 'if my wife waits until 70' : savedPlanQuestion) : null,
+      ])),
+    },
+  });
+  const partnerClaimingSnapshot = { ...savedIncomeSnapshot, statedPartner: { age: 36, socialSecurityAnnual: 24_000, married: true } };
+  const partnerClaiming = await runAskLincAnalysis({
+    question: 'What if my wife waits until 70 to claim?',
+    enableValidation: false,
+    evaluation: {
+      snapshot: partnerClaimingSnapshot,
+      contextPlan: {
+        ...coastPlan,
+        scenarioPlans: scenarioCalculatorRegistry.parsePlans({
+          coast_fire: {
+            requested: true,
+            primary: partnerClaimingVariant({ currentAge: 38, currentSavings: 500_000 }),
+            comparison: partnerClaimingVariant({ partnerSocialSecurityStartAge: 70 }),
+          },
+        }),
+      },
+      skipToneConfig: true,
+      model: () => jsonResponse('Her waiting raises her benefit, and what she would be paid as a survivor.'),
+    },
+  });
+  const partnerClaimingSummary = partnerClaiming.structuredResponse.summary;
+  const partnerClaimingFacts = partnerClaiming.showTheMathData!.evidenceManifest.facts;
   const coastNumberOf = (facts: typeof savedPlanFacts) =>
     facts.find(fact => fact.id.endsWith('_coast_fire_number'))?.value;
 
@@ -861,6 +895,20 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
         !claiming.structuredResponse.save_offer?.items.some(item => item.key === 'socialSecurityStartAge') &&
         claiming.showTheMathData!.evidenceManifest.validation.deterministic.valid,
       detail: 'Claiming a saved benefit later runs the benefit Social Security\'s rules pay at 70, names both amounts and the rule, and offers nothing from the what-if for saving.',
+    },
+    {
+      id: 'partner-claiming-later-moves-their-benefit',
+      category: 'calculator_follow_up',
+      passed: partnerClaimingSummary.includes(
+        'I compared your partner claiming Social Security at 67 with your partner claiming Social Security at 70.'
+      ) &&
+        partnerClaimingSummary.includes(
+          'If your partner claims at 70 instead of 67, their Social Security of $24,000 a year becomes $29,760 by Social Security\'s own rules'
+        ) &&
+        partnerClaimingFacts.some(fact => fact.id.endsWith('_partner_social_security_annual') && fact.value === 29_760) &&
+        !partnerClaiming.structuredResponse.save_offer?.items.some(item => item.key === 'partnerSocialSecurityStartAge') &&
+        partnerClaiming.showTheMathData!.evidenceManifest.validation.deterministic.valid,
+      detail: 'Asking when a partner claims runs their benefit at that age by Social Security\'s rules beside the plan as it stands, names both amounts, and offers nothing from the what-if for saving.',
     },
     {
       id: 'retirement-never-invents-spending',

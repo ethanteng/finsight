@@ -633,6 +633,53 @@ describe('context planner', () => {
     expect(withContribution(30_000, 30_000)?.annualContributionAmount).toBeUndefined();
   });
 
+  it('keeps the partner\'s claiming age the plan states and withholds only a what-if one', () => {
+    const withPartnerClaim = (stated: number, whatIf: number) => {
+      const raw = rawPlan(['retirement_analysis']);
+      raw.retirementInputs.partnerAge = 60;
+      raw.retirementInputs.sources.partnerAge = 'my wife is 60';
+      raw.retirementInputs.partnerSocialSecurityAnnual = 24_000;
+      raw.retirementInputs.sources.partnerSocialSecurityAnnual = 'she gets $24,000';
+      raw.retirementInputs.partnerSocialSecurityStartAge = stated;
+      raw.retirementInputs.sources.partnerSocialSecurityStartAge = `she claims at ${stated}`;
+      raw.scenarios.retirement = {
+        requested: true,
+        primary: {
+          type: 'historical_cpi',
+          annualRate: null,
+          source: null,
+          overrides: {
+            annualWithdrawalAmount: null,
+            annualContributionAmount: null,
+            retirementAge: null,
+            withdrawalStartAge: null,
+            lifeExpectancy: null,
+            socialSecurityStartAge: null,
+            partnerSocialSecurityStartAge: whatIf,
+            sources: {
+              annualWithdrawalAmount: null,
+              annualContributionAmount: null,
+              retirementAge: null,
+              withdrawalStartAge: null,
+              lifeExpectancy: null,
+              socialSecurityStartAge: null,
+              partnerSocialSecurityStartAge: `what if she waits until ${whatIf}`,
+            },
+          },
+        },
+        comparison: { type: 'none', annualRate: null, source: null, overrides: {} },
+      };
+      return parseContextPlan(raw).retirementInputs;
+    };
+
+    // "She claims at 67; what if she waits until 70?": 67 is the plan.
+    expect(withPartnerClaim(67, 70)).toMatchObject({ partnerSocialSecurityAnnual: 24_000, partnerSocialSecurityStartAge: 67 });
+    // The what-if read twice is not the plan.
+    const whatIf = withPartnerClaim(70, 70);
+    expect(whatIf?.partnerSocialSecurityAnnual).toBe(24_000);
+    expect(whatIf?.partnerSocialSecurityStartAge).toBeUndefined();
+  });
+
   it('falls back to the variant values when the baseline has nothing to run on', () => {
     const scenario: any = {
       requested: true,

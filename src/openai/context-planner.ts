@@ -118,14 +118,19 @@ const BASELINE_PLAN_FIELDS = [
 ] as const;
 
 /**
- * Of those, the ones a holdings what-if can set too. A stated value is
+ * Of those, the ones a holdings what-if can set too, the partner's claiming
+ * age included. A stated value is
  * withheld only when it is a variant's own: "I get $30,000 at 62; what if I
  * wait until 70?" and "I save $20,000 a year; what if I saved $30,000?" each
  * state the plan beside the what-if, and dropping the plan's value would
  * leave the baseline on a default the what-if then departs from. The same
  * value in both is the what-if read twice.
  */
-const WITHHELD_WHEN_A_WHAT_IF_FIELDS = ['socialSecurityStartAge', 'annualContributionAmount'] as const;
+const WITHHELD_WHEN_A_WHAT_IF_FIELDS = [
+  'socialSecurityStartAge',
+  'annualContributionAmount',
+  'partnerSocialSecurityStartAge',
+] as const;
 
 /**
  * Keep hypothetical scenario values out of the canonical baseline. The same

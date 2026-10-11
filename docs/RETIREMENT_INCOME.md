@@ -68,7 +68,7 @@ A comparison that states its own amount, or the age its figure is for, is taken 
 
 - **Stated plan and Coast FIRE.** Both read `socialSecurityAmountAge` and move the benefit, in the straight line and in the market-history test.
 - **Holdings-based projection.** The baseline moves a figure the user gave for another age. A what-if can set `socialSecurityStartAge`, and the baseline's benefit moves from its own start age to that one. The what-if is reported as unavailable, not run as no change, when the plan has no Social Security, when the benefit is already being paid, or when the claiming age is already past.
-- **Planner boundary.** The planner's retirement inputs withhold a claiming age only when it equals a what-if's. "I get $30,000 at 62; what if I wait until 70?" keeps 62 as the plan. Withholding it would leave the benefit on the default 67 before the what-if moved it.
+- **Planner boundary.** The planner's retirement inputs withhold a claiming age only when it equals a what-if's. "I get $30,000 at 62; what if I wait until 70?" keeps 62 as the plan. Withholding it would leave the benefit on the default 67 before the what-if moved it. A partner's claiming age follows the same rule, and has a what-if of its own in every calculator (`docs/RETIREMENT_HOUSEHOLD.md`).
 
 ## Not yet
 
