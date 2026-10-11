@@ -1446,9 +1446,6 @@ export interface CashFlowAdjustmentSummary extends ForecastAdjustment, CashFlowI
   amount: number | null;
 }
 
-/** The report lists at most this many typical payees in each direction. */
-const TYPICAL_PAYEES_LISTED = 25;
-
 export interface CashFlowPlannedEventSummary extends PlannedCashFlowEvent {
   nextDate: CalendarDate | null;
   occurrencesInRange: number;
@@ -1503,7 +1500,7 @@ export interface CashFlowReport {
   oneOffs: Array<{ id: string; date: CalendarDate; label: string; flow: CashFlowDirection; amount: number; category: string | null }>;
   /** How large a non-repeating amount must be to be a one-off, by direction; null without a basis. */
   oneOffThresholds: Record<CashFlowDirection, number> | null;
-  /** Largest first, for the sides read from transactions. */
+  /** Every payee behind the typical rates, largest first, for the sides read from transactions. */
   typicalPayees: CashFlowTypicalPayeeSummary[];
   /** The user's choices about what the forecast counts. */
   adjustments: CashFlowAdjustmentSummary[];
@@ -2002,7 +1999,6 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
     },
     typicalPayees: (['income', 'spending'] as const).flatMap(flow => model.typicalPayees
       .filter(payee => payee.flow === flow)
-      .slice(0, TYPICAL_PAYEES_LISTED)
       .map(payee => ({
         flow,
         payeeKey: payee.counterpartyKey,

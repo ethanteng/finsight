@@ -296,6 +296,24 @@ describe('buildCashFlowReport', () => {
     expect(september.total).toEqual(september.actual);
   });
 
+  it('lists every payee behind typical spending, however many there are', () => {
+    // Forty small shops, each visited once, all in the rate.
+    const letters = 'abcdefghijklmnopqrstuvwxyz';
+    const shops = Array.from({ length: 40 }, (_, index) => tx(
+      'checking',
+      addDays('2026-07-10', index * 2),
+      'expense',
+      20 + index,
+      `Shop ${letters[Math.floor(index / 26)]}${letters[index % 26]}`
+    ));
+    const built = model({ transactions: [...transactions, ...shops] });
+    const spending = built.typicalPayees.filter(payee => payee.flow === 'spending');
+    expect(spending.length).toBeGreaterThan(40);
+    const listed = buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 }).typicalPayees
+      .filter(payee => payee.flow === 'spending');
+    expect(listed.map(payee => payee.payeeKey)).toEqual(spending.map(payee => payee.counterpartyKey));
+  });
+
   it('forecasts the days a stale snapshot has not seen', () => {
     const stale = model({ dataThrough: '2026-09-25', today: '2026-10-01' });
     const report = buildCashFlowReport(stale, { granularity: 'month', horizonMonths: 1 });
