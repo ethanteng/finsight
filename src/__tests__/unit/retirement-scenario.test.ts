@@ -360,6 +360,25 @@ describe('retirement scenario runner', () => {
     expect((analyzer.mock.calls[0] as any[])[0].annualContributionAmount).toBe(0);
   });
 
+  it('keeps the user\'s spending cut in a what-if, and never runs the comparison', async () => {
+    const analyzer = jest.fn(async () => analysis(0.85));
+    const data = snapshot();
+    data.retirementAnalysis._storedInputParams.spendingFlexibility = { cutShare: 0.25 };
+
+    const later = await runRetirementScenario(data, {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: { annualWithdrawalAmount: 45_000, sources: { annualWithdrawalAmount: 'spend $45k' } },
+      },
+    }, analyzer);
+    expect(later.status).toBe('completed');
+    const input = (analyzer.mock.calls[0] as any[])[0];
+    expect(input.spendingFlexibility).toEqual({ cutShare: 0.25 });
+    expect(input.spendingFlexibilityComparison).toBeUndefined();
+    if (later.status === 'completed') expect(later.scenarios[1].reusedBaseline).toBe(true);
+  });
+
   it('says there is no Social Security to move rather than comparing nothing', async () => {
     const analyzer = jest.fn(async () => analysis(0.85));
     const execution = await runRetirementScenario(snapshot(), {

@@ -3,8 +3,12 @@
 
 import {
   DEFAULT_SHORT_SERIES_POLICY,
+  PortfolioOutcome,
   RetirementAnalysisInput,
   RetirementAnalysisOutput,
+  SPENDING_CUT_TRIGGER,
+  SpendingFlexibility,
+  SpendingFlexibilityOutcome,
 } from './types';
 import { analyzePortfolio } from './engine/portfolio-analyzer';
 import {
@@ -242,6 +246,20 @@ export async function analyzeRetirementPortfolio(
       'a year in today\'s dollars, what one survivor spends, in place of the couple\'s amount'
     );
   }
+  const spendingFlexibility = input.spendingFlexibility;
+  const flexibilityComparison = spendingFlexibility ? undefined : input.spendingFlexibilityComparison;
+  for (const flexibility of [spendingFlexibility, flexibilityComparison]) {
+    if (flexibility && (!Number.isFinite(flexibility.cutShare) || flexibility.cutShare <= 0 || flexibility.cutShare >= 1)) {
+      throw new Error('A spending cut must be a share of spending above 0 and below 100%');
+    }
+  }
+  if (spendingFlexibility) {
+    assumptions.push(
+      `Spending is cut ${Math.round(spendingFlexibility.cutShare * 100)}% for any withdrawal year that starts with the portfolio ` +
+      `more than ${Math.round(SPENDING_CUT_TRIGGER * 100)}% below its inflation-adjusted value when withdrawals began, ` +
+      'and is full again once it recovers'
+    );
+  }
 
   const timelineBucket = snapToHorizonBucket(withdrawalYears);
   const timelineBucketNote = yearsToWithdrawalStart > 0
@@ -292,15 +310,26 @@ export async function analyzeRetirementPortfolio(
   );
 
   // Phase 4: Simulate withdrawals for user scenario
-  const outcomes = sequences.map(sequence => 
+  const simulate = (flexibility?: SpendingFlexibility) => sequences.map(sequence =>
     simulateWithdrawals(
       portfolioMapping,
       modeledValue,
       sequence,
       input.annualWithdrawalAmount,
-      { withdrawalDelayMonths, withdrawalPolicy, annualContributionAmount, incomeStreams, ...(spendingChange && { spendingChange }) }
+      {
+        withdrawalDelayMonths,
+        withdrawalPolicy,
+        annualContributionAmount,
+        incomeStreams,
+        ...(spendingChange && { spendingChange }),
+        ...(flexibility && { spendingFlexibility: flexibility }),
+      }
     )
   );
+  const outcomes = simulate(spendingFlexibility);
+  // The comparison is the same plan with a cut: survival and how often it
+  // cut, never the plan's own figures.
+  const comparisonOutcomes = flexibilityComparison ? simulate(flexibilityComparison) : undefined;
 
   // Attach outcomes to sequences
   sequences.forEach((seq, idx) => {
@@ -397,7 +426,39 @@ export async function analyzeRetirementPortfolio(
 
   // Only set when true, so an analysis that used every source it wanted
   // serializes exactly as it did before.
-  return treasuryEvidenceDegraded ? { ...analysis, evidenceDegraded: true } : analysis;
+  return {
+    ...analysis,
+    ...(treasuryEvidenceDegraded && { evidenceDegraded: true }),
+    ...(spendingFlexibility && { spendingFlexibility: summarizeSpendingCuts(outcomes, spendingFlexibility) }),
+    ...(flexibilityComparison && comparisonOutcomes && {
+      spendingFlexibilityComparison: summarizeSpendingCuts(comparisonOutcomes, flexibilityComparison),
+    }),
+  };
+}
+
+/** How often a spending cut lasted and how much of the time it was in force. */
+export function summarizeSpendingCuts(
+  outcomes: readonly PortfolioOutcome[],
+  flexibility: SpendingFlexibility
+): SpendingFlexibilityOutcome {
+  const yearsCut = outcomes.map((outcome) => (outcome.monthsSpendingCut ?? 0) / 12);
+  const cut = yearsCut.filter((years) => years > 0).sort((left, right) => left - right);
+  const survived = outcomes.filter((outcome) => outcome.withdrawalSustainability).length;
+  const median = cut.length === 0
+    ? 0
+    : cut.length % 2 === 1
+      ? cut[(cut.length - 1) / 2]
+      : (cut[cut.length / 2 - 1] + cut[cut.length / 2]) / 2;
+  return {
+    cutShare: flexibility.cutShare,
+    triggerDrawdown: SPENDING_CUT_TRIGGER,
+    survivalRate: outcomes.length === 0 ? 0 : survived / outcomes.length,
+    sequencesTested: outcomes.length,
+    sequencesSurvived: survived,
+    sequencesWithCuts: cut.length,
+    medianYearsCut: median,
+    mostYearsCut: cut.length === 0 ? 0 : cut[cut.length - 1],
+  };
 }
 
 // Re-export types for convenience

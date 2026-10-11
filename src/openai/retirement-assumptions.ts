@@ -25,6 +25,7 @@ import {
   MISSING_PARTNER_AGE_CLAUSE,
 } from './household-evidence';
 import type { InputRequest } from './input-request';
+import { describeSpendingCut, describeSpendingFlexibilityResults } from './spending-flexibility-evidence';
 import type { RetirementContributionOrigin } from './retirement-contributions';
 import { savedOn } from '../services/stated-figures';
 import { describeClaimingAdjustmentBriefly } from '../services/social-security-claiming';
@@ -141,9 +142,21 @@ export function describeRetirementAssumptions(
     countedIncomes
   ));
   parts.push(...describeContribution(values, analysis._contributionOrigin));
+  const spendingCut = describeSpendingCut(analysis._spendingFlexibility);
+  if (spendingCut) parts.push(spendingCut);
   if (parts.length === 0) return null;
 
-  return `This projection assumes ${parts.join('; ')}. Tell me if any of that is wrong and I will re-run it.`;
+  // What the user's cut did, or what a 20% cut would change when they have not
+  // said: engine figures, never the model's.
+  const flexibility = analysis._spendingFlexibility && analysis.stressTest
+    ? describeSpendingFlexibilityResults({
+      resolution: analysis._spendingFlexibility,
+      outcome: analysis.spendingFlexibility,
+      comparison: analysis.spendingFlexibilityComparison,
+      survivalRate: analysis.stressTest.survivalRate,
+    })
+    : '';
+  return `This projection assumes ${parts.join('; ')}. Tell me if any of that is wrong and I will re-run it.${flexibility}`;
 }
 
 function money(value: number): string {

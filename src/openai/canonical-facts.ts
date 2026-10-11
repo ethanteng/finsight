@@ -6,6 +6,7 @@ import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 import { incomeOfStream } from '../services/household';
 import { householdIncomeFactRows, householdSocialSecurityFactRows, householdTimelineFactRows } from './household-evidence';
+import { spendingFlexibilityFactRows } from './spending-flexibility-evidence';
 import { questionMentionsSecurity } from './security-question-match';
 import {
   STATED_FIGURE_DEFINITIONS,
@@ -847,6 +848,14 @@ export function buildCanonicalFactPack(
         'age',
         `retirementAnalysis.inputs.incomeStreams.${key}.startAge`
       );
+    }
+    // The user's cut in a bad market and what it did, or the comparison's.
+    for (const row of spendingFlexibilityFactRows({
+      resolution: retirement._spendingFlexibility,
+      outcome: retirement.spendingFlexibility,
+      comparison: retirement.spendingFlexibilityComparison,
+    })) {
+      addSnapshotFact(`retirement_${row.suffix}`, `${row.label} in the retirement projection`, row.value, row.unit, `retirementAnalysis.spendingFlexibility.${row.suffix}`);
     }
     // A partner's incomes, when each income stops, and the couple's timeline.
     if (household) {

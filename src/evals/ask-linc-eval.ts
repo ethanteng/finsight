@@ -330,6 +330,41 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
   });
   const contributionFacts = contribution.showTheMathData!.evidenceManifest.facts;
 
+  // Spending flexibility nobody has stated: the plan keeps fixed spending, and
+  // a disclosed 20% cut runs beside it -- what it would change and how often
+  // it would have been in force, every figure the engine's.
+  const flexibleSnapshot = retirementSnapshot();
+  flexibleSnapshot.retirementAnalysis = {
+    ...flexibleSnapshot.retirementAnalysis!,
+    _spendingFlexibility: { kind: 'comparison', cutShare: 0.2, annualCut: 4_000 },
+    spendingFlexibilityComparison: {
+      cutShare: 0.2,
+      triggerDrawdown: 0.2,
+      survivalRate: 0.94,
+      sequencesTested: 50,
+      sequencesSurvived: 47,
+      sequencesWithCuts: 28,
+      medianYearsCut: 12,
+      mostYearsCut: 24,
+    },
+  };
+  const flexible = await runAskLincAnalysis({
+    question: 'Will my money last in retirement?',
+    enableValidation: false,
+    evaluation: {
+      snapshot: flexibleSnapshot,
+      skipToneConfig: true,
+      model: () => jsonResponse(
+        'On fixed spending your plan lasts in 80% of historical sequences; cutting spending 20% in bad markets would raise that to 94%.',
+        {
+          survival: { value: 80, unit: 'percent', provenance: 'survival_rate' },
+          flexible_survival: { value: 94, unit: 'percent', provenance: 'retirement_flexible_comparison_survival_rate' },
+        }
+      ),
+    },
+  });
+  const flexibleFacts = flexible.showTheMathData!.evidenceManifest.facts;
+
   // A married couple: the partner's benefit on both ages, the plan run until
   // the younger reaches their planning age, and from the first death the
   // survivor paid the larger benefit on the other's record -- disclosed, and
@@ -722,6 +757,22 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
         contributionFacts.some(fact => fact.id === 'retirement_linked_withdrawals_total' && fact.value === 1_000) &&
         contribution.showTheMathData!.evidenceManifest.validation.deterministic.valid,
       detail: 'A contribution read from linked investment activity is disclosed with its months and method, and the answer can cite it and the totals behind it.',
+    },
+    {
+      id: 'unstated-flexibility-runs-a-disclosed-comparison',
+      category: 'retirement',
+      passed: flexible.structuredResponse.summary.includes(
+        'If you cut spending 20% ($4,000 a year) in any year that started with your portfolio more than 20% below its ' +
+        'inflation-adjusted value when withdrawals began, and spent in full again once it recovered, the plan would last ' +
+        'in 94% of historical sequences instead of 80%, with spending cut in 56% of the 50 historical sequences, for a ' +
+        'median of 12 years and at most 24 years.'
+      ) &&
+        keyNumberValue(flexible, 'flexible_survival') === 94 &&
+        flexibleFacts.some(fact => fact.id === 'retirement_flexible_comparison_survival_rate' && fact.value === 94) &&
+        flexibleFacts.some(fact => fact.id === 'retirement_flexible_comparison_sequences_cut_percent' && fact.value === 56) &&
+        !flexibleFacts.some(fact => fact.id === 'retirement_spending_cut_percent') &&
+        flexible.showTheMathData!.evidenceManifest.validation.deterministic.valid,
+      detail: 'With no stated flexibility the plan keeps fixed spending, and a disclosed 20% cut is reported beside it with how often it would have been in force; the answer can cite it.',
     },
     {
       id: 'partner-incomes-and-horizon-reach-the-projection',

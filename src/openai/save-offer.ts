@@ -63,6 +63,7 @@ const LABELS: Record<SaveOfferKey, string> = {
   partnerPlanThroughAge: 'Plan through your partner\'s age',
   survivorAnnualSpending: 'What one of you would spend alone',
   partnerMarried: 'Married',
+  spendingCutPercent: 'You could cut spending in a bad market by',
   investedBalance: 'Invested today',
 };
 
@@ -92,6 +93,7 @@ function display(key: SaveOfferKey, value: number | string): string {
   const dollars = `$${Math.round(value).toLocaleString('en-US')}`;
   if (key === 'investedBalance') return dollars;
   if (AGE_KEYS.has(key)) return String(value);
+  if (key === 'spendingCutPercent') return `${value}%`;
   return `${dollars} a year`;
 }
 

@@ -35,5 +35,8 @@
  *    inflation treatment, and the analysis reports the first-year portfolio
  *    withdrawal it measured. A v10 analysis has no such figure, and any income
  *    it modeled was a single stream assumed to rise with inflation.
+ * 12: spending can be cut in a bad market, and the analysis reports what the
+ *    user's cut did, or a comparison cut run beside a plan whose user has not
+ *    said how much they could cut. A v11 analysis carries neither.
  */
-export const RETIREMENT_ANALYSIS_VERSION = 11 as const;
+export const RETIREMENT_ANALYSIS_VERSION = 12 as const;

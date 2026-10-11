@@ -129,10 +129,11 @@ describe('Your numbers', () => {
     expect(screen.getByText('Linc assumes a fixed amount, which buys less each year prices rise.')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Age the pension starts'), { target: { value: '60' } });
     fireEvent.change(screen.getByLabelText('Does the pension rise with inflation?'), { target: { value: 'rises_with_inflation' } });
+    fireEvent.change(screen.getByLabelText('How much of your spending could you cut in a bad market?'), { target: { value: '20' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save plan' }));
 
     await waitFor(() => expect(saved).toHaveBeenCalledWith({
-      figures: { retirementIncomeStartAge: 60, retirementIncomeInflation: 'rises_with_inflation' },
+      figures: { retirementIncomeStartAge: 60, retirementIncomeInflation: 'rises_with_inflation', spendingCutPercent: 20 },
       source: 'page',
     }));
   });

@@ -25,12 +25,17 @@ import {
 import { generateDisclaimers, calculateConfidenceCeiling } from '../retirement-analytics/interpretation/uncertainty-quantifier';
 import type { DataQualityReport } from '../retirement-analytics/types';
 import { RETIREMENT_ANALYSIS_VERSION } from '../retirement-analytics/version';
-import { statedPartnerOf, type ExtractedRetirementInputs } from './retirement-input-extraction';
+import { statedPartnerOf, statedSpendingCutOf, type ExtractedRetirementInputs } from './retirement-input-extraction';
 import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-types';
 import { compactSearchQueryEvidence } from '../data/search-types';
 import type { SearchContext } from '../data/orchestrator';
 import type { PersonalContextValues } from '../profile/personal-context';
 import { parseStatedFigures, savedNumber, type StatedFigures } from '../services/stated-figures';
+import {
+  resolveSpendingFlexibility,
+  spendingFlexibilityInput,
+  type SpendingFlexibilityResolution,
+} from '../services/spending-flexibility';
 import { resolveRetirementIncome, sameIncomeStreams, type RetirementIncomeOrigins } from './retirement-income';
 import {
   householdIncomeStreams,
@@ -620,6 +625,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     // Every retirement calculator plans for the same partner, so it is read
     // once from the planner rather than by each calculator's own fields.
     ...(statedPartnerOf(plannedRetirementInputs) && { statedPartner: statedPartnerOf(plannedRetirementInputs) }),
+    ...(statedSpendingCutOf(plannedRetirementInputs) && { statedSpendingCut: statedSpendingCutOf(plannedRetirementInputs) }),
     homeValueSummary,
     homeValueData,
     financialSummary: financialSummary || undefined,
@@ -918,6 +924,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
   let contributionOrigin: RetirementContributionOrigin | undefined = undefined;
   let household: RetirementHousehold | undefined = undefined;
   let planThroughAgeOrigin: { origin: 'saved'; savedAt: string } | undefined = undefined;
+  let spendingFlexibility: SpendingFlexibilityResolution | undefined = undefined;
   const withSources = (analysis: RetirementAnalysis): RetirementAnalysisResolution => {
     const covered = withCoverage(analysis);
     const assumed = Object.keys(assumedInputs).length > 0 ? { _assumedInputs: assumedInputs } : {};
@@ -930,6 +937,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         ...(contributionOrigin && { _contributionOrigin: contributionOrigin }),
         ...(household && { _household: household }),
         ...(planThroughAgeOrigin && { _planThroughAgeOrigin: planThroughAgeOrigin }),
+        ...(spendingFlexibility && { _spendingFlexibility: spendingFlexibility }),
       },
     };
   };
@@ -1106,6 +1114,21 @@ async function fetchOrCreateRetirementAnalysis(args: {
     : { annualAmount: 0, origin: { origin: 'none' as const } };
   contributionOrigin = contribution.origin;
 
+  // How much the user could cut in a bad market: what they said, then Your
+  // numbers. Unstated, the plan keeps fixed spending and a 20% cut runs
+  // beside it as a comparison.
+  spendingFlexibility = resolveSpendingFlexibility({
+    stated: statedSpendingCutOf(extracted),
+    statedFigures,
+    annualSpending: annualWithdrawalAmount,
+  });
+  const flexibilityInput = spendingFlexibilityInput(spendingFlexibility);
+  const storedFlexibility = storedAnalysisInput.spendingFlexibility as { cutShare?: number } | undefined;
+  const storedComparison = storedAnalysisInput.spendingFlexibilityComparison as { cutShare?: number } | undefined;
+  const sameFlexibility =
+    (storedFlexibility?.cutShare ?? null) === (flexibilityInput.spendingFlexibility?.cutShare ?? null) &&
+    (storedComparison?.cutShare ?? null) === (flexibilityInput.spendingFlexibilityComparison?.cutShare ?? null);
+
   // Resolve once so cache matching and the stored input use the same evidence
   // boundary as the engine. A full date prevents a January snapshot from
   // selecting an allocation that was not published until June.
@@ -1135,6 +1158,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       (storedInput.userPlanThroughAge ?? storedInput.lifeExpectancy ?? 95) === lifeExpectancy &&
       sameIncome &&
       sameSurvivorSpending &&
+      sameFlexibility &&
       (storedInput.annualContributionAmount ?? 0) === contribution.annualAmount &&
       sameAssumptions(storedAssumptions, persistableAssumptions(assumed)) &&
       storedAnalysisInput.analysisVersion === RETIREMENT_ANALYSIS_VERSION &&
@@ -1230,6 +1254,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       withdrawalStartAge,
       incomeStreams: projectionIncome,
       ...(survivorSpending && { survivorSpending }),
+      ...flexibilityInput,
       annualContributionAmount: contribution.annualAmount,
       // Which of these were assumed, so a later run never reads them back as
       // the user's plan. A figure from an earlier conversation is theirs and
@@ -1273,6 +1298,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         incomeStreams: analysisInput.incomeStreams,
         annualContributionAmount: analysisInput.annualContributionAmount,
         ...(survivorSpending && { survivorSpending }),
+        ...(flexibilityInput.spendingFlexibility && { spendingFlexibility: flexibilityInput.spendingFlexibility }),
       };
       // No `_evidence`: that cites a stored record, and this one is not stored.
       return withSources(degradedResult);
@@ -1319,6 +1345,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       incomeStreams: analysisInput.incomeStreams,
       annualContributionAmount: analysisInput.annualContributionAmount,
       ...(survivorSpending && { survivorSpending }),
+      ...(flexibilityInput.spendingFlexibility && { spendingFlexibility: flexibilityInput.spendingFlexibility }),
     };
     resultWithInputs._evidence = {
       recordId: createdAnalysis.id,

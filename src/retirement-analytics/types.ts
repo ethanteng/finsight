@@ -21,6 +21,44 @@ export type WithdrawalPolicy =
 export const DEFAULT_WITHDRAWAL_POLICY: WithdrawalPolicy = { type: 'historical_cpi' };
 
 /**
+ * How far below its inflation-adjusted value when withdrawals began the
+ * portfolio must be, at the start of a withdrawal year, for that year's
+ * spending to be cut. Fixed and disclosed, not the user's to set.
+ */
+export const SPENDING_CUT_TRIGGER = 0.2;
+
+/** The cut the comparison runs when the user has not said how much they could cut. */
+export const COMPARISON_SPENDING_CUT = 0.2;
+
+/**
+ * Spending flexibility: the share of spending cut in a bad market. At the
+ * start of each withdrawal year after the first, a portfolio more than
+ * `SPENDING_CUT_TRIGGER` below its inflation-adjusted value when withdrawals
+ * began cuts that year's spending by `cutShare`; otherwise spending is full.
+ * One cut, never stacked, and never a raise above the plan.
+ */
+export interface SpendingFlexibility {
+  /** Between 0 and 1: 0.2 is a 20% cut. */
+  cutShare: number;
+}
+
+/** What spending flexibility did across the historical sequences. */
+export interface SpendingFlexibilityOutcome {
+  cutShare: number;
+  triggerDrawdown: number;
+  /** Share of sequences that lasted with the cut applied. */
+  survivalRate: number;
+  sequencesTested: number;
+  sequencesSurvived: number;
+  /** Sequences in which spending was cut at least one year. */
+  sequencesWithCuts: number;
+  /** Among those, the median number of years spending was cut. */
+  medianYearsCut: number;
+  /** The most years spending was cut in any one sequence. */
+  mostYearsCut: number;
+}
+
+/**
  * What to do when an active sleeve's return series is shorter than the record.
  *
  * The dataset's international series begins in 1975 while every other series
@@ -132,6 +170,14 @@ export interface RetirementAnalysisInput {
    * Omitted means spending stays the same for the whole plan.
    */
   survivorSpending?: { fromAge: number; annualAmount: number };
+
+  /** Spending cut in a bad market, when the user said how much they could cut. */
+  spendingFlexibility?: SpendingFlexibility;
+  /**
+   * A cut to run beside the plan as a comparison, when the user has not said
+   * how much they could cut. The plan itself keeps fixed spending.
+   */
+  spendingFlexibilityComparison?: SpendingFlexibility;
   
   /**
    * Investment value deliberately left out of this projection because its
@@ -443,6 +489,8 @@ export interface PortfolioOutcome {
   maximumDrawdown: number; // peak-to-trough decline
   timeToRecovery: number | null; // months until recovery from worst drawdown
   realReturn: number; // inflation-adjusted annualized return
+  /** Withdrawal months spent at the cut amount; only set when a spending cut was simulated. */
+  monthsSpendingCut?: number;
 }
 
 // ============================================================================
@@ -604,6 +652,10 @@ export interface RetirementAnalysisOutput {
    * cache entry, long after the service recovered.
    */
   evidenceDegraded?: boolean;
+  /** What the user's spending cut did; its survival rate is the stress test's own. */
+  spendingFlexibility?: SpendingFlexibilityOutcome;
+  /** The same plan with the comparison cut, when one was requested. */
+  spendingFlexibilityComparison?: SpendingFlexibilityOutcome;
   summary: {
     characteristics: PortfolioCharacteristics;
     tradeoffs: PortfolioTradeoffs;

@@ -54,6 +54,16 @@ const PLAN_FIELDS: Array<Field & { id: StatedFigureKey }> = [
   { id: 'socialSecurityStartAge', label: 'Age Social Security starts', kind: 'age', required: false, minimum: 50, maximum: 80, sentence: '{value}', hint: 'Linc assumes 67.' },
   { id: 'planThroughAge', label: 'Plan through age', kind: 'age', required: false, minimum: 60, maximum: 110, sentence: '{value}', hint: 'Linc assumes 95.' },
   {
+    id: 'spendingCutPercent',
+    label: 'How much of your spending could you cut in a bad market?',
+    kind: 'percent',
+    required: false,
+    minimum: 0,
+    maximum: 75,
+    sentence: '{value}',
+    hint: 'Linc cuts spending by this much in any year your portfolio starts more than 20% below its value when you retired. Enter 0 if you could not cut.',
+  },
+  {
     id: 'allocation',
     label: 'Preset mix for market-history tests',
     kind: 'choice',

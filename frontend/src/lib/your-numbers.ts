@@ -24,6 +24,7 @@ export const STATED_FIGURE_KEYS = [
   'partnerPlanThroughAge',
   'survivorAnnualSpending',
   'partnerMarried',
+  'spendingCutPercent',
 ] as const;
 
 export type StatedFigureKey = (typeof STATED_FIGURE_KEYS)[number];
