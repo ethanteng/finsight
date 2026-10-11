@@ -6,6 +6,8 @@ import {
   householdSocialSecurity,
   householdTimeline,
   partnerAgeMissing,
+  partnerClaimingAt,
+  partnerClaimingUnavailableReason,
   partnerSavableFigures,
   rebuildHouseholdStreams,
   resolveMarriage,
@@ -401,5 +403,48 @@ describe('a partner in the plan', () => {
       { key: 'partnerAge', value: 50 },
       { key: 'partnerMarried', value: 'married' },
     ]);
+  });
+});
+
+describe('the partner claiming at another age', () => {
+  const resolved = (plan: Parameters<typeof partnerClaimingAt>[0]['plan'], married?: boolean) => ({
+    plan,
+    origins: { age: 'stated' as const, socialSecurityStartAge: 'default' as const },
+    ...(married !== undefined && { married: { value: married, origin: 'stated' as const } }),
+  });
+
+  it('moves their own benefit from the figure as given, by Social Security\'s rules', () => {
+    const partner = resolved({
+      age: 48,
+      planThroughAge: 95,
+      socialSecurity: { annualAmount: 32_000, startAge: 67, quote: { amount: 32_000, age: 67 } },
+      socialSecurityClaimAge: 67,
+    });
+    const later = partnerClaimingAt(partner, 70);
+    expect(later.plan.socialSecurity).toMatchObject({
+      annualAmount: 39_680,
+      startAge: 70,
+      quote: { amount: 32_000, age: 67 },
+      claiming: { fromAge: 67, toAge: 70, fromAmount: 32_000, amount: 39_680 },
+    });
+    expect(later.plan.socialSecurityClaimAge).toBe(70);
+    expect(later.origins.socialSecurityStartAge).toBe('stated');
+    // Back to the age the figure is for, it is the figure itself.
+    const back = partnerClaimingAt(later, 67);
+    expect(back.plan.socialSecurity).toEqual({ annualAmount: 32_000, startAge: 67, quote: { amount: 32_000, age: 67 } });
+  });
+
+  it('moves only when a spousal benefit would start when they have none of their own', () => {
+    const partner = resolved({ age: 48, planThroughAge: 95, socialSecurityClaimAge: 67 }, true);
+    expect(partnerClaimingAt(partner, 62).plan).toEqual({ age: 48, planThroughAge: 95, socialSecurityClaimAge: 62 });
+    expect(partnerClaimingUnavailableReason(partner)).toBeUndefined();
+  });
+
+  it('says when there is nobody to move, or nothing it would change', () => {
+    expect(partnerClaimingUnavailableReason(undefined)).toBe(
+      'To compare when your partner claims Social Security I need their age.'
+    );
+    expect(partnerClaimingUnavailableReason(resolved({ age: 48, planThroughAge: 95 })))
+      .toContain('no Social Security of their own');
   });
 });

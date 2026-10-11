@@ -80,6 +80,8 @@ import {
   householdIncomes,
   householdTimeline,
   partnerAgeMissing,
+  partnerClaimingAt,
+  partnerClaimingUnavailableReason,
   partnerSavableFigures,
   resolvePartner,
   survivorSpendingFor,
@@ -149,7 +151,12 @@ const NULLABLE_STRING = { type: ['string', 'null'] as const };
 /** The historical test's preset mix; `unspecified` leaves the disclosed default. */
 const ALLOCATION_OPTIONS = ['unspecified', 'conservative', 'balanced', 'growth'] as const;
 const PENSION_INFLATION_OPTIONS = ['unspecified', ...INCOME_INFLATION_OPTIONS] as const;
-const SOURCE_FIELDS = [...COAST_FIRE_OVERRIDE_FIELDS, 'allocation', 'retirementIncomeInflation'] as const;
+const SOURCE_FIELDS = [
+  ...COAST_FIRE_OVERRIDE_FIELDS,
+  'allocation',
+  'retirementIncomeInflation',
+  'partnerSocialSecurityStartAge',
+] as const;
 type CoastFireSourceField = (typeof SOURCE_FIELDS)[number];
 
 const PLANNED_COAST_FIRE_OVERRIDES_JSON_SCHEMA = {
@@ -160,6 +167,7 @@ const PLANNED_COAST_FIRE_OVERRIDES_JSON_SCHEMA = {
     ...Object.fromEntries(COAST_FIRE_OVERRIDE_FIELDS.map((field) => [field, NULLABLE_NUMBER])),
     allocation: { type: 'string', enum: [...ALLOCATION_OPTIONS] },
     retirementIncomeInflation: { type: 'string', enum: [...PENSION_INFLATION_OPTIONS] },
+    partnerSocialSecurityStartAge: NULLABLE_NUMBER,
     sources: {
       type: 'object',
       additionalProperties: false,
@@ -205,6 +213,12 @@ export interface PlannedCoastFireOverrides {
   lifeExpectancy?: number;
   allocation?: QuickPlanAllocationId;
   retirementIncomeInflation?: IncomeInflation;
+  /**
+   * A what-if on when the partner claims Social Security, at their age. Not an
+   * assumption of the user's own: the partner's figures come from the
+   * retirement inputs, and this only moves their claiming age.
+   */
+  partnerSocialSecurityStartAge?: number;
   sources: Partial<Record<CoastFireSourceField, string>>;
 }
 
@@ -421,6 +435,12 @@ function finiteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+/** An age a partner's retirement benefit can be claimed at, like the user's own. */
+function isPartnerClaimAge(value: number): boolean {
+  const range = OVERRIDE_RANGES.socialSecurityStartAge;
+  return Number.isInteger(value) && value >= EARLIEST_CLAIMING_AGE && value <= range.maximum;
+}
+
 function isIncomeInflation(value: unknown): value is IncomeInflation {
   return typeof value === 'string' && (INCOME_INFLATION_OPTIONS as readonly string[]).includes(value);
 }
@@ -471,6 +491,12 @@ function parseOverrides(value: unknown): PlannedCoastFireOverrides | undefined {
     overrides.retirementIncomeInflation = record.retirementIncomeInflation;
     overrides.sources.retirementIncomeInflation = inflationSource;
   }
+  const partnerClaimAge = finiteNumber(record.partnerSocialSecurityStartAge);
+  const partnerClaimSource = shortSource(rawSources.partnerSocialSecurityStartAge);
+  if (partnerClaimAge !== undefined && partnerClaimSource && isPartnerClaimAge(partnerClaimAge)) {
+    overrides.partnerSocialSecurityStartAge = partnerClaimAge;
+    overrides.sources.partnerSocialSecurityStartAge = partnerClaimSource;
+  }
 
   return SOURCE_FIELDS.some((field) => overrides[field] !== undefined)
     ? overrides
@@ -520,6 +546,10 @@ function layer(
   if (top.retirementIncomeInflation && top.sources.retirementIncomeInflation) {
     merged.retirementIncomeInflation = top.retirementIncomeInflation;
     merged.sources.retirementIncomeInflation = top.sources.retirementIncomeInflation;
+  }
+  if (top.partnerSocialSecurityStartAge !== undefined && top.sources.partnerSocialSecurityStartAge) {
+    merged.partnerSocialSecurityStartAge = top.partnerSocialSecurityStartAge;
+    merged.sources.partnerSocialSecurityStartAge = top.sources.partnerSocialSecurityStartAge;
   }
   return merged;
 }
@@ -864,7 +894,13 @@ function resolveVariant(
     currentAge: currentAge!,
     ...(snapshot.userProfileValues?.householdStatus && { householdStatus: snapshot.userProfileValues.householdStatus }),
   });
-  const resolvedPartner = partner && !('missingAge' in partner) ? partner : undefined;
+  // "What if my partner claims at 70?" moves their benefit by the same rules.
+  const partnerClaimAge = overrides.sources.partnerSocialSecurityStartAge
+    ? overrides.partnerSocialSecurityStartAge
+    : undefined;
+  const resolvedPartner = partner && !('missingAge' in partner)
+    ? partnerClaimAge !== undefined ? partnerClaimingAt(partner, partnerClaimAge) : partner
+    : undefined;
   const timeline = resolvedPartner
     ? householdTimeline({ currentAge: currentAge!, userPlanThroughAge, partner: resolvedPartner.plan })
     : undefined;
@@ -1032,6 +1068,10 @@ function variantLabel(own: ResolvedCoastFireVariant, peer: ResolvedCoastFireVari
     !(field === 'retirementIncomeStartAge' && defaulted(own, field) && defaulted(peer, field))
   );
   const described = differing.slice(0, 2).map((field) => describeField(field, ownValues.get(field) ?? 0));
+  const partnerClaimAge = own.household?.plan.socialSecurityClaimAge;
+  if (described.length < 2 && partnerClaimAge !== undefined && partnerClaimAge !== peer.household?.plan.socialSecurityClaimAge) {
+    described.push(`your partner claiming Social Security at ${partnerClaimAge}`);
+  }
   if (described.length < 2 && own.pensionInflation && own.pensionInflation.value !== peer.pensionInflation?.value) {
     described.push(own.pensionInflation.value === 'rises_with_inflation' ? 'a pension that rises with inflation' : 'a fixed pension');
   }
@@ -1244,6 +1284,14 @@ export async function runCoastFireScenario(
       );
     }
     if (index === 0) primaryQuoteAge = variant.socialSecurityQuote?.age;
+    // A what-if on when the partner claims needs a partner it would change.
+    const partnerClaimingReason = index > 0 && comparisonOwn?.partnerSocialSecurityStartAge !== undefined
+      ? partnerClaimingUnavailableReason(variant.household)
+      : undefined;
+    if (partnerClaimingReason) {
+      comparisonUnavailableReason = partnerClaimingReason;
+      continue;
+    }
     try {
       const { currentAge, retirementAge, currentSavings, annualRetirementSpending, realReturnRate, withdrawalRate } = variant.inputs;
       // Valued through the market-history test's own horizon.
@@ -1834,7 +1882,7 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
   // Each benefit moved to another claiming age, once, with both amounts.
   const claimingNotice = [...new Set(execution.scenarios.flatMap((scenario) =>
     scenario.claiming ? [` ${describeClaimingAdjustment(scenario.claiming)}`] : []
-  ))].join('');
+  ))].join('') + describePartnerClaimingComparison(execution.scenarios);
   const comparisonNotice = execution.comparisonUnavailableReason
     ? ` I could not run the comparison case: ${execution.comparisonUnavailableReason}`
     : '';
@@ -1874,6 +1922,20 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
     `${savingsNotice}${ageNotice}${savedNotice}` +
     `${defaultsNotice}${contributionNotice}${comparisonNotice}${historyNotice}${straightLine} ` +
     'Change any of these and I will re-run it.';
+}
+
+/**
+ * A comparison that moves the partner's claiming age, with both amounts; the
+ * main case's own move is in its partner's income clause.
+ */
+function describePartnerClaimingComparison(scenarios: CoastFireScenarioResult[]): string {
+  const [primary, ...others] = scenarios;
+  const mainAge = primary?.household?.plan.socialSecurityClaimAge;
+  return others.flatMap((scenario) => {
+    const plan = scenario.household?.plan;
+    const claiming = plan?.socialSecurity?.claiming;
+    return claiming && plan?.socialSecurityClaimAge !== mainAge ? [` ${describeClaimingAdjustment(claiming, 'partner')}`] : [];
+  }).join('');
 }
 
 /**
@@ -2112,6 +2174,7 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'annual_contribution', label: 'Annual contributions', description: 'What the user invests each year now; used to find when savings can coast.', valueType: 'currency', minimum: 0, maximum: 10_000_000 },
     { id: 'life_expectancy', label: 'Planning horizon age', description: 'The age incomes are valued through and the market-history test runs to.', valueType: 'age', minimum: 60, maximum: 110 },
     { id: 'allocation', label: 'Preset asset mix', description: 'The mix for the market-history test that runs while holdings cannot be: conservative, balanced, or growth.', valueType: 'enum', options: ['conservative', 'balanced', 'growth'] },
+    { id: 'partner_social_security_start_age', label: 'Partner\'s Social Security claiming age', description: 'A comparison only: the age, the partner\'s own, at which they claim; their benefit moves by Social Security\'s claiming rules.', valueType: 'age', minimum: EARLIEST_CLAIMING_AGE, maximum: 80 },
   ],
   defaults: [
     { id: 'real_return_rate_percent', value: DEFAULT_COAST_FIRE_REAL_RETURN_PERCENT, description: 'The public Coast FIRE calculator\'s default growth after inflation.' },
@@ -2138,7 +2201,7 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
   ],
   planner: {
     jsonSchema: COAST_FIRE_SCENARIO_PLAN_JSON_SCHEMA,
-    instructions: `When the user asks whether they have reached Coast FIRE, what their Coast FIRE number is, when they will reach Coast FIRE, or changes an input of a Coast FIRE answer earlier in this decision, set requested=true. Coast FIRE means having enough invested today that growth alone, with no further contributions, reaches the retirement target by the retirement age. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, currentSavings (invested retirement savings today), annualRetirementSpending (annual spending once retired, in today's dollars), annualRetirementIncome (a pension, annuity or other income in retirement that is not Social Security, per year), retirementIncomeStartAge (when that income starts), retirementIncomeInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), socialSecurityAnnual and socialSecurityStartAge (Social Security only; socialSecurityStartAge is when the user claims it), socialSecurityAmountAge (only when the user says which claiming age their Social Security figure is for, such as a statement showing $2,500 a month at 67; otherwise null), realReturnRatePercent (growth after inflation in percentage points: 5% is 5, never 0.05), withdrawalRatePercent (percentage points: 4% is 4), annualContribution (what the user invests per year now; only used to find when they reach Coast FIRE), and lifeExpectancy (the age the user wants their plan to run through, only when they say one). Until holdings are linked (or while none of the linked ones can be simulated), application code also runs the savings through market history on a preset mix: set allocation to conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets, and otherwise to unspecified with a null source. When the user gives a range for one value, put the low end in primary and only the high end in comparison. When the newest message changes an input of the earlier Coast FIRE case, put the earlier case in primary and only the changed values in comparison; for claiming Social Security at another age, that is only socialSecurityStartAge, never a new amount, because application code applies Social Security's own claiming rules to the benefit. A spouse's or partner's age, Social Security, pension or planning age is never one of these fields; it belongs in the retirement inputs' partner fields, which application code reads for this calculation too. Nor is how much of their spending the user could cut if markets fell; it belongs in the retirement inputs' spending-cut fields, which application code reads for the market-history test. Never estimate or supply typical values; application code applies disclosed defaults and asks for anything else missing, so request the calculation even when figures are missing. A Coast FIRE question does not by itself request any other calculator. The overrides object and every field and source are always present; use null for absent values. When there is no Coast FIRE question, set requested=false, allocation=unspecified, retirementIncomeInflation=unspecified, and null for every other value and every source in both variants.`,
+    instructions: `When the user asks whether they have reached Coast FIRE, what their Coast FIRE number is, when they will reach Coast FIRE, or changes an input of a Coast FIRE answer earlier in this decision, set requested=true. Coast FIRE means having enough invested today that growth alone, with no further contributions, reaches the retirement target by the retirement age. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, currentSavings (invested retirement savings today), annualRetirementSpending (annual spending once retired, in today's dollars), annualRetirementIncome (a pension, annuity or other income in retirement that is not Social Security, per year), retirementIncomeStartAge (when that income starts), retirementIncomeInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), socialSecurityAnnual and socialSecurityStartAge (Social Security only; socialSecurityStartAge is when the user claims it), socialSecurityAmountAge (only when the user says which claiming age their Social Security figure is for, such as a statement showing $2,500 a month at 67; otherwise null), realReturnRatePercent (growth after inflation in percentage points: 5% is 5, never 0.05), withdrawalRatePercent (percentage points: 4% is 4), annualContribution (what the user invests per year now; only used to find when they reach Coast FIRE), and lifeExpectancy (the age the user wants their plan to run through, only when they say one). Until holdings are linked (or while none of the linked ones can be simulated), application code also runs the savings through market history on a preset mix: set allocation to conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets, and otherwise to unspecified with a null source. When the user gives a range for one value, put the low end in primary and only the high end in comparison. When the newest message changes an input of the earlier Coast FIRE case, put the earlier case in primary and only the changed values in comparison; for claiming Social Security at another age, that is only socialSecurityStartAge, never a new amount, because application code applies Social Security's own claiming rules to the benefit. A spouse's or partner's age, Social Security, pension or planning age is never one of these fields; it belongs in the retirement inputs' partner fields, which application code reads for this calculation too. The one exception is a what-if on when the partner claims Social Security ("what if my wife claims at 70?"): put only that claiming age, at the partner's own age, in comparison.overrides.partnerSocialSecurityStartAge with the primary's null, never a new amount, because application code moves the partner's benefit by the same claiming rules. Nor is how much of their spending the user could cut if markets fell; it belongs in the retirement inputs' spending-cut fields, which application code reads for the market-history test. Never estimate or supply typical values; application code applies disclosed defaults and asks for anything else missing, so request the calculation even when figures are missing. A Coast FIRE question does not by itself request any other calculator. The overrides object and every field and source are always present; use null for absent values. When there is no Coast FIRE question, set requested=false, allocation=unspecified, retirementIncomeInflation=unspecified, and null for every other value and every source in both variants.`,
     parsePlan: parseCoastFireScenarioPlan,
   },
   execution: {

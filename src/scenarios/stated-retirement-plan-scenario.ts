@@ -69,6 +69,8 @@ import {
   incomeOfStream,
   partnerAgeMissing,
   partnerSavableFigures,
+  partnerClaimingAt,
+  partnerClaimingUnavailableReason,
   resolvePartner,
 } from '../services/household';
 import {
@@ -120,6 +122,12 @@ export type StatedRetirementPlanField = NumericField | 'allocation' | 'pensionIn
 const ALLOCATION_OPTIONS = ['unspecified', 'conservative', 'balanced', 'growth'] as const;
 const PENSION_INFLATION_OPTIONS = ['unspecified', ...INCOME_INFLATION_OPTIONS] as const;
 const ALL_FIELDS: readonly StatedRetirementPlanField[] = [...NUMERIC_FIELDS, 'allocation', 'pensionInflation'];
+/**
+ * Every field the planner fills: the plan's own, and a what-if on when the
+ * partner claims, whose figures otherwise come from the retirement inputs.
+ */
+type PlanSourceField = StatedRetirementPlanField | 'partnerSocialSecurityStartAge';
+const SOURCE_FIELDS: readonly PlanSourceField[] = [...ALL_FIELDS, 'partnerSocialSecurityStartAge'];
 
 const NULLABLE_NUMBER = { type: ['number', 'null'] as const };
 const NULLABLE_STRING = { type: ['string', 'null'] as const };
@@ -127,16 +135,17 @@ const NULLABLE_STRING = { type: ['string', 'null'] as const };
 const PLANNED_OVERRIDES_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: [...ALL_FIELDS, 'sources'],
+  required: [...SOURCE_FIELDS, 'sources'],
   properties: {
     ...Object.fromEntries(NUMERIC_FIELDS.map((field) => [field, NULLABLE_NUMBER])),
     allocation: { type: 'string', enum: [...ALLOCATION_OPTIONS] },
     pensionInflation: { type: 'string', enum: [...PENSION_INFLATION_OPTIONS] },
+    partnerSocialSecurityStartAge: NULLABLE_NUMBER,
     sources: {
       type: 'object',
       additionalProperties: false,
-      required: [...ALL_FIELDS],
-      properties: Object.fromEntries(ALL_FIELDS.map((field) => [field, NULLABLE_STRING])),
+      required: [...SOURCE_FIELDS],
+      properties: Object.fromEntries(SOURCE_FIELDS.map((field) => [field, NULLABLE_STRING])),
     },
   },
 } as const;
@@ -174,7 +183,9 @@ export interface PlannedStatedRetirementOverrides {
   lifeExpectancy?: number;
   allocation?: QuickPlanAllocationId;
   pensionInflation?: IncomeInflation;
-  sources: Partial<Record<StatedRetirementPlanField, string>>;
+  /** A what-if on when the partner claims Social Security, at their age; their benefit moves by the claiming rules. */
+  partnerSocialSecurityStartAge?: number;
+  sources: Partial<Record<PlanSourceField, string>>;
 }
 
 export interface StatedRetirementPlan {
@@ -433,8 +444,18 @@ function parseOverrides(value: unknown): PlannedStatedRetirementOverrides | unde
     overrides.pensionInflation = record.pensionInflation;
     overrides.sources.pensionInflation = pensionInflationSource;
   }
+  // An age a partner's retirement benefit can be claimed at, like the user's own.
+  const partnerClaimAge = finiteNumber(record.partnerSocialSecurityStartAge);
+  const partnerClaimSource = shortSource(rawSources.partnerSocialSecurityStartAge);
+  if (
+    partnerClaimAge !== undefined && partnerClaimSource && Number.isInteger(partnerClaimAge) &&
+    partnerClaimAge >= EARLIEST_CLAIMING_AGE && partnerClaimAge <= RANGES.socialSecurityStartAge.maximum
+  ) {
+    overrides.partnerSocialSecurityStartAge = partnerClaimAge;
+    overrides.sources.partnerSocialSecurityStartAge = partnerClaimSource;
+  }
 
-  return ALL_FIELDS.some((field) => overrides[field] !== undefined) ? overrides : undefined;
+  return SOURCE_FIELDS.some((field) => overrides[field] !== undefined) ? overrides : undefined;
 }
 
 /** Validate the semantic planner result without reading numbers out of prose. */
@@ -473,7 +494,7 @@ function layer(
 ): PlannedStatedRetirementOverrides {
   if (!top) return base;
   const merged: PlannedStatedRetirementOverrides = { ...base, sources: { ...base.sources } };
-  for (const field of ALL_FIELDS) {
+  for (const field of SOURCE_FIELDS) {
     const value = top[field];
     const source = top.sources[field];
     if (value === undefined || !source) continue;
@@ -805,10 +826,17 @@ function resolveVariant(
         : saved('socialSecurityStartAge')?.value) ?? DEFAULT_SOCIAL_SECURITY_START_AGE,
     known: assumptions.find((assumption) => assumption.key === 'socialSecurityAnnual')?.origin !== 'default',
   };
-  const household: PlannedHousehold | undefined = partner && !('missingAge' in partner)
+  // "What if my partner claims at 70?" moves their benefit by the same rules.
+  const partnerClaimAge = overrides.sources.partnerSocialSecurityStartAge
+    ? overrides.partnerSocialSecurityStartAge
+    : undefined;
+  const planned = partner && !('missingAge' in partner)
+    ? partnerClaimAge !== undefined ? partnerClaimingAt(partner, partnerClaimAge) : partner
+    : undefined;
+  const household: PlannedHousehold | undefined = planned
     ? {
-      ...partner,
-      timeline: householdTimeline({ currentAge: currentAge!, userPlanThroughAge: lifeExpectancy, partner: partner.plan }),
+      ...planned,
+      timeline: householdTimeline({ currentAge: currentAge!, userPlanThroughAge: lifeExpectancy, partner: planned.plan }),
     }
     : undefined;
 
@@ -902,6 +930,10 @@ function variantLabel(own: ResolvedVariant, peer: ResolvedVariant | undefined): 
     .filter((field) => requestValue(own, field) !== undefined)
     .slice(0, 2)
     .map((field) => describeField(field, requestValue(own, field)!));
+  const partnerClaimAge = own.household?.plan.socialSecurityClaimAge;
+  if (described.length < 2 && partnerClaimAge !== undefined && partnerClaimAge !== peer.household?.plan.socialSecurityClaimAge) {
+    described.push(`your partner claiming Social Security at ${partnerClaimAge}`);
+  }
   return described.length > 0 ? capitalize(described.join(' and ')) : 'Your plan';
 }
 
@@ -1075,6 +1107,7 @@ export async function runStatedRetirementPlan(
     comparisonOwn.socialSecurityAmountAge === undefined;
 
   const variants: ResolvedVariant[] = [];
+  let partnerClaimingUnavailable: string | undefined;
   for (const [index, overrides] of layers.entries()) {
     const inheritedQuoteAge = index > 0 && comparisonMovesSameBenefit
       ? variants[0]?.socialSecurityQuote?.age
@@ -1095,11 +1128,19 @@ export async function runStatedRetirementPlan(
         standInFor
       );
     }
+    // A what-if on when the partner claims needs a partner it would change.
+    const partnerClaimingReason = index > 0 && comparisonOwn?.partnerSocialSecurityStartAge !== undefined
+      ? partnerClaimingUnavailableReason(variant.household)
+      : undefined;
+    if (partnerClaimingReason) {
+      partnerClaimingUnavailable = partnerClaimingReason;
+      continue;
+    }
     if (!variants.some((existing) => requestKey(existing) === requestKey(variant))) variants.push(variant);
   }
 
   const scenarios: StatedRetirementPlanResult[] = [];
-  let comparisonUnavailableReason: string | undefined;
+  let comparisonUnavailableReason: string | undefined = partnerClaimingUnavailable;
   for (const [index, variant] of variants.entries()) {
     try {
       // The comparison cut runs beside the main case only.
@@ -1383,6 +1424,20 @@ function describeHousehold(scenario: StatedRetirementPlanResult): string {
 }
 
 /**
+ * A comparison that moves the partner's claiming age, with both amounts; the
+ * main case's own move is in its partner's income clause.
+ */
+function describePartnerClaimingComparison(scenarios: StatedRetirementPlanResult[]): string {
+  const [primary, ...others] = scenarios;
+  const mainAge = primary?.household?.plan.socialSecurityClaimAge;
+  return others.flatMap((scenario) => {
+    const plan = scenario.household?.plan;
+    const claiming = plan?.socialSecurity?.claiming;
+    return claiming && plan?.socialSecurityClaimAge !== mainAge ? [` ${describeClaimingAdjustment(claiming, 'partner')}`] : [];
+  }).join('');
+}
+
+/**
  * Deterministic disclosure appended to every stated-plan answer. It leads with
  * the one thing that most separates this from the real projection -- a preset
  * mix rather than the user's holdings -- because that is both the honest limit
@@ -1421,7 +1476,7 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
   // Each benefit moved to another claiming age, once, with both amounts.
   const claimingNotice = [...new Set(execution.scenarios.flatMap((scenario) =>
     scenario.claiming ? [` ${describeClaimingAdjustment(scenario.claiming)}`] : []
-  ))].join('');
+  ))].join('') + describePartnerClaimingComparison(execution.scenarios);
   const pension = describePension(primary);
   const bridge = describeIncomeGaps(inputs, primary.household);
   const household = describeHousehold(primary);
@@ -1726,6 +1781,7 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
     { id: 'pension_inflation', label: 'Pension inflation treatment', description: 'A fixed dollar amount, or today\'s dollars rising with inflation.', valueType: 'enum', options: ['fixed', 'rises_with_inflation'] },
     { id: 'life_expectancy', label: 'Planning horizon age', description: 'Age through which the plan is modeled.', valueType: 'age', minimum: 60, maximum: 110 },
     { id: 'allocation', label: 'Preset asset mix', description: 'Conservative, balanced, or growth.', valueType: 'enum', options: ['conservative', 'balanced', 'growth'] },
+    { id: 'partner_social_security_start_age', label: 'Partner\'s Social Security claiming age', description: 'A comparison only: the age, the partner\'s own, at which they claim; their benefit moves by Social Security\'s claiming rules.', valueType: 'age', minimum: EARLIEST_CLAIMING_AGE, maximum: 80 },
   ],
   defaults: [
     { id: 'allocation', value: DEFAULT_ALLOCATION_ID, description: 'The public retirement calculator\'s default preset.' },
@@ -1746,7 +1802,7 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
   ],
   planner: {
     jsonSchema: STATED_RETIREMENT_PLAN_JSON_SCHEMA,
-    instructions: `Request this for any question about whether the user can retire, whether their savings will last, how much they can spend in retirement, or a change to such a plan stated earlier in this decision, including a plan the free retirement calculator answered. Application code runs it only when no investment holdings are linked, or none of the linked ones can be simulated, as a stand-in for the holdings-based projection, so request it for those questions even when the user has stated nothing yet; it asks for whatever is missing. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, investableAssets (invested savings today), annualSpending (spending per year once retired, in today's dollars), annualContributions (saving per year until retirement), socialSecurityAnnual and socialSecurityStartAge (Social Security only; socialSecurityStartAge is when the user claims it), socialSecurityAmountAge (only when the user says which claiming age their Social Security figure is for, such as a statement showing $2,500 a month at 67; otherwise null), pensionAnnual (a pension, annuity or other income in retirement that is not Social Security, per year) and pensionStartAge, pensionInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), lifeExpectancy (the age the plan runs through), and allocation: conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets; otherwise unspecified with a null source. When the newest message changes an input of a plan stated earlier, put the earlier plan in primary and only the changed values in comparison; for claiming Social Security at another age, that is only socialSecurityStartAge, never a new amount, because application code applies Social Security's own claiming rules to the benefit. When the user gives a range for one value, put the low end in primary and only the high end in comparison. A spouse's or partner's age, Social Security, pension or planning age is never one of these fields; it belongs in the retirement inputs' partner fields, which application code reads for this plan too. Never estimate or supply typical values; application code uses the conventional retirement age when none is stated, the user's current spending when their accounts show it, and otherwise reports what the mix sustained instead of a verdict. Do not request it for a Coast FIRE question unless the user also asks whether that plan survives market history. The overrides object and every field and source are always present. When there is no such retirement question, set requested=false, allocation=unspecified, pensionInflation=unspecified, and null for every other value and every source in both variants.`,
+    instructions: `Request this for any question about whether the user can retire, whether their savings will last, how much they can spend in retirement, or a change to such a plan stated earlier in this decision, including a plan the free retirement calculator answered. Application code runs it only when no investment holdings are linked, or none of the linked ones can be simulated, as a stand-in for the holdings-based projection, so request it for those questions even when the user has stated nothing yet; it asks for whatever is missing. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, investableAssets (invested savings today), annualSpending (spending per year once retired, in today's dollars), annualContributions (saving per year until retirement), socialSecurityAnnual and socialSecurityStartAge (Social Security only; socialSecurityStartAge is when the user claims it), socialSecurityAmountAge (only when the user says which claiming age their Social Security figure is for, such as a statement showing $2,500 a month at 67; otherwise null), pensionAnnual (a pension, annuity or other income in retirement that is not Social Security, per year) and pensionStartAge, pensionInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), lifeExpectancy (the age the plan runs through), and allocation: conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets; otherwise unspecified with a null source. When the newest message changes an input of a plan stated earlier, put the earlier plan in primary and only the changed values in comparison; for claiming Social Security at another age, that is only socialSecurityStartAge, never a new amount, because application code applies Social Security's own claiming rules to the benefit. When the user gives a range for one value, put the low end in primary and only the high end in comparison. A spouse's or partner's age, Social Security, pension or planning age is never one of these fields; it belongs in the retirement inputs' partner fields, which application code reads for this plan too. The one exception is a what-if on when the partner claims Social Security ("what if my wife claims at 70?"): put only that claiming age, at the partner's own age, in comparison.overrides.partnerSocialSecurityStartAge with the primary's null, never a new amount, because application code moves the partner's benefit by the same claiming rules. Never estimate or supply typical values; application code uses the conventional retirement age when none is stated, the user's current spending when their accounts show it, and otherwise reports what the mix sustained instead of a verdict. Do not request it for a Coast FIRE question unless the user also asks whether that plan survives market history. The overrides object and every field and source are always present. When there is no such retirement question, set requested=false, allocation=unspecified, pensionInflation=unspecified, and null for every other value and every source in both variants.`,
     parsePlan: parseStatedRetirementPlan,
   },
   execution: {

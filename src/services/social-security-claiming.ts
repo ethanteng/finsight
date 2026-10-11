@@ -225,10 +225,19 @@ export function describeClaimingAdjustmentBriefly(
  * The sentence an answer adds when it rescaled a benefit, naming both amounts
  * and the rule, so the user can check it against their own statement.
  */
-export function describeClaimingAdjustment(adjustment: ClaimingAdjustment): string {
+export function describeClaimingAdjustment(
+  adjustment: ClaimingAdjustment,
+  /** Whose benefit it is: the user's own, or their partner's (whose ages these are). */
+  whose: 'user' | 'partner' = 'user'
+): string {
   const later = adjustment.toAge > adjustment.fromAge;
+  const rule = `(${later ? 'a credit for each month after' : 'a reduction for each month before'} full retirement ` +
+    `age, which I took as ${describeFullRetirementAge(adjustment.fullRetirementAge)} from ` +
+    `${whose === 'partner' ? 'their' : 'your'} age)`;
+  if (whose === 'partner') {
+    return `If your partner claims at ${adjustment.toAge} instead of ${adjustment.fromAge}, their Social Security of ` +
+      `${money(adjustment.fromAmount)} a year becomes ${money(adjustment.amount)} by Social Security's own rules ${rule}.`;
+  }
   return `Claimed at ${adjustment.toAge} instead of ${adjustment.fromAge}, Social Security of ` +
-    `${money(adjustment.fromAmount)} a year becomes ${money(adjustment.amount)} by Social Security's own rules ` +
-    `(${later ? 'a credit for each month after' : 'a reduction for each month before'} full retirement age, which I ` +
-    `took as ${describeFullRetirementAge(adjustment.fullRetirementAge)} from your age).`;
+    `${money(adjustment.fromAmount)} a year becomes ${money(adjustment.amount)} by Social Security's own rules ${rule}.`;
 }

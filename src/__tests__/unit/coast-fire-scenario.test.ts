@@ -88,6 +88,7 @@ const FIELDS = [
   'withdrawalRatePercent',
   'annualContribution',
   'lifeExpectancy',
+  'partnerSocialSecurityStartAge',
 ] as const;
 
 type Field = (typeof FIELDS)[number];
@@ -1092,6 +1093,57 @@ describe('Coast FIRE calculator', () => {
         'partnerMarried',
       ]));
       expect(coastFireInputRequest(execution)).toBeNull();
+    });
+
+    it('compares the partner claiming at another age, moving their benefit by the same rules', async () => {
+      const runner = householdRunner();
+      const execution = await runCoastFireScenario(
+        PARTNER,
+        plan({ ...STATED, socialSecurityAnnual: 30_000 }, { partnerSocialSecurityStartAge: 70 }),
+        runner as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+
+      expect(execution.scenarios.map((scenario) => scenario.label))
+        .toEqual(['Your partner claiming Social Security at 67', 'Your partner claiming Social Security at 70']);
+      const partnerBenefit = (index: number) => execution.scenarios[index].metrics.incomes
+        ?.find((income) => income.owner === 'partner' && income.kind === 'social_security');
+      // Their 67 and 70 are the user's 70 and 73.
+      expect(partnerBenefit(0)).toMatchObject({ annualAmount: 20_000, startAge: 70 });
+      expect(partnerBenefit(1)).toMatchObject({ annualAmount: 24_800, startAge: 73 });
+      // The history runs each case with the partner as that case plans them.
+      expect(runner.mock.calls.map((call) => call[1]?.partner.socialSecurity?.annualAmount)).toEqual([20_000, 24_800]);
+      expect(execution.scenarios[1].metrics.retirementTarget).toBeLessThan(execution.scenarios[0].metrics.retirementTarget);
+
+      const disclosure = describeCoastFireScenarioExecution(execution)!;
+      expect(disclosure).toContain(
+        'If your partner claims at 70 instead of 67, their Social Security of $20,000 a year becomes $24,800 by ' +
+        'Social Security\'s own rules (a credit for each month after full retirement age, which I took as 67 from their age).'
+      );
+      const facts = coastFireScenarioCanonicalFacts(execution);
+      const comparisonFacts = facts.filter((fact) => fact.provenance.scenarioId === execution.scenarios[1].id);
+      expect(comparisonFacts.find((fact) => fact.id.endsWith('_partner_social_security_annual'))?.value).toBe(24_800);
+      expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+      // A what-if is never offered for Your numbers.
+      expect(coastFireSavableFigures(execution).map((figure) => figure.key)).not.toContain('partnerSocialSecurityStartAge');
+    });
+
+    it('says why it cannot compare when the partner claims, without their age or a benefit it would move', async () => {
+      const noPartner = await runCoastFireScenario(
+        EMPTY_SNAPSHOT,
+        plan(STATED, { partnerSocialSecurityStartAge: 70 }),
+        householdRunner() as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+      expect(noPartner.scenarios).toHaveLength(1);
+      expect(describeCoastFireScenarioExecution(noPartner)).toContain(
+        'I could not run the comparison case: To compare when your partner claims Social Security I need their age.'
+      );
+
+      const nothingToMove = await runCoastFireScenario(
+        { statedPartner: { age: 35 } },
+        plan(STATED, { partnerSocialSecurityStartAge: 70 }),
+        householdRunner() as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+      expect(nothingToMove.comparisonUnavailableReason).toContain('no Social Security of their own');
     });
 
     it('counts a survivor benefit when married, without a reserve to bridge to it, and asks when it does not know', async () => {

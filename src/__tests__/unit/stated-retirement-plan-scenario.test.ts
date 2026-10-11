@@ -36,6 +36,7 @@ const NUMERIC = [
   'pensionAnnual',
   'pensionStartAge',
   'lifeExpectancy',
+  'partnerSocialSecurityStartAge',
 ] as const;
 
 type Values = Partial<Record<(typeof NUMERIC)[number], number>> & { allocation?: string; pensionInflation?: string };
@@ -851,6 +852,51 @@ describe('retirement plan from stated figures', () => {
       { key: 'partnerMarried', label: 'Married', value: 'married', display: 'Yes' },
     ]);
     expect(statedRetirementPlanInputRequest(execution)).toBeNull();
+  });
+
+  it('compares the partner claiming at another age, moving their benefit by the same rules', async () => {
+    const runner = householdRunner();
+    const snapshot = { ...NO_HOLDINGS, statedPartner: { age: 42, socialSecurityAnnual: 24_000, married: true } };
+    const execution = await runStatedRetirementPlan(
+      snapshot,
+      plan(LEAD, { partnerSocialSecurityStartAge: 70 }),
+      runner as QuickPlanRunner
+    ) as CompletedStatedRetirementPlanExecution;
+
+    expect(runner.mock.calls.map((call) => call[1]?.partner.socialSecurity)).toEqual([
+      { annualAmount: 24_000, startAge: 67, quote: { amount: 24_000, age: 67 } },
+      expect.objectContaining({ annualAmount: 29_760, startAge: 70, quote: { amount: 24_000, age: 67 } }),
+    ]);
+    expect(execution.scenarios.map((scenario) => scenario.label))
+      .toEqual(['Your partner claiming Social Security at 67', 'Your partner claiming Social Security at 70']);
+    // Their 70 is the user's 73.
+    expect(execution.scenarios[1].household?.incomeStreams).toContainEqual(
+      { label: 'your partner\'s Social Security', annualAmount: 29_760, startAge: 73, inflationAdjusted: true }
+    );
+
+    const disclosure = describeStatedRetirementPlanExecution(execution)!;
+    expect(disclosure).toContain(
+      'If your partner claims at 70 instead of 67, their Social Security of $24,000 a year becomes $29,760 by ' +
+      'Social Security\'s own rules (a credit for each month after full retirement age, which I took as 67 from their age).'
+    );
+    const facts = statedRetirementPlanCanonicalFacts(execution);
+    expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+    // The main case's partner figures are offered; the what-if's claiming age is not.
+    expect(statedRetirementPlanSavableFigures(execution)).not.toContainEqual(
+      expect.objectContaining({ key: 'partnerSocialSecurityStartAge' })
+    );
+  });
+
+  it('says why it cannot compare when the partner claims without knowing the partner', async () => {
+    const execution = await runStatedRetirementPlan(
+      NO_HOLDINGS,
+      plan(LEAD, { partnerSocialSecurityStartAge: 70 }),
+      householdRunner() as QuickPlanRunner
+    ) as CompletedStatedRetirementPlanExecution;
+    expect(execution.scenarios).toHaveLength(1);
+    expect(describeStatedRetirementPlanExecution(execution)).toContain(
+      'I could not run the comparison case: To compare when your partner claims Social Security I need their age.'
+    );
   });
 
   it('spends what the user said one survivor would, from the first death', async () => {
