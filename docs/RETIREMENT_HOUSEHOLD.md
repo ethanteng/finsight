@@ -22,7 +22,7 @@ Each figure resolves the way the user's own do: the current decision, then Your 
 | Each partner's planning age | 95 | The same convention as the user's |
 | Spending after the first death | Unchanged | Nothing says it falls, and assuming it does would flatter the plan |
 
-A partner's age is never assumed. When their incomes are known but their age is not, the calculators run the user's own plan and the answer says the partner's incomes are left out until the age is given.
+A partner's age is never assumed. When their incomes, planning age, or survivor spending are known but their age is not, the calculators run the user's own plan and the answer says the partner's figures are left out until the age is given.
 
 A partner's Social Security figure is moved to the age they claim it by the same rules as the user's (`src/services/social-security-claiming.ts`), on the full retirement age the partner's own age implies. See "Claiming age" in `docs/RETIREMENT_INCOME.md`.
 

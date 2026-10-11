@@ -23,6 +23,13 @@ describe('a partner in the plan', () => {
     expect(resolvePartner({ retirementAge: 65, currentAge: 60 })).toBeNull();
     expect(resolvePartner({ stated: { socialSecurityAnnual: 24_000 }, retirementAge: 65, currentAge: 60 }))
       .toEqual({ missingAge: true });
+    expect(resolvePartner({ stated: { survivorAnnualSpending: 50_000 }, retirementAge: 65, currentAge: 60 }))
+      .toEqual({ missingAge: true });
+    expect(resolvePartner({
+      statedFigures: { partnerPlanThroughAge: saved(92) },
+      retirementAge: 65,
+      currentAge: 60,
+    })).toEqual({ missingAge: true });
   });
 
   it('takes what the user said, then Your numbers, then named defaults', () => {

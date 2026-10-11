@@ -96,9 +96,9 @@ export interface ResolvedPartner {
  * The partner's figures: what the user said in this decision, then Your
  * numbers, then named defaults -- and only for an income the partner has.
  *
- * Null when there is no partner to plan for. When incomes are known but the
- * partner's age is not, `missingAge` says so: their incomes cannot be timed,
- * and an age is not something to assume.
+ * Null when there is no partner to plan for. When partner-scoped figures are
+ * known but the partner's age is not, `missingAge` says so: those figures
+ * cannot be timed, and an age is not something to assume.
  */
 export function resolvePartner(args: {
   stated?: StatedPartner;
@@ -136,7 +136,14 @@ export function resolvePartner(args: {
   const pensionAmount = take<number>('pensionAnnual', savedNum('partnerRetirementIncome'));
   const age = take<number>('age', savedNum('partnerAge'));
   const hasIncome = (socialSecurityAmount ?? 0) > 0 || (pensionAmount ?? 0) > 0;
-  if (age === undefined) return hasIncome ? { missingAge: true } : null;
+  // Survivor spending and a partner planning age also need their age; do not
+  // drop them silently when the age is missing.
+  const hasPartnerScopedFigure = hasIncome
+    || stated.planThroughAge !== undefined
+    || stated.survivorAnnualSpending !== undefined
+    || savedNum('partnerPlanThroughAge') !== undefined
+    || savedNum('survivorAnnualSpending') !== undefined;
+  if (age === undefined) return hasPartnerScopedFigure ? { missingAge: true } : null;
 
   const ageGap = args.currentAge - age;
   const withDefault = <T extends number | string>(
