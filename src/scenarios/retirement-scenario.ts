@@ -14,6 +14,7 @@ import {
   type RetirementIncomeOrigins,
 } from '../openai/retirement-income';
 import {
+  claimingChange,
   describeClaimingAdjustment,
   EARLIEST_CLAIMING_AGE,
   type ClaimingAdjustment,
@@ -450,7 +451,8 @@ function resolveVariant(
         },
       }
       : claimed;
-    if (partnerClaimAge !== undefined && plan.socialSecurity?.claiming) partnerClaiming = plan.socialSecurity.claiming;
+    // Reported from the benefit the baseline claims, not the figure as given.
+    if (partnerClaimAge !== undefined) partnerClaiming = claimingChange(partner.plan.socialSecurity, plan.socialSecurity);
     const timeline = householdTimeline({ currentAge: input.currentAge, userPlanThroughAge, partner: plan });
     input.lifeExpectancy = timeline.horizonAge;
     // A benefit claimed at another age, or a later first death, changes the
@@ -909,7 +911,7 @@ export function retirementScenarioCanonicalFacts(
     if (scenario.partnerClaiming) {
       const claiming = scenario.partnerClaiming;
       addCalculation(`${prefix}_partner_social_security_at_claiming_age`, `${scenario.label} the user's partner's Social Security a year claimed at ${claiming.toAge} (the partner's age), by Social Security's claiming rules, in today's dollars`, claiming.amount, 'usd', scenario.id);
-      addCalculation(`${prefix}_partner_social_security_before_claiming_change`, `${scenario.label} the user's partner's Social Security a year as given, for claiming at ${claiming.fromAge} (the partner's age), in today's dollars`, claiming.fromAmount, 'usd', scenario.id);
+      addCalculation(`${prefix}_partner_social_security_before_claiming_change`, `${scenario.label} the user's partner's Social Security a year in the baseline, claimed at ${claiming.fromAge} (the partner's age), in today's dollars`, claiming.fromAmount, 'usd', scenario.id);
       addCalculation(`${prefix}_partner_social_security_claiming_change`, `${scenario.label} change in the partner's annual Social Security from claiming at ${claiming.toAge} instead of ${claiming.fromAge}`, Number(((claiming.amount / claiming.fromAmount - 1) * 100).toFixed(4)), 'percent', scenario.id);
     }
     addCalculation(`${prefix}_withdrawal_rate`, `${scenario.label} initial withdrawal rate`, scenario.analysis.metrics.withdrawalRate * 100, 'percent', scenario.id);

@@ -887,6 +887,27 @@ describe('retirement plan from stated figures', () => {
     );
   });
 
+  it('compares the partner\'s claim from the age the plan has them claim at', async () => {
+    // $24,000 is their benefit at 67; the plan has them claim at 62, $16,800.
+    const snapshot = {
+      ...NO_HOLDINGS,
+      statedPartner: { age: 42, socialSecurityAnnual: 24_000, socialSecurityAmountAge: 67, socialSecurityStartAge: 62, married: true },
+    };
+    const compare = async (age: number) => describeStatedRetirementPlanExecution(await runStatedRetirementPlan(
+      snapshot,
+      plan(LEAD, { partnerSocialSecurityStartAge: age }),
+      householdRunner() as QuickPlanRunner
+    ))!;
+
+    expect(await compare(70)).toContain(
+      'If your partner claims at 70 instead of 62, their Social Security of $16,800 a year becomes $29,760'
+    );
+    // Back to the age the figure is for is a move too.
+    expect(await compare(67)).toContain(
+      'If your partner claims at 67 instead of 62, their Social Security of $16,800 a year becomes $24,000'
+    );
+  });
+
   it('says why it cannot compare when the partner claims without knowing the partner', async () => {
     const execution = await runStatedRetirementPlan(
       NO_HOLDINGS,

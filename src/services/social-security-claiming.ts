@@ -160,6 +160,29 @@ export function benefitAtClaimingAge(args: {
 }
 
 /**
+ * How a what-if changes a benefit the plan already claims at one age: from the
+ * plan's own age and amount to the what-if's, not from the figure as given,
+ * which may be for a third age. Undefined when the age does not move or the
+ * claiming rules applied to neither (so there is no full retirement age to
+ * name).
+ */
+export function claimingChange(
+  from: { annualAmount: number; startAge: number; claiming?: ClaimingAdjustment } | undefined,
+  to: { annualAmount: number; startAge: number; claiming?: ClaimingAdjustment } | undefined
+): ClaimingAdjustment | undefined {
+  if (!from || !to || from.startAge === to.startAge) return undefined;
+  const fullRetirementAge = to.claiming?.fullRetirementAge ?? from.claiming?.fullRetirementAge;
+  if (!fullRetirementAge) return undefined;
+  return {
+    fromAmount: from.annualAmount,
+    fromAge: from.startAge,
+    toAge: to.startAge,
+    amount: to.annualAmount,
+    fullRetirementAge,
+  };
+}
+
+/**
  * The age a Social Security figure is for. In order: the age the user named
  * for it; for a comparison that only moves the claiming age, the age the main
  * case's figure was for (so "what if I claim at 70?" moves the same benefit);

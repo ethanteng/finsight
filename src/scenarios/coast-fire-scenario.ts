@@ -69,6 +69,7 @@ import {
 import type { SavableFigure, SaveOfferKey } from '../openai/save-offer';
 import {
   benefitAtClaimingAge,
+  claimingChange,
   describeClaimingAdjustment,
   EARLIEST_CLAIMING_AGE,
   LATEST_CREDIT_AGE,
@@ -1932,16 +1933,16 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
 }
 
 /**
- * A comparison that moves the partner's claiming age, with both amounts; the
- * main case's own move is in its partner's income clause.
+ * A comparison that moves the partner's claiming age, with both amounts,
+ * measured from the main case's benefit: the figure as given may be for a
+ * third age, and the main case's own move is in its partner's income clause.
  */
 function describePartnerClaimingComparison(scenarios: CoastFireScenarioResult[]): string {
   const [primary, ...others] = scenarios;
-  const mainAge = primary?.household?.plan.socialSecurityClaimAge;
+  const main = primary?.household?.plan.socialSecurity;
   return others.flatMap((scenario) => {
-    const plan = scenario.household?.plan;
-    const claiming = plan?.socialSecurity?.claiming;
-    return claiming && plan?.socialSecurityClaimAge !== mainAge ? [` ${describeClaimingAdjustment(claiming, 'partner')}`] : [];
+    const change = claimingChange(main, scenario.household?.plan.socialSecurity);
+    return change ? [` ${describeClaimingAdjustment(change, 'partner')}`] : [];
   }).join('');
 }
 

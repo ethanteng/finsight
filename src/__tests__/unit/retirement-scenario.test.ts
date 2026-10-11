@@ -240,6 +240,46 @@ describe('retirement scenario runner', () => {
       });
     });
 
+    it('reports the partner\'s move from the age the plan claims at, not the age their figure is for', async () => {
+      // Their $32,000 is for 67, but the plan has them claim at 62: $22,400.
+      const data = coupleSnapshot();
+      const household = data.retirementAnalysis._household;
+      household.plan = {
+        ...household.plan,
+        socialSecurity: {
+          annualAmount: 22_400,
+          startAge: 62,
+          quote: { amount: 32_000, age: 67 },
+          claiming: { fromAmount: 32_000, fromAge: 67, toAge: 62, amount: 22_400, fullRetirementAge: { years: 67, months: 0 } },
+        },
+        socialSecurityClaimAge: 62,
+      };
+      data.retirementAnalysis._storedInputParams.incomeStreams[1] =
+        { label: 'your partner\'s Social Security', annualAmount: 22_400, startAge: 64, inflationAdjusted: true };
+      const whatIf = async (age: number) => {
+        const execution = await runRetirementScenario(data, {
+          requested: true,
+          primary: {
+            type: 'historical_cpi',
+            overrides: { partnerSocialSecurityStartAge: age, sources: { partnerSocialSecurityStartAge: `if she claims at ${age}` } },
+          },
+        }, jest.fn(async () => analysis(0.85)));
+        if (execution.status !== 'completed') throw new Error('not completed');
+        return execution;
+      };
+
+      const later = await whatIf(70);
+      expect(later.scenarios[0].partnerClaiming).toEqual({
+        fromAmount: 22_400, fromAge: 62, toAge: 70, amount: 39_680, fullRetirementAge: { years: 67, months: 0 },
+      });
+      expect(describeRetirementScenarioExecution(later)).toContain(
+        'If your partner claims at 70 instead of 62, their Social Security of $22,400 a year becomes $39,680'
+      );
+      // Back to the age the figure is for: still a move, and still said.
+      const atQuote = await whatIf(67);
+      expect(atQuote.scenarios[0].partnerClaiming).toMatchObject({ fromAge: 62, fromAmount: 22_400, toAge: 67, amount: 32_000 });
+    });
+
     it('cannot move a partner\'s claiming age without a partner to plan for', async () => {
       const execution = await runRetirementScenario(snapshot(), {
         requested: true,
