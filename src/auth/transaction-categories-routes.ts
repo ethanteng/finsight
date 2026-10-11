@@ -3,8 +3,6 @@ import { requireAuth, AuthenticatedRequest } from './middleware';
 import { getPrismaClient } from '../prisma-client';
 import {
   categoryRulePayee,
-  categoryRuleSubject,
-  categoryRuleSubjectFor,
   findCategoryRule,
   findMatchingSnapshotTransactions,
   findSnapshotTransaction,
@@ -54,15 +52,17 @@ router.get('/:transactionId/matches', requireAuth, async (req: AuthenticatedRequ
       return res.status(404).json({ success: false, error: 'Transaction not found' });
     }
     // The direction lets the page say which way the matches go, which the
-    // amount's sign can't: card purchases are stored positive. A payee that can
-    // be matched can take a rule for its new transactions, even with no others yet.
+    // amount's sign can't: card purchases are stored positive. It is the
+    // provider's direction (same as the rule), so a row the user already
+    // recategorized across a cash-flow boundary still names the money that way.
+    // A payee that can take a rule can be matched even with no others yet.
     const rule = await findCategoryRule(req.user!.id, found.target);
     res.json({
       success: true,
       data: {
         count: found.matches.length,
-        direction: moneyDirection(found.target),
-        canApplyToMatching: categoryRuleSubject(found.target) !== null,
+        direction: found.subject?.direction ?? moneyDirection(found.target),
+        canApplyToMatching: found.subject !== null,
         rule: rule && { id: rule.id, category: rule.category },
       },
     });
@@ -90,10 +90,10 @@ async function applyToMatching(
   }
   const rows = [found.target, ...found.matches];
   const prisma = getPrismaClient();
-  // Keyed by the way the payee moves money as its provider classified it, so a
-  // target the user already recategorized across a cash-flow boundary updates the
-  // rule that did it rather than starting one the other way.
-  const subject = await categoryRuleSubjectFor(userId, found.target);
+  // Matches and the rule share the provider's direction (from findMatching…),
+  // so a target the user already recategorized across a cash-flow boundary
+  // updates the rule that did it and applies to the same-way siblings.
+  const subject = found.subject;
   const label = String(found.target?.merchant_name || found.target?.name || '').trim().slice(0, RULE_LABEL_MAX_LENGTH);
   // Every override is written before the snapshot is patched, for the same reason
   // as a single edit: no user category in the JSON blob without a row behind it.

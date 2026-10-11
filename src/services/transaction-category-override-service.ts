@@ -409,21 +409,40 @@ function isInvestmentActivity(transaction: any): boolean {
  * and a merchant's refunds keep their own category. A transaction whose
  * direction can't be told matches nothing, rather than risk mixing the two.
  *
+ * `direction` and `originalCategories` let a caller match the way a rule is
+ * keyed: by the provider's classification. A user category can turn a row's
+ * direction around, so without those a recategorized payment would match the
+ * payee's money the other way. When they are omitted, each row is read as it
+ * stands (unit tests and any caller that has no restore points).
+ *
  * Transactions without a provider id cannot carry an override and are skipped,
  * as is everything when the payee has no name to match on.
  */
-export function matchingTransactions(transactions: readonly any[], target: any): any[] {
+export function matchingTransactions(
+  transactions: readonly any[],
+  target: any,
+  options?: {
+    direction?: 'in' | 'out';
+    originalCategories?: ReadonlyMap<string, readonly string[]>;
+  }
+): any[] {
   const key = counterpartyKey(target?.merchant_name, target?.name);
-  const direction = moneyDirection(target);
+  const direction = options?.direction ?? moneyDirection(target);
   if (!key || !direction) return [];
   const targetId = resolveProviderTransactionId(target);
   const investment = isInvestmentActivity(target);
+  const directionOf = (transaction: any): 'in' | 'out' | null => {
+    if (!options?.originalCategories) return moneyDirection(transaction);
+    const id = resolveProviderTransactionId(transaction);
+    const original = id ? options.originalCategories.get(id) : undefined;
+    return providerMoneyDirection(transaction, original) ?? moneyDirection(transaction);
+  };
   return transactions.filter(transaction => {
     const id = resolveProviderTransactionId(transaction);
     return id !== null
       && id !== targetId
       && isInvestmentActivity(transaction) === investment
-      && moneyDirection(transaction) === direction
+      && directionOf(transaction) === direction
       && counterpartyKey(transaction?.merchant_name, transaction?.name) === key;
   });
 }
@@ -432,8 +451,9 @@ export function matchingTransactions(transactions: readonly any[], target: any):
 export async function findMatchingSnapshotTransactions(
   userId: string,
   transactionId: string
-): Promise<{ target: any; matches: any[] } | null> {
-  const snapshot = await getPrismaClient().financialSummarySnapshot.findUnique({
+): Promise<{ target: any; matches: any[]; subject: CategoryRuleSubject | null } | null> {
+  const prisma = getPrismaClient();
+  const snapshot = await prisma.financialSummarySnapshot.findUnique({
     where: { userId },
     select: { transactions: true },
   });
@@ -441,5 +461,25 @@ export async function findMatchingSnapshotTransactions(
   const transactions = snapshot.transactions as any[];
   const target = transactions.find(transaction => resolveProviderTransactionId(transaction) === transactionId);
   if (!target) return null;
-  return { target, matches: matchingTransactions(transactions, target) };
+  // Same provider direction a rule would use, so "also apply" and the rule agree
+  // when the target was already recategorized across a cash-flow boundary.
+  const subject = await categoryRuleSubjectFor(userId, target);
+  if (!subject) return { target, matches: [], subject: null };
+  const ids = transactions
+    .map(transaction => resolveProviderTransactionId(transaction))
+    .filter((id): id is string => id !== null);
+  const originals = ids.length === 0
+    ? []
+    : await prisma.transactionCategoryOverride.findMany({
+      where: { userId, transactionId: { in: ids } },
+      select: { transactionId: true, originalCategory: true },
+    });
+  return {
+    target,
+    subject,
+    matches: matchingTransactions(transactions, target, {
+      direction: subject.direction,
+      originalCategories: new Map(originals.map(row => [row.transactionId, row.originalCategory])),
+    }),
+  };
 }

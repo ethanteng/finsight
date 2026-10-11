@@ -315,6 +315,22 @@ describe('transactions a category edit can also apply to', () => {
     const transfer = { transaction_id: 'txn-1', name: 'ZELLE', amount: -50, personal_finance_category: { primary: 'TRANSFER', detailed: 'TRANSFER' } };
     expect(matchingTransactions([transfer, { ...transfer, transaction_id: 'txn-2' }], transfer)).toEqual([]);
   });
+
+  it('matches by the provider direction when a user category turned the row around', () => {
+    const stamped = {
+      transaction_id: 'txn-1', name: 'VENMO PAYMENT', merchant_name: 'Venmo', amount: -50,
+      category: ['INCOME'], category_source: 'user', transaction_type: 'income',
+    };
+    const payment = { transaction_id: 'txn-2', name: 'VENMO PAYMENT', merchant_name: 'Venmo', amount: -40, transaction_type: 'transfer_out' };
+    const cashout = { transaction_id: 'txn-3', name: 'VENMO CASHOUT', merchant_name: 'Venmo', amount: 60, transaction_type: 'transfer_in' };
+    // As the row stands it is money in, so it would match the cashout.
+    expect(matchingTransactions([stamped, payment, cashout], stamped).map(t => t.transaction_id)).toEqual(['txn-3']);
+    // With the provider direction a rule uses, it matches the other payments out.
+    expect(matchingTransactions([stamped, payment, cashout], stamped, {
+      direction: 'out',
+      originalCategories: new Map([['txn-1', ['TRANSFER_OUT']]]),
+    }).map(t => t.transaction_id)).toEqual(['txn-2']);
+  });
 });
 
 describe('a payee’s category rule', () => {

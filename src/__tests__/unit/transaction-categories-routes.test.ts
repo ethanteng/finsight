@@ -10,7 +10,7 @@ import request from 'supertest';
 const prisma: Record<string, any> = {
   $transaction: jest.fn(async (operations: Promise<unknown>[]) => Promise.all(operations)),
   financialSummarySnapshot: { findUnique: jest.fn(), updateMany: jest.fn() },
-  transactionCategoryOverride: { findUnique: jest.fn(), upsert: jest.fn(), delete: jest.fn() },
+  transactionCategoryOverride: { findUnique: jest.fn(), findMany: jest.fn(), upsert: jest.fn(), delete: jest.fn() },
   transactionCategoryRule: { findMany: jest.fn(), upsert: jest.fn(), deleteMany: jest.fn() },
 };
 
@@ -48,6 +48,7 @@ beforeEach(() => {
   prisma.financialSummarySnapshot.findUnique.mockResolvedValue({ computedAt, transactions: snapshotTransactions() });
   prisma.financialSummarySnapshot.updateMany.mockResolvedValue({ count: 1 });
   prisma.transactionCategoryOverride.findUnique.mockResolvedValue(null);
+  prisma.transactionCategoryOverride.findMany.mockResolvedValue([]);
   prisma.transactionCategoryRule.findMany.mockResolvedValue([]);
   prisma.transactionCategoryRule.upsert.mockImplementation(async (args: any) => ({ id: 'rule-1', ...args.create }));
   prisma.transactionCategoryRule.deleteMany.mockResolvedValue({ count: 1 });
@@ -141,9 +142,29 @@ describe('PUT /api/transaction-categories/:transactionId', () => {
         : transaction),
     });
     prisma.transactionCategoryOverride.findUnique.mockResolvedValue({ originalCategory: ['TRANSFER_OUT'] });
-    await request(app).put('/api/transaction-categories/txn-1').send({ primary: 'RENT_AND_UTILITIES', applyToMatching: true });
+    prisma.transactionCategoryOverride.findMany.mockResolvedValue([
+      { transactionId: 'txn-1', originalCategory: ['TRANSFER_OUT'] },
+    ]);
+    const response = await request(app).put('/api/transaction-categories/txn-1').send({ primary: 'RENT_AND_UTILITIES', applyToMatching: true });
     expect(prisma.transactionCategoryRule.upsert.mock.calls[0][0].where.userId_counterpartyKey_direction_investment)
       .toMatchObject({ counterpartyKey: 'venmo', direction: 'out' });
+    // Matches follow that same provider direction: other payments out, not the cashout in.
+    expect(response.body.data.appliedTo).toEqual(['txn-1', 'txn-2', 'txn-3']);
+  });
+
+  it('names match direction from the provider when the row was recategorized', async () => {
+    prisma.financialSummarySnapshot.findUnique.mockResolvedValue({
+      computedAt,
+      transactions: snapshotTransactions().map(transaction => transaction.transaction_id === 'txn-1'
+        ? { ...transaction, category: ['INCOME', 'INCOME_OTHER_INCOME'], category_source: 'user', transaction_type: 'income' }
+        : transaction),
+    });
+    prisma.transactionCategoryOverride.findUnique.mockResolvedValue({ originalCategory: ['TRANSFER_OUT'] });
+    prisma.transactionCategoryOverride.findMany.mockResolvedValue([
+      { transactionId: 'txn-1', originalCategory: ['TRANSFER_OUT'] },
+    ]);
+    const response = await request(app).get('/api/transaction-categories/txn-1/matches');
+    expect(response.body.data).toMatchObject({ count: 2, direction: 'out', canApplyToMatching: true });
   });
 
   it('without it, still sets only the one transaction', async () => {
