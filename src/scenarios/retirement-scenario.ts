@@ -399,7 +399,7 @@ function resolveVariant(
     if (field === 'partnerSocialSecurityStartAge') {
       // The partner's own benefit claimed at another age moves the same way,
       // and with it their spousal start and the survivor benefit.
-      const reason = partnerClaimingUnavailableReason(partner);
+      const reason = partnerClaimingUnavailableReason(partner, value);
       if (reason) return { unavailableReason: reason };
       partnerClaimAge = value;
     } else if (field === 'socialSecurityStartAge') {

@@ -290,15 +290,26 @@ export function partnerClaimingAt(
 }
 
 /**
- * Why a what-if on when the partner claims cannot run: nobody to plan for, or
- * nothing it would change. Undefined when it can.
+ * Why a what-if on when the partner claims cannot run, the way the user's own
+ * cannot: nobody to plan for, nothing it would change, a benefit already being
+ * paid, or a claiming age already behind them. Undefined when it can.
  */
-export function partnerClaimingUnavailableReason(partner: ResolvedPartner | undefined): string | undefined {
+export function partnerClaimingUnavailableReason(
+  partner: ResolvedPartner | undefined,
+  claimAge: number
+): string | undefined {
   if (!partner) return 'To compare when your partner claims Social Security I need their age.';
+  const { plan } = partner;
   // Unmarried with no benefit of their own, their claiming age moves nothing.
-  if (!partner.plan.socialSecurity && !partner.married?.value) {
+  if (!plan.socialSecurity && !partner.married?.value) {
     return 'Your partner has no Social Security of their own in this plan, so when they claim changes nothing. ' +
       'Tell me their benefit and I will compare.';
+  }
+  if (plan.socialSecurity && plan.socialSecurity.startAge <= plan.age) {
+    return 'Your partner\'s Social Security is already being paid in this plan, so when they claim cannot change.';
+  }
+  if (claimAge < plan.age) {
+    return `Your partner claiming Social Security at ${claimAge} is already in the past at ${plan.age}.`;
   }
   return undefined;
 }

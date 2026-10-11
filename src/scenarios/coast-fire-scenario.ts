@@ -637,6 +637,8 @@ interface ResolvedCoastFireVariant {
   userPlanThroughAge?: number;
   /** What one survivor spends from the first death, when the user said. */
   survivorSpending?: { fromAge: number; annualAmount: number };
+  /** Why a what-if on when the partner claims could not move them; the case then cannot run as asked. */
+  partnerClaimingUnavailable?: string;
   /** How much the user could cut in a bad market, for the market-history test only. */
   spendingFlexibility?: SpendingFlexibilityResolution;
 }
@@ -898,9 +900,13 @@ function resolveVariant(
   const partnerClaimAge = overrides.sources.partnerSocialSecurityStartAge
     ? overrides.partnerSocialSecurityStartAge
     : undefined;
-  const resolvedPartner = partner && !('missingAge' in partner)
-    ? partnerClaimAge !== undefined ? partnerClaimingAt(partner, partnerClaimAge) : partner
+  const knownPartner = partner && !('missingAge' in partner) ? partner : undefined;
+  const partnerClaimingUnavailable = partnerClaimAge !== undefined
+    ? partnerClaimingUnavailableReason(knownPartner, partnerClaimAge)
     : undefined;
+  const resolvedPartner = knownPartner && partnerClaimAge !== undefined && !partnerClaimingUnavailable
+    ? partnerClaimingAt(knownPartner, partnerClaimAge)
+    : knownPartner;
   const timeline = resolvedPartner
     ? householdTimeline({ currentAge: currentAge!, userPlanThroughAge, partner: resolvedPartner.plan })
     : undefined;
@@ -961,6 +967,7 @@ function resolveVariant(
     ...(namedPlanThroughAge !== undefined && { userPlanThroughAge: namedPlanThroughAge }),
     ...(survivorSpending && { survivorSpending }),
     ...(spendingFlexibility && { spendingFlexibility }),
+    ...(partnerClaimingUnavailable && { partnerClaimingUnavailable }),
   };
 }
 
@@ -1284,12 +1291,9 @@ export async function runCoastFireScenario(
       );
     }
     if (index === 0) primaryQuoteAge = variant.socialSecurityQuote?.age;
-    // A what-if on when the partner claims needs a partner it would change.
-    const partnerClaimingReason = index > 0 && comparisonOwn?.partnerSocialSecurityStartAge !== undefined
-      ? partnerClaimingUnavailableReason(variant.household)
-      : undefined;
-    if (partnerClaimingReason) {
-      comparisonUnavailableReason = partnerClaimingReason;
+    // A what-if on when the partner claims needs a partner it can move.
+    if (index > 0 && variant.partnerClaimingUnavailable) {
+      comparisonUnavailableReason = variant.partnerClaimingUnavailable;
       continue;
     }
     try {

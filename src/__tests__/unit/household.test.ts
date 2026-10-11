@@ -437,14 +437,33 @@ describe('the partner claiming at another age', () => {
   it('moves only when a spousal benefit would start when they have none of their own', () => {
     const partner = resolved({ age: 48, planThroughAge: 95, socialSecurityClaimAge: 67 }, true);
     expect(partnerClaimingAt(partner, 62).plan).toEqual({ age: 48, planThroughAge: 95, socialSecurityClaimAge: 62 });
-    expect(partnerClaimingUnavailableReason(partner)).toBeUndefined();
+    expect(partnerClaimingUnavailableReason(partner, 62)).toBeUndefined();
   });
 
-  it('says when there is nobody to move, or nothing it would change', () => {
-    expect(partnerClaimingUnavailableReason(undefined)).toBe(
+  it('says when there is nobody to move, nothing it would change, or nothing left to move', () => {
+    expect(partnerClaimingUnavailableReason(undefined, 70)).toBe(
       'To compare when your partner claims Social Security I need their age.'
     );
-    expect(partnerClaimingUnavailableReason(resolved({ age: 48, planThroughAge: 95 })))
+    expect(partnerClaimingUnavailableReason(resolved({ age: 48, planThroughAge: 95 }), 70))
       .toContain('no Social Security of their own');
+    const paid = resolved({
+      age: 68,
+      planThroughAge: 95,
+      socialSecurity: { annualAmount: 30_000, startAge: 67, quote: { amount: 30_000, age: 67 } },
+      socialSecurityClaimAge: 67,
+    });
+    expect(partnerClaimingUnavailableReason(paid, 70)).toBe(
+      'Your partner\'s Social Security is already being paid in this plan, so when they claim cannot change.'
+    );
+    const notYet = resolved({
+      age: 66,
+      planThroughAge: 95,
+      socialSecurity: { annualAmount: 30_000, startAge: 67, quote: { amount: 30_000, age: 67 } },
+      socialSecurityClaimAge: 67,
+    });
+    expect(partnerClaimingUnavailableReason(notYet, 64)).toBe(
+      'Your partner claiming Social Security at 64 is already in the past at 66.'
+    );
+    expect(partnerClaimingUnavailableReason(notYet, 70)).toBeUndefined();
   });
 });

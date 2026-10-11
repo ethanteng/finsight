@@ -899,6 +899,23 @@ describe('retirement plan from stated figures', () => {
     );
   });
 
+  it('will not move a partner\'s claim into the past, or one already being paid', async () => {
+    const past = await runStatedRetirementPlan(
+      { ...NO_HOLDINGS, statedPartner: { age: 64, socialSecurityAnnual: 24_000, married: true } },
+      plan(LEAD, { partnerSocialSecurityStartAge: 62 }),
+      householdRunner() as QuickPlanRunner
+    ) as CompletedStatedRetirementPlanExecution;
+    expect(past.scenarios).toHaveLength(1);
+    expect(past.comparisonUnavailableReason).toBe('Your partner claiming Social Security at 62 is already in the past at 64.');
+
+    const paid = await runStatedRetirementPlan(
+      { ...NO_HOLDINGS, statedPartner: { age: 68, socialSecurityAnnual: 24_000, socialSecurityStartAge: 66, married: true } },
+      plan(LEAD, { partnerSocialSecurityStartAge: 70 }),
+      householdRunner() as QuickPlanRunner
+    ) as CompletedStatedRetirementPlanExecution;
+    expect(paid.comparisonUnavailableReason).toContain('already being paid');
+  });
+
   it('spends what the user said one survivor would, from the first death', async () => {
     const runner = householdRunner();
     const snapshot = {

@@ -518,6 +518,8 @@ interface ResolvedVariant {
   userSocialSecurity: { claimAge: number; known: boolean };
   /** How much the user could cut in a bad market, or the comparison; absent without a spending level. */
   spendingFlexibility?: SpendingFlexibilityResolution;
+  /** Why a what-if on when the partner claims could not move them; the case then cannot run as asked. */
+  partnerClaimingUnavailable?: string;
 }
 
 /**
@@ -830,9 +832,13 @@ function resolveVariant(
   const partnerClaimAge = overrides.sources.partnerSocialSecurityStartAge
     ? overrides.partnerSocialSecurityStartAge
     : undefined;
-  const planned = partner && !('missingAge' in partner)
-    ? partnerClaimAge !== undefined ? partnerClaimingAt(partner, partnerClaimAge) : partner
+  const knownPartner = partner && !('missingAge' in partner) ? partner : undefined;
+  const partnerClaimingUnavailable = partnerClaimAge !== undefined
+    ? partnerClaimingUnavailableReason(knownPartner, partnerClaimAge)
     : undefined;
+  const planned = knownPartner && partnerClaimAge !== undefined && !partnerClaimingUnavailable
+    ? partnerClaimingAt(knownPartner, partnerClaimAge)
+    : knownPartner;
   const household: PlannedHousehold | undefined = planned
     ? {
       ...planned,
@@ -862,6 +868,7 @@ function resolveVariant(
     ...(partner && 'missingAge' in partner && { missingPartnerAge: true as const }),
     userSocialSecurity,
     ...(spendingFlexibility && { spendingFlexibility }),
+    ...(partnerClaimingUnavailable && { partnerClaimingUnavailable }),
   };
 }
 
@@ -1128,12 +1135,9 @@ export async function runStatedRetirementPlan(
         standInFor
       );
     }
-    // A what-if on when the partner claims needs a partner it would change.
-    const partnerClaimingReason = index > 0 && comparisonOwn?.partnerSocialSecurityStartAge !== undefined
-      ? partnerClaimingUnavailableReason(variant.household)
-      : undefined;
-    if (partnerClaimingReason) {
-      partnerClaimingUnavailable = partnerClaimingReason;
+    // A what-if on when the partner claims needs a partner it can move.
+    if (index > 0 && variant.partnerClaimingUnavailable) {
+      partnerClaimingUnavailable = variant.partnerClaimingUnavailable;
       continue;
     }
     if (!variants.some((existing) => requestKey(existing) === requestKey(variant))) variants.push(variant);
