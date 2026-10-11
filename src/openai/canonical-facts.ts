@@ -812,7 +812,8 @@ export function buildCanonicalFactPack(
     for (const stream of projectionIncome) {
       const { owner, kind } = incomeOfStream(stream);
       // The partner's incomes, and every income's end, are the household's facts below.
-      if (owner === 'partner' && household) continue;
+      // Skip even when `_household` is absent so a partner stream is never labeled as the user's.
+      if (owner === 'partner') continue;
       const pension = kind === 'pension';
       const key = pension ? 'retirement_pension' : 'retirement_social_security';
       const claiming = pension ? undefined : incomeOrigins?.socialSecurity?.claiming;
