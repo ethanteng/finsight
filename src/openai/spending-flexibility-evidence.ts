@@ -10,7 +10,7 @@
 
 import type { SpendingFlexibilityOutcome } from '../retirement-analytics/types';
 import type { SpendingFlexibilityResolution } from '../services/spending-flexibility';
-import { SPENDING_CUT_TRIGGER } from '../services/spending-flexibility';
+import { MAXIMUM_SPENDING_CUT_PERCENT, SPENDING_CUT_TRIGGER } from '../services/spending-flexibility';
 import { savedOn } from '../services/stated-figures';
 import type { CanonicalFactUnit } from './canonical-facts';
 
@@ -61,9 +61,21 @@ function howOften(outcome: SpendingFlexibilityOutcome): string {
 }
 
 /**
+ * Why a cut the user stated is not the one the plan ran, as a sentence; empty
+ * when nothing they said was set aside.
+ */
+export function describeIgnoredSpendingCut(resolution: SpendingFlexibilityResolution | undefined): string {
+  return resolution?.ignoredStated
+    ? ` I did not use the spending cut you described: it comes to more than ${MAXIMUM_SPENDING_CUT_PERCENT}% of the ` +
+      'plan\'s spending, which I took as a misreading.'
+    : '';
+}
+
+/**
  * What a cut did, as sentences: how often the user's own cut was in force,
  * or, when they have not said, what a 20% cut would change beside fixed
- * spending. Empty when there is nothing to report.
+ * spending. Empty when there is nothing to report. A stated cut that could
+ * not be used is named first.
  */
 export function describeSpendingFlexibilityResults(args: {
   resolution: SpendingFlexibilityResolution | undefined;
@@ -73,6 +85,10 @@ export function describeSpendingFlexibilityResults(args: {
   /** The plan's survival on its own spending. */
   survivalRate: number;
 }): string {
+  return describeIgnoredSpendingCut(args.resolution) + describeResults(args);
+}
+
+function describeResults(args: Parameters<typeof describeSpendingFlexibilityResults>[0]): string {
   const { resolution, outcome, comparison, survivalRate } = args;
   if (resolution?.kind === 'cut' && outcome) {
     return outcome.sequencesWithCuts === 0

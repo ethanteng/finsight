@@ -99,6 +99,18 @@ import {
   withPartnerAgeField,
   type PlannedHousehold,
 } from '../openai/household-evidence';
+import type { SpendingFlexibilityOutcome } from '../retirement-analytics/types';
+import {
+  resolveSpendingFlexibility,
+  savableSpendingCut,
+  spendingFlexibilityInput,
+  type SpendingFlexibilityResolution,
+} from '../services/spending-flexibility';
+import {
+  describeSpendingCut,
+  describeSpendingFlexibilityResults,
+  spendingFlexibilityFactRows,
+} from '../openai/spending-flexibility-evidence';
 
 export const COAST_FIRE_CALCULATOR_ID = 'coast_fire' as const;
 /**
@@ -270,6 +282,16 @@ export interface CoastFireHistoricalTest {
   firstStartMonth: string;
   lastStartMonth: string;
   horizonYears: number;
+  /**
+   * The cut in a bad market the test ran (`survivalRate` is then with that
+   * cut) and how often it was in force, or the 20% comparison beside fixed
+   * spending when the user has not said. The straight line never cuts.
+   */
+  spendingFlexibility?: {
+    resolution: SpendingFlexibilityResolution;
+    outcome?: SpendingFlexibilityOutcome;
+    comparison?: SpendingFlexibilityOutcome;
+  };
 }
 
 /** Whether the pension rises with prices, and whether the user said so. */
@@ -585,6 +607,8 @@ interface ResolvedCoastFireVariant {
   userPlanThroughAge?: number;
   /** What one survivor spends from the first death, when the user said. */
   survivorSpending?: { fromAge: number; annualAmount: number };
+  /** How much the user could cut in a bad market, for the market-history test only. */
+  spendingFlexibility?: SpendingFlexibilityResolution;
 }
 
 /** Whether the pension rises with prices: the user's words, then Your numbers, then fixed. */
@@ -868,6 +892,14 @@ function resolveVariant(
     : undefined;
   const incomes: CoastFireIncome[] = couple?.incomes ?? ownIncomes;
   const survivorSpending = household ? survivorSpendingFor(household.plan, household.timeline) : undefined;
+  // The straight line spends in full every year; the market-history test runs
+  // the user's cut in a bad market, or a 20% cut beside fixed spending when
+  // they have not said.
+  const spendingFlexibility = resolveSpendingFlexibility({
+    stated: snapshot.statedSpendingCut,
+    statedFigures: snapshot.statedFigures,
+    annualSpending: annualRetirementSpending,
+  });
 
   return {
     inputs: {
@@ -892,6 +924,7 @@ function resolveVariant(
     planThroughAge: household?.timeline.horizonAge ?? userPlanThroughAge,
     ...(namedPlanThroughAge !== undefined && { userPlanThroughAge: namedPlanThroughAge }),
     ...(survivorSpending && { survivorSpending }),
+    ...(spendingFlexibility && { spendingFlexibility }),
   };
 }
 
@@ -1021,6 +1054,8 @@ function variantKey(variant: ResolvedCoastFireVariant): string {
       planThroughAge: variant.planThroughAge,
       survivorSpending: variant.survivorSpending ?? null,
     }),
+    // Only a cut the test runs, so a case without one keeps its id.
+    ...(variant.spendingFlexibility?.kind === 'cut' && { spendingCut: variant.spendingFlexibility.cutShare }),
   });
 }
 
@@ -1033,6 +1068,7 @@ function historicalTestKey(variant: ResolvedCoastFireVariant): string {
   return JSON.stringify([
     currentAge, retirementAge, currentSavings, annualRetirementSpending, variant.incomes, variant.allocation.id,
     variant.household?.plan ?? null, variant.planThroughAge,
+    variant.spendingFlexibility?.kind === 'cut' ? variant.spendingFlexibility.cutShare : null,
   ]);
 }
 
@@ -1053,7 +1089,9 @@ const QUICKPLAN_MINIMUM_ASSETS = 1_000;
  */
 async function presetHistoricalTest(
   variant: ResolvedCoastFireVariant,
-  runQuickPlan: QuickPlanRunner
+  runQuickPlan: QuickPlanRunner,
+  /** Whether to run the 20% comparison when the user has not said: beside the main case only. */
+  withComparison: boolean
 ): Promise<CoastFireHistoricalTest | undefined> {
   const inputs = variant.inputs;
   if (inputs.currentSavings < QUICKPLAN_MINIMUM_ASSETS) return undefined;
@@ -1061,6 +1099,12 @@ async function presetHistoricalTest(
   const own = variant.incomes.filter((income) => income.owner !== 'partner');
   const socialSecurity = own.find((income) => income.kind === 'social_security');
   const pension = own.find((income) => income.kind === 'pension');
+  const resolution = variant.spendingFlexibility;
+  const { spendingFlexibility, spendingFlexibilityComparison } = spendingFlexibilityInput(resolution);
+  const flexibility = {
+    ...(spendingFlexibility && { spendingFlexibility }),
+    ...(withComparison && spendingFlexibilityComparison && { spendingFlexibilityComparison }),
+  };
 
   try {
     const run = await runQuickPlan({
@@ -1084,7 +1128,7 @@ async function presetHistoricalTest(
       origins: variant.household.origins,
       ...(variant.household.married && { married: variant.household.married }),
       userSocialSecurity: variant.userSocialSecurity,
-    });
+    }, Object.keys(flexibility).length > 0 ? flexibility : undefined);
     const evaluated = run.primary;
     if (!evaluated) return undefined;
     const mix = QUICKPLAN_ALLOCATIONS[run.inputs.allocation];
@@ -1107,6 +1151,14 @@ async function presetHistoricalTest(
       firstStartMonth: run.history.firstStartMonth,
       lastStartMonth: run.history.lastStartMonth,
       horizonYears: run.history.horizonYears,
+      // A comparison the test did not run has nothing to report.
+      ...(resolution && (resolution.kind !== 'comparison' || flexibility.spendingFlexibilityComparison) && {
+        spendingFlexibility: {
+          resolution,
+          ...(run.spendingFlexibility && { outcome: run.spendingFlexibility }),
+          ...(run.spendingFlexibilityComparison && { comparison: run.spendingFlexibilityComparison }),
+        },
+      }),
     };
   } catch (error) {
     console.warn('Ask Linc: Coast FIRE historical test skipped:', error);
@@ -1225,7 +1277,7 @@ export async function runCoastFireScenario(
     // same historical figures in the answer twice under two labels.
     const testKey = historicalTestKey(variant);
     const historicalTest = runHistory && !testedKeys.has(testKey)
-      ? await presetHistoricalTest(variant, runQuickPlan)
+      ? await presetHistoricalTest(variant, runQuickPlan, index === 0)
       : undefined;
     testedKeys.add(testKey);
     scenarios.push({
@@ -1497,15 +1549,20 @@ export function coastFireScenarioCanonicalFacts(execution: CoastFireScenarioExec
       add('scenario_input', 'history_bond_share', `${mix}: share in bonds`, test.allocation.bondsPercent, 'percent');
       add('scenario_input', 'history_cash_share', `${mix}: share in cash`, test.allocation.cashPercent, 'percent');
       add('scenario_input', 'history_horizon_age', `${mix}: age the test runs through`, test.lifeExpectancy, 'age');
+      // With the user's cut, the test's survival is the plan's with that cut.
+      const flexibility = test.spendingFlexibility;
+      const withCut = flexibility?.resolution.kind === 'cut' && flexibility.outcome
+        ? `, cutting spending ${Math.round(flexibility.resolution.cutShare * 100)}% in a bad market`
+        : '';
       add(
         'scenario_calculation',
         'history_survival_rate',
-        `${mix}: share of tested historical sequences in which the money lasted through age ${test.lifeExpectancy}`,
+        `${mix}: share of tested historical sequences in which the money lasted through age ${test.lifeExpectancy}${withCut}`,
         Number((test.survivalRate * 100).toFixed(4)),
         'percent'
       );
       add('scenario_calculation', 'history_sequences_tested', `${mix}: historical sequences tested`, test.sequencesTested, 'count');
-      add('scenario_calculation', 'history_sequences_survived', `${mix}: sequences in which the money lasted`, test.sequencesSurvived, 'count');
+      add('scenario_calculation', 'history_sequences_survived', `${mix}: sequences in which the money lasted${withCut}`, test.sequencesSurvived, 'count');
       add(
         'scenario_calculation',
         'history_median_portfolio_at_retirement',
@@ -1513,6 +1570,18 @@ export function coastFireScenarioCanonicalFacts(execution: CoastFireScenarioExec
         roundMoney(test.projectedPortfolioAtRetirement),
         'usd'
       );
+      // The user's cut and what it did, or the comparison's.
+      if (flexibility) {
+        for (const row of spendingFlexibilityFactRows(flexibility)) {
+          add(
+            row.input ? 'scenario_input' : 'scenario_calculation',
+            `history_${row.suffix}`,
+            `${mix}: ${decapitalize(row.label)}`,
+            row.value,
+            row.unit
+          );
+        }
+      }
     }
   }
   return facts;
@@ -1566,11 +1635,22 @@ function describeHistoricalTest(scenario: CoastFireScenarioResult): string {
   const mixDefault = test.allocation.origin === 'default'
     ? ` You did not name a mix, so I used the ${test.allocation.label} preset.`
     : '';
+  // The cut the test ran, then what it did, or what a 20% cut would change.
+  const flexibility = test.spendingFlexibility;
+  const cutClause = describeSpendingCut(flexibility?.resolution);
+  const spendingCut = (cutClause ? ` It plans on ${cutClause}.` : '') + (flexibility
+    ? describeSpendingFlexibilityResults({
+      resolution: flexibility.resolution,
+      ...(flexibility.outcome && { outcome: flexibility.outcome }),
+      ...(flexibility.comparison && { comparison: flexibility.comparison }),
+      survivalRate: test.survivalRate,
+    })
+    : '');
   return ` The market-history test ran the ${test.allocation.label} preset (${test.allocation.description}), not ` +
     `what you hold: ${money(m.currentSavings)} left alone from ${m.currentAge} to ${m.retirementAge}, then ` +
     `${spending} through ${household ? 'your age' : 'age'} ${test.lifeExpectancy}, against every overlapping ${test.horizonYears}-year stretch ` +
     `of US market returns and inflation that began between ${readableMonth(test.firstStartMonth)} and ` +
-    `${readableMonth(test.lastStartMonth)}.${mixDefault}`;
+    `${readableMonth(test.lastStartMonth)}.${mixDefault}${spendingCut}`;
 }
 
 /**
@@ -1781,8 +1861,12 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
         }]
       : []),
   ]);
+  // A cut belongs to the test; the number itself plans on full spending.
+  const fullSpending = tested.some((scenario) => scenario.historicalTest?.spendingFlexibility?.resolution.kind === 'cut')
+    ? ', and full spending every year'
+    : '';
   const straightLine = tested.length > 0
-    ? ' The Coast FIRE number itself is a single straight line — the same return every year. Neither part models taxes or fees.'
+    ? ` The Coast FIRE number itself is a single straight line — the same return every year${fullSpending}. Neither part models taxes or fees.`
     : ' It is a single straight line — the same return every year, with no taxes, fees or market swings.';
 
   return `Coast FIRE assumptions: ${rate(m.realReturnRate)} a year after inflation and a ${rate(m.withdrawalRate)} ` +
@@ -1983,6 +2067,9 @@ export function coastFireSavableFigures(execution: CoastFireScenarioExecution): 
   });
   const mix = primary.historicalTest?.allocation;
   if (mix?.origin === 'user') figures.push({ key: 'allocation', value: mix.id });
+  // A cut the user stated, once the test has run on it.
+  const spendingCut = savableSpendingCut(primary.historicalTest?.spendingFlexibility?.resolution);
+  if (spendingCut !== undefined) figures.push({ key: 'spendingCutPercent', value: spendingCut });
   if (primary.pensionInflation?.origin === 'user') {
     figures.push({ key: 'retirementIncomeInflation', value: primary.pensionInflation.value });
   }
@@ -2051,7 +2138,7 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
   ],
   planner: {
     jsonSchema: COAST_FIRE_SCENARIO_PLAN_JSON_SCHEMA,
-    instructions: `When the user asks whether they have reached Coast FIRE, what their Coast FIRE number is, when they will reach Coast FIRE, or changes an input of a Coast FIRE answer earlier in this decision, set requested=true. Coast FIRE means having enough invested today that growth alone, with no further contributions, reaches the retirement target by the retirement age. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, currentSavings (invested retirement savings today), annualRetirementSpending (annual spending once retired, in today's dollars), annualRetirementIncome (a pension, annuity or other income in retirement that is not Social Security, per year), retirementIncomeStartAge (when that income starts), retirementIncomeInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), socialSecurityAnnual and socialSecurityStartAge (Social Security only; socialSecurityStartAge is when the user claims it), socialSecurityAmountAge (only when the user says which claiming age their Social Security figure is for, such as a statement showing $2,500 a month at 67; otherwise null), realReturnRatePercent (growth after inflation in percentage points: 5% is 5, never 0.05), withdrawalRatePercent (percentage points: 4% is 4), annualContribution (what the user invests per year now; only used to find when they reach Coast FIRE), and lifeExpectancy (the age the user wants their plan to run through, only when they say one). Until holdings are linked (or while none of the linked ones can be simulated), application code also runs the savings through market history on a preset mix: set allocation to conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets, and otherwise to unspecified with a null source. When the user gives a range for one value, put the low end in primary and only the high end in comparison. When the newest message changes an input of the earlier Coast FIRE case, put the earlier case in primary and only the changed values in comparison; for claiming Social Security at another age, that is only socialSecurityStartAge, never a new amount, because application code applies Social Security's own claiming rules to the benefit. A spouse's or partner's age, Social Security, pension or planning age is never one of these fields; it belongs in the retirement inputs' partner fields, which application code reads for this calculation too. Never estimate or supply typical values; application code applies disclosed defaults and asks for anything else missing, so request the calculation even when figures are missing. A Coast FIRE question does not by itself request any other calculator. The overrides object and every field and source are always present; use null for absent values. When there is no Coast FIRE question, set requested=false, allocation=unspecified, retirementIncomeInflation=unspecified, and null for every other value and every source in both variants.`,
+    instructions: `When the user asks whether they have reached Coast FIRE, what their Coast FIRE number is, when they will reach Coast FIRE, or changes an input of a Coast FIRE answer earlier in this decision, set requested=true. Coast FIRE means having enough invested today that growth alone, with no further contributions, reaches the retirement target by the retirement age. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, currentSavings (invested retirement savings today), annualRetirementSpending (annual spending once retired, in today's dollars), annualRetirementIncome (a pension, annuity or other income in retirement that is not Social Security, per year), retirementIncomeStartAge (when that income starts), retirementIncomeInflation (fixed when the user says the pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has a cost-of-living adjustment or rises with inflation; otherwise unspecified with a null source), socialSecurityAnnual and socialSecurityStartAge (Social Security only; socialSecurityStartAge is when the user claims it), socialSecurityAmountAge (only when the user says which claiming age their Social Security figure is for, such as a statement showing $2,500 a month at 67; otherwise null), realReturnRatePercent (growth after inflation in percentage points: 5% is 5, never 0.05), withdrawalRatePercent (percentage points: 4% is 4), annualContribution (what the user invests per year now; only used to find when they reach Coast FIRE), and lifeExpectancy (the age the user wants their plan to run through, only when they say one). Until holdings are linked (or while none of the linked ones can be simulated), application code also runs the savings through market history on a preset mix: set allocation to conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets, and otherwise to unspecified with a null source. When the user gives a range for one value, put the low end in primary and only the high end in comparison. When the newest message changes an input of the earlier Coast FIRE case, put the earlier case in primary and only the changed values in comparison; for claiming Social Security at another age, that is only socialSecurityStartAge, never a new amount, because application code applies Social Security's own claiming rules to the benefit. A spouse's or partner's age, Social Security, pension or planning age is never one of these fields; it belongs in the retirement inputs' partner fields, which application code reads for this calculation too. Nor is how much of their spending the user could cut if markets fell; it belongs in the retirement inputs' spending-cut fields, which application code reads for the market-history test. Never estimate or supply typical values; application code applies disclosed defaults and asks for anything else missing, so request the calculation even when figures are missing. A Coast FIRE question does not by itself request any other calculator. The overrides object and every field and source are always present; use null for absent values. When there is no Coast FIRE question, set requested=false, allocation=unspecified, retirementIncomeInflation=unspecified, and null for every other value and every source in both variants.`,
     parsePlan: parseCoastFireScenarioPlan,
   },
   execution: {

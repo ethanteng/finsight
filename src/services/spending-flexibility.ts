@@ -33,7 +33,7 @@ export interface StatedSpendingCut {
 
 export type SpendingCutForm = 'percent' | 'amount' | 'floor';
 
-export type SpendingFlexibilityResolution =
+export type SpendingFlexibilityResolution = (
   /** The user's own cut, which the plan runs. */
   | {
     kind: 'cut';
@@ -48,7 +48,15 @@ export type SpendingFlexibilityResolution =
   /** The user said they could not cut: fixed spending, and no comparison. */
   | { kind: 'none'; origin: 'stated' | 'saved'; savedAt?: string }
   /** Nobody said: fixed spending, with a disclosed comparison at this cut. */
-  | { kind: 'comparison'; cutShare: number; annualCut: number };
+  | { kind: 'comparison'; cutShare: number; annualCut: number }
+) & {
+  /**
+   * Set when the user stated a cut no plan can be built on (more than
+   * `MAXIMUM_SPENDING_CUT_PERCENT` of spending), so the next source applied
+   * instead and the answer says why.
+   */
+  ignoredStated?: true;
+};
 
 /** A share of spending from a stated cut, or undefined when it cannot be one. */
 function shareOf(stated: StatedSpendingCut, annualSpending: number): { share: number; form: SpendingCutForm } | undefined {
@@ -89,14 +97,19 @@ export function resolveSpendingFlexibility(args: {
       ? { kind: 'cut', cutShare: stated.share, annualCut: annual(stated.share), origin: 'stated', statedAs: stated.form }
       : { kind: 'none', origin: 'stated' };
   }
+  // A figure was said but cannot be used: the answer says so, rather than
+  // planning on the next source as if nothing had been said.
+  const ignored = args.stated !== undefined &&
+    Object.values(args.stated).some((value) => value !== undefined) &&
+    { ignoredStated: true as const };
   const saved = savedNumber(args.statedFigures, 'spendingCutPercent');
   if (saved) {
     const share = saved.value / 100;
     return share > 0
-      ? { kind: 'cut', cutShare: share, annualCut: annual(share), origin: 'saved', savedAt: saved.savedAt }
-      : { kind: 'none', origin: 'saved', savedAt: saved.savedAt };
+      ? { kind: 'cut', cutShare: share, annualCut: annual(share), origin: 'saved', savedAt: saved.savedAt, ...ignored }
+      : { kind: 'none', origin: 'saved', savedAt: saved.savedAt, ...ignored };
   }
-  return { kind: 'comparison', cutShare: COMPARISON_SPENDING_CUT, annualCut: annual(COMPARISON_SPENDING_CUT) };
+  return { kind: 'comparison', cutShare: COMPARISON_SPENDING_CUT, annualCut: annual(COMPARISON_SPENDING_CUT), ...ignored };
 }
 
 /** The engine's inputs for a resolution: the plan's own cut, or the comparison beside fixed spending. */
