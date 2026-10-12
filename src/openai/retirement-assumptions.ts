@@ -156,7 +156,7 @@ export function describeRetirementAssumptions(
   parts.push(...describeContribution(values, analysis._contributionOrigin));
   const fees = describeFees(analysis.feesDeducted);
   if (fees) parts.push(fees);
-  const taxes = describeTaxes(analysis._taxes);
+  const taxes = describeTaxes(analysis._taxes, values.withdrawalStartAge);
   if (taxes) parts.push(taxes);
   const healthcare = describeHealthcare(analysis._healthcare);
   if (healthcare) parts.push(healthcare);

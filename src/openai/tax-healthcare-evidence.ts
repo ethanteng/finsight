@@ -16,6 +16,7 @@ import type { RetirementHealthcare, RetirementTaxes } from '../retirement-analyt
 import type { FinancialContextSnapshot } from './types';
 import { MEDICARE_ANNUAL_PREMIUM, COBRA_MONTHS } from '../retirement-analytics/engine/healthcare';
 import { TAX_FIGURES_YEAR } from '../retirement-analytics/engine/taxes';
+import { EARLY_WITHDRAWAL_AGE } from '../retirement-analytics/engine/retirement-cash-plan';
 import { savedOn, STATED_FIGURE_DEFINITIONS } from '../services/stated-figures';
 import type { CanonicalFactUnit } from './canonical-facts';
 import type { InputFieldSpec, InputRequest, InputRequestSpec } from './input-request';
@@ -146,10 +147,18 @@ function stateClause(resolution: RetirementTaxResolution): string {
  * household files, how the money is held and the state's rate. Null when the
  * run was untaxed.
  */
-export function describeTaxes(resolution: RetirementTaxResolution | undefined): string | null {
+export function describeTaxes(
+  resolution: RetirementTaxResolution | undefined,
+  /** When withdrawals begin, as the user's age, for the additional tax on early pre-tax draws. */
+  withdrawalStartAge?: number
+): string | null {
   if (!resolution) return null;
+  const early = withdrawalStartAge !== undefined && withdrawalStartAge < EARLY_WITHDRAWAL_AGE && resolution.taxes.accounts.pretax > 0
+    ? ', and the 10% additional tax on pre-tax money drawn before 59½ (its exceptions, such as leaving an employer ' +
+      'at 55 or later, are not counted)'
+    : '';
   return `${TAX_FIGURES_YEAR} federal income tax on each year's withdrawals and income, ${FILING_TEXT[resolution.filing.origin]}, ` +
-    `drawing taxable savings first, then pre-tax, then Roth, with required minimum distributions; ` +
+    `drawing taxable savings first, then pre-tax, then Roth, with required minimum distributions${early}; ` +
     `${accountsClause(resolution)}; ${stateClause(resolution)}`;
 }
 

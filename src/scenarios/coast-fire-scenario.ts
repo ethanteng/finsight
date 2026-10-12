@@ -1954,7 +1954,7 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
   // tests had to assume.
   const costs = tested[0]?.historicalTest?.taxesAndHealthcare;
   const costClauses = costs
-    ? [describeTaxes(costs.taxes), describeHealthcare(costs.healthcare)].filter(Boolean).join('; ')
+    ? [describeTaxes(costs.taxes, tested[0].metrics.retirementAge), describeHealthcare(costs.healthcare)].filter(Boolean).join('; ')
     : '';
   const taxNotice = costs && costClauses
     ? ` ${tested.length > 1 ? 'Each test counts' : 'The test counts'} ${costClauses}.` +

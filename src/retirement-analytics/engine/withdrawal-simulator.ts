@@ -26,7 +26,7 @@ import {
   WithdrawalPolicy,
 } from '../types';
 import { mappingFromResolvedExposures } from './portfolio-mapper';
-import { planYearCash, type TaxHousehold, type YearCashPlan } from './retirement-cash-plan';
+import { EARLY_WITHDRAWAL_AGE, planYearCash, type TaxHousehold, type YearCashPlan } from './retirement-cash-plan';
 import { requiredDistributionAge, uniformLifetimeDivisor } from './taxes';
 import {
   COBRA_ANNUAL_PREMIUM,
@@ -323,6 +323,10 @@ export function simulateWithdrawals(
           peopleAged65: alive.filter((person) => ageOf(person) >= 65).length,
           stateRate: taxes.stateRate,
           priceLevel,
+          // The pre-tax money's owner is the one the distributions follow.
+          ...(ownerAge !== undefined && ownerAge < EARLY_WITHDRAWAL_AGE && {
+            earlyWithdrawalShare: Math.min(12, Math.round((EARLY_WITHDRAWAL_AGE - ownerAge) * 12)) / 12,
+          }),
         },
       }),
       ...(healthcare && {

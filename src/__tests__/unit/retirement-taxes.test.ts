@@ -72,7 +72,9 @@ describe('health premiums in retirement', () => {
     expect(MEDICARE_ANNUAL_PREMIUM).toBeCloseTo(2_902.68, 6);
   });
 
-  it('credits the benchmark less the expected share of income, with nothing above 400% of the poverty line', () => {
+  it('credits the benchmark less the expected share of income, with nothing below 100% or above 400% of the poverty line', () => {
+    expect(applicablePercentage(0.99)).toBeUndefined();
+    expect(premiumTaxCredit({ benchmarkPremium: 10_000, modifiedAdjustedGrossIncome: 0, householdSize: 1 })).toBe(0);
     expect(applicablePercentage(1)).toBeCloseTo(0.021, 6);
     expect(applicablePercentage(3.5)).toBeCloseTo(0.0996, 6);
     expect(applicablePercentage(4.01)).toBeUndefined();
@@ -121,13 +123,22 @@ describe('a year of a retired household\'s cash', () => {
 
   it('keeps marketplace premiums low when the draw adds no income', () => {
     const benchmark = marketplaceBenchmarkPremium(60);
+    // A $20,000 pension is 128% of the poverty line; Roth money adds nothing to it.
     const roth = planYearCash({
+      spending: 40_000, ordinaryIncome: 20_000, socialSecurity: 0, balances: { ...none, roth: 1_000_000 },
+      taxableBasis: 0, requiredDistribution: 0, tax: single,
+      healthcare: { fixedPremiums: 0, marketplaceBenchmark: benchmark, marketplacePeople: 1, householdSize: 1 },
+    });
+    expect(roth.premiumTaxCredit).toBeCloseTo(benchmark - 0.021 * 20_000, 6);
+    expect(roth.premiums).toBeCloseTo(0.021 * 20_000, 6);
+    // Below the poverty line no credit is paid: the full premium.
+    const noIncome = planYearCash({
       spending: 40_000, ordinaryIncome: 0, socialSecurity: 0, balances: { ...none, roth: 1_000_000 },
       taxableBasis: 0, requiredDistribution: 0, tax: single,
       healthcare: { fixedPremiums: 0, marketplaceBenchmark: benchmark, marketplacePeople: 1, householdSize: 1 },
     });
-    expect(roth.premiumTaxCredit).toBeCloseTo(benchmark, 6);
-    expect(roth.draws.roth).toBeCloseTo(40_000, 1);
+    expect(noIncome.premiumTaxCredit).toBe(0);
+    expect(noIncome.draws.roth).toBeCloseTo(40_000 + benchmark, 1);
     // From pre-tax money the same spending is income, past the 400% line.
     const pretax = planYearCash({
       spending: 60_000, ordinaryIncome: 0, socialSecurity: 0, balances: { ...none, pretax: 2_000_000 },
@@ -155,14 +166,15 @@ describe('a year of a retired household\'s cash', () => {
 
   it('credits only marketplace enrollees when an unmarried couple files two returns', () => {
     const benchmark = marketplaceBenchmarkPremium(60);
+    // A $40,000 pension between them: each return is 128% of the poverty line.
     const both = planYearCash({
-      spending: 40_000, ordinaryIncome: 0, socialSecurity: 0, balances: { ...none, roth: 1_000_000 },
+      spending: 40_000, ordinaryIncome: 40_000, socialSecurity: 0, balances: { ...none, roth: 1_000_000 },
       taxableBasis: 0, requiredDistribution: 0,
       tax: { household: 'separate_singles', peopleAged65: 0, stateRate: 0, priceLevel: 1 },
       healthcare: { fixedPremiums: 0, marketplaceBenchmark: benchmark * 2, marketplacePeople: 2, householdSize: 2 },
     });
     const one = planYearCash({
-      spending: 40_000, ordinaryIncome: 0, socialSecurity: 0, balances: { ...none, roth: 1_000_000 },
+      spending: 40_000, ordinaryIncome: 40_000, socialSecurity: 0, balances: { ...none, roth: 1_000_000 },
       taxableBasis: 0, requiredDistribution: 0,
       tax: { household: 'separate_singles', peopleAged65: 1, stateRate: 0, priceLevel: 1 },
       healthcare: {
@@ -173,8 +185,52 @@ describe('a year of a retired household\'s cash', () => {
       },
     });
     // One marketplace enrollee must not be priced as two half-benchmarks.
+    expect(both.premiumTaxCredit).toBeGreaterThan(0);
     expect(one.premiumTaxCredit).toBeGreaterThan(both.premiumTaxCredit / 2 - 1);
     expect(one.premiums).toBeLessThan(MEDICARE_ANNUAL_PREMIUM + benchmark - both.premiumTaxCredit / 2 + 1);
+  });
+
+  it('keeps the credit when spending can be covered without crossing 400% of the poverty line', () => {
+    // At 62 the benchmark is about $16,860. Drawing $62,510 of pre-tax money
+    // stays just under the line and covers $50,960 after tax and premiums;
+    // just past it, the whole credit is gone and the next draw that covers
+    // the spending is about $75,600.
+    const plan = planYearCash({
+      spending: 50_960, ordinaryIncome: 0, socialSecurity: 0, balances: { ...none, pretax: 500_000 },
+      taxableBasis: 0, requiredDistribution: 0, tax: single,
+      healthcare: { fixedPremiums: 0, marketplaceBenchmark: marketplaceBenchmarkPremium(62), marketplacePeople: 1, householdSize: 1 },
+    });
+    expect(plan.draws.pretax).toBeLessThan(4 * 15_650);
+    expect(plan.draws.pretax).toBeGreaterThan(62_400);
+    expect(plan.premiumTaxCredit).toBeGreaterThan(10_000);
+    expect(plan.shortfall).toBe(0);
+  });
+
+  it('crosses 400% of the poverty line only when spending cannot be covered below it', () => {
+    const plan = planYearCash({
+      spending: 60_000, ordinaryIncome: 0, socialSecurity: 0, balances: { ...none, pretax: 500_000 },
+      taxableBasis: 0, requiredDistribution: 0, tax: single,
+      healthcare: { fixedPremiums: 0, marketplaceBenchmark: marketplaceBenchmarkPremium(62), marketplacePeople: 1, householdSize: 1 },
+    });
+    expect(plan.premiumTaxCredit).toBe(0);
+    expect(plan.draws.pretax - plan.federalTax - plan.premiums).toBeCloseTo(60_000, 2);
+  });
+
+  it('adds the 10% additional tax to pre-tax money drawn before 59 1/2, for the part of the year it applies', () => {
+    const base = {
+      spending: 40_000, ordinaryIncome: 0, socialSecurity: 0, balances: { ...none, pretax: 1_000_000 },
+      taxableBasis: 0, requiredDistribution: 0,
+    };
+    const early = planYearCash({ ...base, tax: { ...single, earlyWithdrawalShare: 1 } });
+    const halfYear = planYearCash({ ...base, tax: { ...single, earlyWithdrawalShare: 0.5 } });
+    const later = planYearCash({ ...base, tax: single });
+    // W - (1,240 + 12% of (W - 28,500)) - 10% of W = 40,000.
+    expect(early.draws.pretax).toBeCloseTo(37_820 / 0.78, 1);
+    expect(halfYear.draws.pretax).toBeGreaterThan(later.draws.pretax);
+    expect(halfYear.draws.pretax).toBeLessThan(early.draws.pretax);
+    // Roth and taxable money pay nothing extra.
+    const roth = planYearCash({ ...base, balances: { ...none, roth: 1_000_000 }, tax: { ...single, earlyWithdrawalShare: 1 } });
+    expect(roth.federalTax).toBe(0);
   });
 
   it('reports what it could not cover', () => {
@@ -238,6 +294,20 @@ describe('the simulation with taxes and premiums', () => {
     expect(outcome.finalValue).toBeCloseTo(1_000_000 - 10_000 - tax, 0);
   });
 
+  it('charges the additional tax on pre-tax money drawn before the owner reaches 59 1/2', () => {
+    const run = (age: number) => simulateWithdrawals(mapping, 1_000_000, flat(12), 40_000, {
+      taxes: taxes({ taxable: 0, pretax: 1, roth: 0 }), people: [{ age }],
+    });
+    const early = run(50);
+    const later = run(60);
+    expect(early.firstYearCosts!.federalTax).toBeGreaterThan(later.firstYearCosts!.federalTax);
+    expect(early.finalValue).toBeLessThan(later.finalValue);
+    // Half the year under 59 1/2: half the additional tax.
+    const half = run(59);
+    expect(half.firstYearCosts!.federalTax).toBeGreaterThan(later.firstYearCosts!.federalTax);
+    expect(half.firstYearCosts!.federalTax).toBeLessThan(early.firstYearCosts!.federalTax);
+  });
+
   it('files single once a partner\'s plan ends', () => {
     const couple = (endMonth?: number) => simulateWithdrawals(mapping, 2_000_000, flat(24), 80_000, {
       taxes: taxes({ taxable: 0, pretax: 1, roth: 0 }, { filing: 'joint' }),
@@ -252,9 +322,9 @@ describe('the simulation with taxes and premiums', () => {
     const roth = simulateWithdrawals(mapping, 1_000_000, flat(12), 40_000, {
       taxes: taxes({ taxable: 0, pretax: 0, roth: 1 }), healthcare: marketplace, people: [{ age: 60 }],
     });
-    // No income at all: the credit covers all but nothing of the benchmark.
-    expect(roth.firstYearCosts!.premiumTaxCredit).toBeCloseTo(marketplaceBenchmarkPremium(60), 4);
-    expect(roth.firstYearCosts!.healthcarePremiums).toBeCloseTo(0, 4);
+    // No income at all is below the poverty line, where no credit is paid.
+    expect(roth.firstYearCosts!.premiumTaxCredit).toBe(0);
+    expect(roth.firstYearCosts!.healthcarePremiums).toBeCloseTo(marketplaceBenchmarkPremium(60), 4);
 
     const pretax = simulateWithdrawals(mapping, 1_000_000, flat(12), 70_000, {
       taxes: taxes({ taxable: 0, pretax: 1, roth: 0 }), healthcare: marketplace, people: [{ age: 60 }],

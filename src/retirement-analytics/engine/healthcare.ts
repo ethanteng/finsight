@@ -17,9 +17,9 @@
 //   year (KFF Employer Health Benefits Survey), plus the 2% COBRA allows, for
 //   18 months.
 // - Premium tax credit, 2026 coverage: the applicable percentages of Rev.
-//   Proc. 2025-25 (2.10% to 9.96% of income, none above 400% of the poverty
-//   line, now the enhanced credits have ended) against the 2025 HHS poverty
-//   guidelines ($15,650 for one, $21,150 for two).
+//   Proc. 2025-25 (2.10% to 9.96% of income, none below 100% or above 400%
+//   of the poverty line, now the enhanced credits have ended) against the
+//   2025 HHS poverty guidelines ($15,650 for one, $21,150 for two).
 
 export const HEALTHCARE_FIGURES_YEAR = 2026;
 
@@ -50,16 +50,21 @@ export function povertyLine(householdSize: number): number {
   return 15_650 + 5_500 * Math.max(0, Math.round(householdSize) - 1);
 }
 
+/** Income above this multiple of the poverty line earns no premium tax credit. */
+export const CREDIT_INCOME_CAP = 4;
+
 /**
  * The share of income a household is expected to pay for the benchmark plan,
- * by income as a multiple of the poverty line; undefined above 400%, where
- * no credit is paid. Below the poverty line the lowest share applies: those
- * households qualify for Medicaid in most states, at no premium.
+ * by income as a multiple of the poverty line; undefined where no credit is
+ * paid: above 400%, and below 100%, where the credit requires at least the
+ * poverty line. A household that low may qualify for Medicaid in a state
+ * that expanded it; the plan does not count that, and prices the full
+ * premium instead, which is what it costs in a state that did not.
  */
 export function applicablePercentage(povertyMultiple: number): number | undefined {
-  if (povertyMultiple > 4) return undefined;
+  if (povertyMultiple > CREDIT_INCOME_CAP || povertyMultiple < 1) return undefined;
   const bands: ReadonlyArray<readonly [from: number, to: number, startRate: number, endRate: number]> = [
-    [0, 1.33, 0.0210, 0.0210],
+    [1, 1.33, 0.0210, 0.0210],
     [1.33, 1.5, 0.0314, 0.0419],
     [1.5, 2, 0.0419, 0.0660],
     [2, 2.5, 0.0660, 0.0844],

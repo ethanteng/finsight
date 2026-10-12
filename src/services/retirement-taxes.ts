@@ -34,14 +34,17 @@ const PRETAX_SUBTYPES = new Set([
   '401a', '401k', '403b', '457b', 'ira', 'traditional ira', 'rollover ira', 'sep ira', 'simple ira', 'sarsep',
   'keogh', 'pension', 'profit sharing plan', 'thrift savings plan', 'retirement', 'traditional 401k',
   'fixed annuity', 'variable annuity', 'other annuity', 'annuity',
+  // An HSA is tax-free only for medical costs; drawn for ordinary spending it
+  // is taxed as income, like a traditional IRA. The plan does not tell the
+  // two apart, so it counts the heavier.
+  'hsa',
   // Canadian registered plans are tax-deferred the same way.
   'rrsp', 'rrif', 'lira', 'lif', 'lrif', 'lrsp', 'prif', 'rlif', 'qshr',
 ]);
 const ROTH_SUBTYPES = new Set([
   'roth', 'roth ira', 'roth 401k', 'roth 403b', 'roth 457b',
-  // Tax-free on the way out, as a Roth is: an HSA for health costs, and the
-  // Canadian and UK equivalents.
-  'hsa', 'tfsa', 'isa', 'cash isa', 'non-taxable brokerage account',
+  // Tax-free on the way out, as a Roth is: the Canadian and UK equivalents.
+  'tfsa', 'isa', 'cash isa', 'non-taxable brokerage account',
 ]);
 const TAXABLE_SUBTYPES = new Set([
   'brokerage', 'cash management', 'mutual fund', 'stock plan', 'trust', 'ugma', 'utma', 'crypto exchange',

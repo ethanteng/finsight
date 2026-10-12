@@ -29,7 +29,7 @@ describe('account tax treatment', () => {
     expect(accountTaxTreatment({ subtype: 'roth 401k' })).toBe('roth');
     expect(accountTaxTreatment({ subtype: 'roth' })).toBe('roth');
     expect(accountTaxTreatment({ subtype: 'brokerage' })).toBe('taxable');
-    expect(accountTaxTreatment({ subtype: 'hsa' })).toBe('roth');
+    expect(accountTaxTreatment({ subtype: 'hsa' })).toBe('pretax');
     expect(accountTaxTreatment({ subtype: 'investment', name: 'Rollover IRA' })).toBe('pretax');
     expect(accountTaxTreatment({ subtype: 'other', name: 'My Roth IRA' })).toBe('roth');
     expect(accountTaxTreatment({ subtype: 'other', name: 'Individual' })).toBe('taxable');
@@ -227,6 +227,15 @@ describe('what an answer says', () => {
       'then pre-tax, then Roth, with required minimum distributions; all savings counted as pre-tax, the most heavily ' +
       'taxed kind (assumed); no state income tax, since I do not know your state\'s rate'
     );
+  });
+
+  it('names the additional tax on early pre-tax draws only where withdrawals start before 59 1/2', () => {
+    expect(describeTaxes(unknownEverything.taxes, 50)).toContain(
+      'with required minimum distributions, and the 10% additional tax on pre-tax money drawn before 59½'
+    );
+    expect(describeTaxes(unknownEverything.taxes, 62)).not.toContain('additional tax');
+    // An HSA drawn for ordinary spending is taxed like a traditional IRA.
+    expect(accountTaxTreatment({ subtype: 'hsa', name: 'Health Savings Account' })).toBe('pretax');
   });
 
   it('says what coverage it priced and that it was assumed', () => {

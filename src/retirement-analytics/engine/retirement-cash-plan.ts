@@ -5,12 +5,19 @@
 // Taxable money is drawn first, then pre-tax, then Roth, the conventional
 // order; a required minimum distribution comes out of pre-tax money whatever
 // the order would take, and what of it the household does not need is
-// reinvested in the taxable account after tax. The tax and the premiums
-// depend on the draw, so the draw is solved: the smallest draw whose cash,
-// after tax and premiums, covers the spending.
+// reinvested in the taxable account after tax. Pre-tax money drawn before
+// 59 1/2 pays the 10% additional tax (IRC 72(t)); its exceptions -- leaving
+// an employer at 55 or later, substantially equal periodic payments -- are
+// not counted. The tax and the premiums depend on the draw, so the draw is
+// solved: the smallest draw whose cash, after tax and premiums, covers the
+// spending.
 
 import { taxForYear, type YearTax } from './taxes';
-import { premiumTaxCredit } from './healthcare';
+import { CREDIT_INCOME_CAP, povertyLine, premiumTaxCredit } from './healthcare';
+
+/** The additional tax on pre-tax money drawn before 59 1/2. */
+export const EARLY_WITHDRAWAL_TAX_RATE = 0.10;
+export const EARLY_WITHDRAWAL_AGE = 59.5;
 
 export type TaxHousehold = 'single' | 'joint' | 'separate_singles';
 
@@ -36,6 +43,8 @@ export interface YearCashInput {
     peopleAged65: number;
     stateRate: number;
     priceLevel: number;
+    /** Share of the year the pre-tax money's owner is under 59 1/2, when its draws pay the additional tax. */
+    earlyWithdrawalShare?: number;
   };
   healthcare?: {
     /** Premiums that do not depend on income: Medicare, COBRA, a stated premium. */
@@ -73,6 +82,8 @@ interface Evaluation {
   stateTax: number;
   premiums: number;
   premiumTaxCredit: number;
+  /** Whether income is past the point where the premium tax credit stops. */
+  pastCreditCap: boolean;
 }
 
 function householdTax(
@@ -129,17 +140,20 @@ function evaluate(input: YearCashInput, discretionary: number): Evaluation {
   const gains = taxable * gainShare;
   const ordinary = input.ordinaryIncome + pretax;
   const tax = householdTax(input, ordinary, gains);
+  const earlyShare = Math.min(1, Math.max(0, input.tax?.earlyWithdrawalShare ?? 0));
+  const earlyWithdrawalTax = EARLY_WITHDRAWAL_TAX_RATE * earlyShare * pretax;
 
   let premiums = 0;
   let credit = 0;
+  let pastCreditCap = false;
   const health = input.healthcare;
   if (health) {
     const marketplacePeople = Math.max(0, health.marketplacePeople);
-    if (
-      input.tax?.household === 'separate_singles' &&
-      health.householdSize > 1 &&
-      marketplacePeople > 0
-    ) {
+    const separate = input.tax?.household === 'separate_singles' && health.householdSize > 1;
+    pastCreditCap = separate
+      ? tax.modifiedAdjustedGrossIncome / health.householdSize > CREDIT_INCOME_CAP * povertyLine(1)
+      : tax.modifiedAdjustedGrossIncome > CREDIT_INCOME_CAP * povertyLine(health.householdSize);
+    if (separate && marketplacePeople > 0) {
       // Each unmarried partner files alone. Only people on the marketplace
       // share that credit; a Medicare enrollee is not given a phantom half
       // of the benchmark.
@@ -158,15 +172,17 @@ function evaluate(input: YearCashInput, discretionary: number): Evaluation {
     premiums = health.fixedPremiums + Math.max(0, health.marketplaceBenchmark - credit);
   }
 
+  const federal = tax.federal + earlyWithdrawalTax;
   const cash = input.ordinaryIncome + input.socialSecurity + taxable + pretax + roth -
-    tax.federal - tax.state - premiums;
+    federal - tax.state - premiums;
   return {
     draws: { taxable, pretax, roth },
     cash,
-    federalTax: tax.federal,
+    federalTax: federal,
     stateTax: tax.state,
     premiums,
     premiumTaxCredit: credit,
+    pastCreditCap,
   };
 }
 
@@ -186,33 +202,6 @@ function plan(input: YearCashInput, result: Evaluation, shortfall: number): Year
   };
 }
 
-/**
- * Smallest discretionary draw in [lowBound, highBound] whose cash covers
- * spending. Cash must be non-decreasing on that interval. Null when even
- * highBound cannot cover.
- */
-function smallestCovering(
-  input: YearCashInput,
-  spending: number,
-  lowBound: number,
-  highBound: number
-): YearCashPlan | null {
-  if (!(highBound >= lowBound)) return null;
-  const atHigh = evaluate(input, highBound);
-  if (atHigh.cash < spending) return null;
-  const atLow = evaluate(input, lowBound);
-  if (atLow.cash >= spending) return plan(input, atLow, 0);
-
-  let low = lowBound;
-  let high = highBound;
-  for (let i = 0; i < 64 && high - low > 1e-4; i++) {
-    const middle = (low + high) / 2;
-    if (evaluate(input, middle).cash >= spending) high = middle;
-    else low = middle;
-  }
-  return plan(input, evaluate(input, high), 0);
-}
-
 /** The year's draws, taxes and premiums, in today's dollars. */
 export function planYearCash(input: YearCashInput): YearCashPlan {
   const spending = Math.max(0, input.spending);
@@ -223,25 +212,26 @@ export function planYearCash(input: YearCashInput): YearCashPlan {
   const all = evaluate(input, total);
   if (all.cash < spending) return plan(input, all, spending - all.cash);
 
-  // Cash usually rises with the draw, but losing the premium tax credit at
-  // 400% of the poverty line can drop cash: a below-cliff draw may cover
-  // spending when a larger one does not. Prefer the smallest covering draw
-  // that keeps a credit when one exists; only clear the cliff when that
-  // window cannot cover.
-  const marketplace = input.healthcare?.marketplaceBenchmark ?? 0;
-  if (marketplace > 0 && base.premiumTaxCredit > 0) {
-    let low = 0;
-    let high = total;
+  const covers = (draw: number) => evaluate(input, draw).cash >= spending;
+  /** The smallest draw in [low, high] that passes `test`, given it passes at `high` and keeps passing once it does. */
+  const smallest = (low: number, high: number, test: typeof covers): number => {
     for (let i = 0; i < 64 && high - low > 1e-4; i++) {
       const middle = (low + high) / 2;
-      if (evaluate(input, middle).premiumTaxCredit > 0) low = middle;
-      else high = middle;
+      if (test(middle)) high = middle;
+      else low = middle;
     }
-    const below = smallestCovering(input, spending, 0, low);
-    if (below) return below;
-    const above = smallestCovering(input, spending, high, total);
-    if (above) return above;
+    return high;
+  };
+  // Cash rises with the draw, since no tax or premium takes all of a dollar,
+  // with one exception: past 400% of the poverty line the whole premium
+  // credit is lost at once, and cash falls. So the draws on either side of
+  // that point are searched apart, the lower side first, which keeps the
+  // credit whenever spending can be covered without crossing it.
+  if (!base.pastCreditCap && all.pastCreditCap) {
+    const cliff = smallest(0, total, (draw) => evaluate(input, draw).pastCreditCap);
+    const below = Math.max(0, cliff - 1e-3);
+    if (covers(below)) return plan(input, evaluate(input, smallest(0, below, covers)), 0);
+    return plan(input, evaluate(input, smallest(cliff, total, covers)), 0);
   }
-
-  return smallestCovering(input, spending, 0, total) ?? plan(input, all, 0);
+  return plan(input, evaluate(input, smallest(0, total, covers)), 0);
 }

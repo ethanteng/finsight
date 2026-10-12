@@ -1647,7 +1647,7 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
   // first year, and what Linc had to assume. A run recorded before taxes
   // says they were not modeled.
   const costs = primary.taxesAndHealthcare;
-  const taxClause = describeTaxes(costs?.taxes);
+  const taxClause = describeTaxes(costs?.taxes, inputs.retirementAge);
   const healthClause = describeHealthcare(costs?.healthcare);
   const costClauses = [taxClause, healthClause].filter(Boolean).join('; ');
   const taxNotice = costs
