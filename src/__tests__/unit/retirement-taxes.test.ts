@@ -149,6 +149,34 @@ describe('a year of a retired household\'s cash', () => {
     expect(pretax.premiums).toBeCloseTo(benchmark, 6);
   });
 
+  it('scales the premium tax credit by marketplace coverage months, not a full-year contribution', () => {
+    // Half a year on the marketplace before Medicare: Form 8962 charges six
+    // months of the expected income contribution, so the credit is half the
+    // full-year credit — not a prorated benchmark less a full year of that
+    // contribution (which understates the credit by thousands).
+    const annual = marketplaceBenchmarkPremium(64);
+    const magi = 50_000;
+    const fullYearCredit = premiumTaxCredit({
+      benchmarkPremium: annual,
+      modifiedAdjustedGrossIncome: magi,
+      householdSize: 1,
+    });
+    expect(fullYearCredit).toBeGreaterThan(5_000);
+    const halfYear = planYearCash({
+      spending: 40_000, ordinaryIncome: magi, socialSecurity: 0, balances: { ...none, roth: 1_000_000 },
+      taxableBasis: 0, requiredDistribution: 0, tax: single,
+      healthcare: {
+        fixedPremiums: MEDICARE_ANNUAL_PREMIUM / 2,
+        marketplaceBenchmark: annual / 2,
+        marketplacePeople: 0.5,
+        marketplaceCoverageShare: 0.5,
+        householdSize: 1,
+      },
+    });
+    expect(halfYear.premiumTaxCredit).toBeCloseTo(fullYearCredit / 2, 4);
+    expect(halfYear.premiums).toBeCloseTo(MEDICARE_ANNUAL_PREMIUM / 2 + annual / 2 - fullYearCredit / 2, 4);
+  });
+
   it('prefers a below-cliff draw when one covers spending after the premium credit', () => {
     // $50k spend with $20k Social Security from all pre-tax money: a ~$41k
     // draw keeps MAGI under 400% of the poverty line; naive bisection jumps

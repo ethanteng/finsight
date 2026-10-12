@@ -273,6 +273,8 @@ export function simulateWithdrawals(
     let fixedPremiums = 0;
     let marketplaceBenchmark = 0;
     let marketplacePeople = 0;
+    /** Calendar months with anyone on the marketplace (for Form 8962). */
+    let marketplaceCoverageMonths = 0;
     if (healthcare && month >= healthcare.startMonth) {
       for (const person of alive) {
         const age = ageOf(person);
@@ -286,12 +288,14 @@ export function simulateWithdrawals(
         if (healthcare.coverage === 'marketplace') {
           marketplaceBenchmark += marketplaceBenchmarkPremium(age) * monthsBeforeMedicare / 12;
           marketplacePeople += monthsBeforeMedicare / 12;
+          marketplaceCoverageMonths = Math.max(marketplaceCoverageMonths, monthsBeforeMedicare);
         } else if (healthcare.coverage === 'cobra') {
           const cobraMonths = Math.min(monthsBeforeMedicare, Math.max(0, COBRA_MONTHS - (month - healthcare.startMonth)));
           fixedPremiums += COBRA_ANNUAL_PREMIUM * cobraMonths / 12;
           const marketplaceMonths = monthsBeforeMedicare - cobraMonths;
           marketplaceBenchmark += marketplaceBenchmarkPremium(age) * marketplaceMonths / 12;
           marketplacePeople += marketplaceMonths / 12;
+          marketplaceCoverageMonths = Math.max(marketplaceCoverageMonths, marketplaceMonths);
         }
         // An employer retiree plan with no stated premium, or a spouse's
         // plan, adds nothing; the answer says so.
@@ -341,6 +345,7 @@ export function simulateWithdrawals(
           fixedPremiums,
           marketplaceBenchmark,
           marketplacePeople,
+          marketplaceCoverageShare: marketplaceCoverageMonths / 12,
           householdSize: Math.max(1, alive.length),
         },
       }),

@@ -57,6 +57,13 @@ export interface YearCashInput {
      * split across a Medicare enrollee who has no marketplace premium.
      */
     marketplacePeople: number;
+    /**
+     * Share of the year with marketplace coverage (calendar months / 12).
+     * Form 8962 scales the expected income contribution by coverage months; a
+     * prorated benchmark with a full-year contribution understates the credit.
+     * Defaults to a full year when omitted.
+     */
+    marketplaceCoverageShare?: number;
     /** People in the household, for the poverty line. */
     householdSize: number;
   };
@@ -156,18 +163,29 @@ function evaluate(input: YearCashInput, discretionary: number): Evaluation {
     if (separate && marketplacePeople > 0) {
       // Each unmarried partner files alone. Only people on the marketplace
       // share that credit; a Medicare enrollee is not given a phantom half
-      // of the benchmark.
+      // of the benchmark. Person-years annualize the benchmark so a half-year
+      // of coverage pays half a year's expected contribution, not a full one.
       credit = marketplacePeople * premiumTaxCredit({
         benchmarkPremium: health.marketplaceBenchmark / marketplacePeople,
         modifiedAdjustedGrossIncome: tax.modifiedAdjustedGrossIncome / health.householdSize,
         householdSize: 1,
       });
-    } else {
-      credit = premiumTaxCredit({
-        benchmarkPremium: health.marketplaceBenchmark,
-        modifiedAdjustedGrossIncome: tax.modifiedAdjustedGrossIncome,
-        householdSize: health.householdSize,
-      });
+    } else if (health.marketplaceBenchmark > 0) {
+      // Joint / single: Form 8962's monthly contribution is (applicable% ×
+      // annual MAGI) / 12 for each covered month, so scale the annual credit
+      // by coverage share rather than feeding a prorated benchmark a full year
+      // of expected contribution.
+      const coverageShare = Math.min(
+        1,
+        Math.max(0, health.marketplaceCoverageShare ?? 1)
+      );
+      credit = coverageShare > 0
+        ? coverageShare * premiumTaxCredit({
+          benchmarkPremium: health.marketplaceBenchmark / coverageShare,
+          modifiedAdjustedGrossIncome: tax.modifiedAdjustedGrossIncome,
+          householdSize: health.householdSize,
+        })
+        : 0;
     }
     premiums = health.fixedPremiums + Math.max(0, health.marketplaceBenchmark - credit);
   }
