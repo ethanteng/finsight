@@ -68,7 +68,9 @@ export function accountTaxTreatment(account: { subtype?: string | null; type?: s
   // A generic subtype ("investment", "other", none) can still be named for
   // what it is: "Roth IRA", "Rollover IRA", "Individual brokerage".
   if (/\broth\b/.test(name)) return 'roth';
-  if (/\b(?:401\s*\(?k\)?|403\s*\(?b\)?|457|ira|tsp|thrift savings|pension|sep|simple)\b/.test(name)) return 'pretax';
+  if (/\b(?:401\s*\(?k\)?|403\s*\(?b\)?|457|ira|tsp|thrift savings|pension|sep|simple|hsa|health savings)\b/.test(name)) {
+    return 'pretax';
+  }
   if (/\b(?:brokerage|individual|joint|taxable)\b/.test(name)) return 'taxable';
   return undefined;
 }

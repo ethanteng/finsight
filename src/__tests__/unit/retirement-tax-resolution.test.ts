@@ -30,6 +30,7 @@ describe('account tax treatment', () => {
     expect(accountTaxTreatment({ subtype: 'roth' })).toBe('roth');
     expect(accountTaxTreatment({ subtype: 'brokerage' })).toBe('taxable');
     expect(accountTaxTreatment({ subtype: 'hsa' })).toBe('pretax');
+    expect(accountTaxTreatment({ subtype: 'other', name: 'Health Savings Account' })).toBe('pretax');
     expect(accountTaxTreatment({ subtype: 'investment', name: 'Rollover IRA' })).toBe('pretax');
     expect(accountTaxTreatment({ subtype: 'other', name: 'My Roth IRA' })).toBe('roth');
     expect(accountTaxTreatment({ subtype: 'other', name: 'Individual' })).toBe('taxable');
