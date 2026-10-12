@@ -101,7 +101,7 @@ describe("marketing review fixes", () => {
     expect(screen.getByRole("button", { name: "Close menu" })).toHaveAttribute("aria-expanded", "true");
     const mobileMenu = screen.getByLabelText("Mobile navigation");
     expect(within(mobileMenu).getByRole("link", { name: "How It Works" })).toHaveAttribute("href", "/features");
-    expect(within(mobileMenu).getByRole("link", { name: "What You Can Ask" })).toHaveAttribute("href", "/use-cases");
+    expect(within(mobileMenu).getByRole("link", { name: "Cash Flow Forecast New" })).toHaveAttribute("href", "/cash-flow-forecast");
     expect(within(mobileMenu).getByRole("link", { name: "Coast FIRE" })).toHaveAttribute("href", "/coast-fire-calculator");
     expect(within(mobileMenu).getByRole("link", { name: "Compare" })).toHaveAttribute("href", "/vs");
     expect(within(mobileMenu).getByRole("link", { name: "Pricing" })).toHaveAttribute("href", "/pricing");

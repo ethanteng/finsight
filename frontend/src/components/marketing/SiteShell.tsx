@@ -15,7 +15,10 @@ export function SiteHeader() {
         </Link>
         <div className="nav-links">
           {PRIMARY_NAV_LINKS.map((item) => (
-            <Link href={item.href} key={item.href} data-cs-override-id={item.csOverrideId}>{item.label}</Link>
+            <Link href={item.href} key={item.href} data-cs-override-id={item.csOverrideId}>
+              {item.label}
+              {item.badge && <span className="nav-badge">{item.badge}</span>}
+            </Link>
           ))}
         </div>
         <div className="nav-actions">

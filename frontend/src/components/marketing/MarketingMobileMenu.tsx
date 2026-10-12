@@ -61,7 +61,10 @@ export function MarketingMobileMenu() {
               data-cs-override-id={`${item.csOverrideId}-mobile`}
               onClick={closeMenu}
             >
-              {item.label}
+              <span className="mobile-menu-label">
+                {item.label}
+                {item.badge && <span className="nav-badge">{item.badge}</span>}
+              </span>
               <span aria-hidden="true">→</span>
             </Link>
           ))}
