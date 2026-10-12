@@ -112,10 +112,13 @@ describe('account mix', () => {
     });
     expect(resolution.origin).toBe('stated');
     expect(resolution.assumedPretaxShare).toBe(0);
+    expect(resolution.savedAt).toBeTruthy();
     // $100k Roth placed; the other $400k follows the saved 30/50/20 split.
     expect(resolution.shares.roth).toBeCloseTo(0.2 + 0.8 * 0.2);
     expect(resolution.shares.taxable).toBeCloseTo(0.8 * 0.3);
     expect(resolution.shares.pretax).toBeCloseTo(0.8 * 0.5);
+    // Hybrid percents must not overwrite Your numbers via "Use these next time?".
+    expect(savableAccountSplit(resolution)).toBeUndefined();
   });
 
   it('falls back to Your numbers, then to all pre-tax', () => {
@@ -169,6 +172,8 @@ describe('healthcare', () => {
       healthcare: { coverage: 'cobra', annualPremium: 4_000 },
       coverageOrigin: 'stated',
       premiumOrigin: 'stated',
+      // Outranked "included" is not a source: ask again and mark on-top assumed.
+      inSpendingOrigin: 'default',
     });
   });
 

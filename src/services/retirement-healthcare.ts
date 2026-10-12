@@ -79,9 +79,13 @@ export function resolveHealthcare(args: {
   ) {
     return { kind: 'included', origin: 'saved', savedAt: savedInSpending.savedAt };
   }
+  // A saved "included" that was outranked is no longer a source: mark the
+  // on-top treatment assumed so disclosure says so and the form asks again.
   const inSpendingOrigin: FigureOrigin = args.stated?.inSpending === false
     ? 'stated'
-    : savedInSpending ? 'saved' : 'default';
+    : savedInSpending?.value === 'included'
+      ? 'default'
+      : savedInSpending ? 'saved' : 'default';
 
   const savedCoverage = savedChoice(args.statedFigures, 'preMedicareCoverage');
   const coverage: { value: PreMedicareCoverage; origin: FigureOrigin; savedAt?: string } = isCoverage(args.stated?.coverage)
