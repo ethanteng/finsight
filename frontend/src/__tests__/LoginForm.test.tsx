@@ -238,10 +238,10 @@ describe('LoginForm', () => {
       storeCoastFireSignupContext(INPUTS, { email: 'member@example.com', sourceToken: TOKEN });
     });
 
-    it('says the result is waiting and fills in the address', () => {
+    it('says the plan is saved and fills in the address', () => {
       render(<LoginForm />);
 
-      expect(screen.getByText('Your Coast FIRE result is ready.')).toBeInTheDocument();
+      expect(screen.getByText('Your Coast FIRE plan is saved.')).toBeInTheDocument();
       expect(screen.getByLabelText('Email address')).toHaveValue('member@example.com');
     });
 
@@ -284,7 +284,7 @@ describe('LoginForm', () => {
       searchParams = new URLSearchParams();
       render(<LoginForm />);
 
-      expect(screen.queryByText(/result is ready/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/plan is saved/i)).not.toBeInTheDocument();
     });
   });
 
@@ -335,7 +335,7 @@ describe('LoginForm', () => {
 
       render(<LoginForm />);
 
-      expect(screen.getByText('Your retirement result is ready.')).toBeInTheDocument();
+      expect(screen.getByText('Your retirement plan is saved.')).toBeInTheDocument();
       // Spent on arrival: a second visit is an ordinary sign-in.
       expect(document.cookie).not.toContain(TOKEN);
       // The lookup fills in the address the run was sent to.
@@ -381,12 +381,12 @@ describe('LoginForm', () => {
       }) as unknown as typeof fetch;
 
       const { unmount } = render(<LoginForm />);
-      expect(screen.getByText('Your retirement result is ready.')).toBeInTheDocument();
+      expect(screen.getByText('Your retirement plan is saved.')).toBeInTheDocument();
       expect(document.cookie).not.toContain(TOKEN);
       unmount();
 
       render(<LoginForm />);
-      expect(screen.getByText('Your retirement result is ready.')).toBeInTheDocument();
+      expect(screen.getByText('Your retirement plan is saved.')).toBeInTheDocument();
       await waitFor(() => expect(screen.getByLabelText('Email address')).toHaveValue('member@example.com'));
 
       fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-password' } });

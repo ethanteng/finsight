@@ -191,8 +191,10 @@ it('still renders a plan when the response omits the assumed list', async () => 
 
   renderPage();
   fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
-  // The plan answer opens in Ask Linc; here it is the locked card and the form.
-  expect(await screen.findByText('Your result is ready.')).toBeInTheDocument();
+  // The verdict, with the locked plan and its form beside it.
+  expect(await screen.findByRole('heading', {
+    name: /worked in 736 of 800 retirements in market history/i,
+  })).toBeInTheDocument();
   expect(screen.getByLabelText('Email address')).toBeInTheDocument();
 });
 

@@ -199,7 +199,7 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   // response may sit in a shared cache.
   res.setHeader('Cache-Control', 'no-store');
   res.json({
-    message: 'Your Coast FIRE result is ready in Ask Linc.',
+    message: 'Your Coast FIRE plan is saved in Ask Linc.',
     ref,
     // Lets the page send this visitor to sign in rather than to a signup that
     // would refuse the address.

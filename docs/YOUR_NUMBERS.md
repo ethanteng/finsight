@@ -45,4 +45,5 @@ A saved retirement age the user has already reached is no plan for the future an
 | `src/openai/save-offer.ts` | "Use these next time?" |
 | `src/scenarios/coast-fire-scenario.ts`, `stated-retirement-plan-scenario.ts` | Reading saved figures, disclosure, and `savableFigures` |
 | `frontend/src/app/your-numbers/` | The page |
+| `frontend/src/lib/your-numbers-fields.ts` | The plan, partner, and taxes and coverage fields with their labels and bounds, shared with the public calculators' locked preview (`lib/calculator-locked-plan.ts`) |
 | `frontend/src/components/SaveOfferCard.tsx` | The offer under an answer |

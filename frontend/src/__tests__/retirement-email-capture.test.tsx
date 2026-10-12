@@ -10,9 +10,8 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
-import { pushRetirementResultsEmailed, pushCalculatorRunLimitReached } from '@/lib/dataLayer';
+import { pushRetirementResultsEmailed } from '@/lib/dataLayer';
 import { leaveForSignup } from '@/lib/calculator-handover';
-import { CALCULATOR_RUN_LIMIT, runLimitPhrase } from '@/lib/calculator-run-limit';
 
 /*
  * jsdom implements neither navigation nor a `location` that can be replaced,
@@ -27,7 +26,6 @@ jest.mock('@/lib/calculator-handover', () => ({
 
 jest.mock('@/lib/dataLayer', () => ({
   pushRetirementInteraction: jest.fn(),
-  pushCalculatorRunLimitReached: jest.fn(),
   pushRetirementModelRun: jest.fn(),
   pushRetirementResultsEmailed: jest.fn(),
   pushStartFreeClick: jest.fn(),
@@ -126,14 +124,8 @@ function mockApi(planResult: unknown, emailResponse: Partial<Response> = { ok: t
   }) as unknown as typeof fetch;
 }
 
-/*
- * Built from the constant rather than written out, so these keep testing the
- * behaviour rather than the default — `NEXT_PUBLIC_CALCULATOR_RUN_LIMIT` set
- * in a developer's environment would otherwise fail the suite.
- */
-function runLockCopy(): RegExp {
-  return new RegExp(`that is ${runLimitPhrase()}`, 'i');
-}
+/** BASE_RESULT's verdict, as the page states it. */
+const VERDICT = 'Retiring at 60 worked in 736 of 800 retirements in market history.';
 
 async function runTheModel() {
   const edit = screen.queryByRole('button', { name: /edit inputs.*run again/i });
@@ -163,21 +155,22 @@ it('asks for an address only once a plan has produced a verdict', async () => {
   await runTheModel();
 
   expect(await screen.findByLabelText('Email address')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'See my result in Ask Linc' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeInTheDocument();
 });
 
 /*
  * Placement is the point of where this sits: someone who reads their verdict
- * and stops should still be offered a copy of it. The capture belongs with the
- * answer, above the jump link, and both inside the results block — not further
- * down past two charts.
+ * and stops should still be offered the way into Ask Linc. The capture sits on
+ * the lock beside the answer, inside the results block — not further down past
+ * two charts, and with no jump link standing in for it.
  */
 it('keeps saving next to the result in the combined view', async () => {
   renderPage();
   await runTheModel();
   const field = await screen.findByLabelText('Email address');
-  // Beside the card that stands in for the verdict until Ask Linc shows it.
-  expect(field.closest('.calculator-result-grid')).toHaveTextContent(/your result is ready/i);
+  // On the locked plan, in the same block as the verdict.
+  expect(field.closest('.calculator-locked-plan')).toHaveTextContent('Make it your plan.');
+  expect(field.closest('.calculator-result-grid')).toHaveTextContent(VERDICT);
   expect(screen.queryByRole('link', { name: /see what this result means/i })).not.toBeInTheDocument();
 });
 
@@ -258,7 +251,7 @@ it('surfaces a refusal and leaves the form ready to retry', async () => {
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid email address.');
-  expect(screen.getByRole('button', { name: 'See my result in Ask Linc' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeEnabled();
   expect(emailed).not.toHaveBeenCalled();
 });
 
@@ -304,10 +297,11 @@ it('carries the run to signup instead of stopping at the inbox', async () => {
 });
 
 /*
- * Nothing stored is a 503, so no account could open the run. The verdict
- * belongs in Ask Linc, not here, so the form asks for a retry.
+ * Nothing stored is a 503, so no account could open the run. The form asks
+ * for a retry; the verdict is the page's own, so it stays where it is and
+ * nothing leaves for signup.
  */
-it('asks for a retry, and shows no verdict, when nothing was stored', async () => {
+it('asks for a retry, and stays on the verdict, when nothing was stored', async () => {
   mockApi(BASE_RESULT, {
     ok: false,
     status: 503,
@@ -322,8 +316,8 @@ it('asks for a retry, and shows no verdict, when nothing was stored', async () =
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
   expect(await screen.findByRole('alert')).toHaveTextContent(/could not save your result/i);
-  expect(screen.queryByText(/retiring at 60 worked in/i)).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'See my result in Ask Linc' })).toBeEnabled();
+  expect(screen.getByRole('heading', { name: VERDICT })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeEnabled();
   expect(leaveForSignup).not.toHaveBeenCalled();
 });
 
@@ -352,60 +346,26 @@ it('scrolls to the results once they render, not on the next frame', async () =>
 });
 
 /*
- * Three runs answer the question the page asks. Past that it is being used as
- * a free modelling tool, and the only thing left to do is save the result —
- * which is the argument the page exists to make.
+ * The model no longer rations runs. The verdict is free on the page, so every
+ * re-run answers too — and nothing the page keeps in the tab locks it on the
+ * next render either. The lock is on what Ask Linc adds, not on the engine.
  */
-it('locks the model after three runs and points at the save form', async () => {
-  renderPage();
-
-  for (let run = 0; run < CALCULATOR_RUN_LIMIT; run += 1) {
-    await runTheModel();
-    await screen.findByLabelText('Email address');
-  }
-
-  expect(screen.queryByRole('button', { name: /run the model/i })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /edit inputs.*run again/i })).not.toBeInTheDocument();
-  expect(screen.getByText(/you’ve used your free runs/i)).toBeVisible();
-  await waitFor(() => expect(pushCalculatorRunLimitReached).toHaveBeenCalledTimes(1));
-  expect(pushCalculatorRunLimitReached).toHaveBeenCalledWith('retirement');
-  // The save form is still there: it is what the lock is pointing at.
-  expect(screen.getByRole('button', { name: 'See my result in Ask Linc' })).toBeEnabled();
-});
-
-/*
- * A rates-only answer has no capture form, and the page deliberately refuses
- * to hand one to signup. Counting them would let three spend the allowance and
- * leave the visitor locked out of entering the full plan that *would* have
- * been savable — while the lock tells them to save a result they cannot.
- */
-it('does not spend a run on a result that cannot be saved', async () => {
-  mockApi(RATES_RESULT);
-  renderPage();
-
-  for (let run = 0; run < CALCULATOR_RUN_LIMIT + 1; run += 1) {
-    await runTheModel();
-    await screen.findByText(/what this mix sustained/i);
-  }
-
-  expect(screen.getByRole('button', { name: /edit inputs.*run again/i })).toBeEnabled();
-  expect(screen.queryByText(runLockCopy())).not.toBeInTheDocument();
-});
-
-/* The count survives a reload, so it is not shrugged off by refreshing. */
-it('is still locked after the page is rendered again', async () => {
+it('keeps answering however many times the visitor runs it', async () => {
   const first = renderPage();
-  for (let run = 0; run < CALCULATOR_RUN_LIMIT; run += 1) {
+
+  for (let run = 0; run < 5; run += 1) {
     await runTheModel();
-    await screen.findByLabelText('Email address');
+    expect(await screen.findByRole('heading', { name: VERDICT })).toBeInTheDocument();
   }
+
+  fireEvent.click(screen.getByRole('button', { name: /edit inputs.*run again/i }));
+  expect(screen.getByRole('button', { name: /run the model/i })).toBeEnabled();
+  expect(screen.queryByText(/free runs/i)).not.toBeInTheDocument();
   first.unmount();
 
   const again = renderPage();
-
-  await waitFor(() => {
-    expect(again.getByRole('button', { name: /run the model/i })).toBeDisabled();
-  });
+  expect(again.getByRole('button', { name: /run the model/i })).toBeEnabled();
+  expect(again.getByText(/no email needed to see your result/i)).toBeInTheDocument();
 });
 
 it('keeps the typed address out of Contentsquare recordings', async () => {
@@ -438,8 +398,8 @@ it('resets the capture when a new plan is run', async () => {
   await runTheModel();
 
   // A fresh form for the new plan: the earlier hand-off belonged to that run.
-  await screen.findByText('Your result is ready.');
-  expect(screen.queryByText(/taking you to your result/i)).not.toBeInTheDocument();
+  await screen.findByRole('heading', { name: /retiring at 62 worked in/i });
+  expect(screen.queryByText(/taking you to ask linc/i)).not.toBeInTheDocument();
   // The form is back for the new plan, holding the address already given in
   // this tab rather than asking for it again.
   expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');

@@ -51,21 +51,10 @@ if (typeof window !== 'undefined') {
   }
 } 
 /*
- * The suite runs against the default run limit, whatever a developer happens
- * to have exported. Cases that run a calculator more than once are about
- * something else entirely, and a low `NEXT_PUBLIC_CALCULATOR_RUN_LIMIT` in the
- * environment would fail them for a reason that has nothing to do with what
- * they test. The limit's own suite sets the variable explicitly.
- *
- * Deleted here rather than in a beforeEach: the module reads it once on import.
- */
-delete process.env.NEXT_PUBLIC_CALCULATOR_RUN_LIMIT
-
-/*
  * One jsdom serves every test in a file, and session storage outlives a
- * render. Anything a component persists — the calculators count their runs
- * there, so the fourth submit in a file is refused — otherwise leaks into the
- * next test as state no visitor would have had.
+ * render. Anything a component persists — the calculators remember the
+ * visitor's address and the run they are handing to signup there — otherwise
+ * leaks into the next test as state no visitor would have had.
  */
 beforeEach(() => {
   try {

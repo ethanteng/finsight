@@ -1,11 +1,11 @@
 /**
  * From a calculator answer into Ask Linc.
  *
- * Neither calculator shows its answer on its own page, in any case: the run
- * opens in Ask Linc as a decision in the visitor's account. What matters here
- * is that nothing restating the answer reaches the page — not the figures, not
- * the reading, not the page CTA — and that the address takes the run to the
- * right door:
+ * Both calculators show their answer on the page, with the details Ask Linc
+ * also plans with locked beside it and an email form on the lock. What matters
+ * here is that the answer is the page's own — it stays put through a failed
+ * save and asks for no model reading — that the page CTA carries no run, and
+ * that the address takes the run to the right door, saying where it is going:
  *
  * - a visitor already signed in: attached to that account, then `/app`;
  * - an address with an account: sign-in, which attaches it;
@@ -29,7 +29,6 @@ jest.mock('@/lib/calculator-handover', () => ({
 jest.mock('@/lib/dataLayer', () => ({
   pushCoastFireCalculated: jest.fn(),
   pushCoastFireResultsEmailed: jest.fn(),
-  pushCalculatorRunLimitReached: jest.fn(),
   pushRetirementInteraction: jest.fn(),
   pushRetirementModelRun: jest.fn(),
   pushRetirementResultsEmailed: jest.fn(),
@@ -39,7 +38,9 @@ jest.mock('@/lib/dataLayer', () => ({
 jest.mock('recharts', () => ({
   BarChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
   Bar: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Cell: () => null,
   LabelList: () => null,
+  ReferenceLine: () => null,
   XAxis: () => null,
   YAxis: () => null,
   ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
@@ -136,16 +137,15 @@ describe('Coast FIRE calculator', () => {
     fireEvent.submit(screen.getByRole('button', { name: /calculate my coast fire number/i }).closest('form')!);
   }
 
-  it('holds the answer back for Ask Linc', () => {
+  it('shows the answer, with what Ask Linc adds locked beside it', () => {
     render(<CoastFireCalculator />);
     calculate();
 
-    expect(screen.getByText('Your result is ready.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'See my result in Ask Linc' })).toBeInTheDocument();
-    // Not hidden: absent. A blurred copy of the real figure is one inspector away.
-    expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
-    expect(screen.queryByText(/you haven’t reached coast fire yet|you’ve reached coast fire/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/your return assumption does most of the work/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'You’ve reached Coast FIRE.' })).toBeInTheDocument();
+    expect(screen.getByText(COAST_FIRE_NUMBER)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Make it your plan.' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeInTheDocument();
+    // The formula's own figures, so there is nothing for a model to read.
     expect(requested('/interpretation')).toBe(false);
   });
 
@@ -159,7 +159,8 @@ describe('Coast FIRE calculator', () => {
     expect(href).toContain('entry=results_page');
     expect(readCoastFireSignupContext()?.sourceToken).toBe(REF);
     expect(readCoastFireSignupContext()?.email).toBe('reader@example.com');
-    expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
+    expect(screen.getByRole('heading', { name: 'Taking you to Ask Linc…' })).toBeInTheDocument();
+    expect(screen.getByText(/choose a password and your coast fire plan opens as your first decision/i)).toBeInTheDocument();
   });
 
   /*
@@ -174,7 +175,7 @@ describe('Coast FIRE calculator', () => {
 
     expect(await destination()).toBe('/login?source=coast-fire-calculator');
     expect(readCoastFireSignupContext()?.sourceToken).toBe(REF);
-    expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
+    expect(screen.getByText(/sign in and your coast fire plan opens as a new decision/i)).toBeInTheDocument();
   });
 
   it('attaches the run for a visitor already signed in and opens it in the app', async () => {
@@ -190,13 +191,13 @@ describe('Coast FIRE calculator', () => {
     const attach = calls.find(({ url }) => url.includes('/auth/calculator-lead'))!;
     expect((attach.init?.headers as Record<string, string>).Authorization).toBe(`Bearer ${SESSION}`);
     expect(JSON.parse(String(attach.init?.body))).toEqual({ calculatorRef: REF });
-    expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
+    expect(screen.getByText('Your Coast FIRE plan is saved in your account. Opening it…')).toBeInTheDocument();
   });
 
   /*
    * A session whose account the lead does not name (they typed some other
    * address) attaches nothing, so the run follows the address they typed —
-   * still into Ask Linc, never onto this page.
+   * into signup for that address, not into the session's account.
    */
   it('follows the typed address when a session cannot take the run', async () => {
     window.localStorage.setItem('auth_token', SESSION);
@@ -206,11 +207,15 @@ describe('Coast FIRE calculator', () => {
     giveEmail('reader@example.com');
 
     expect(await destination()).toContain('/getstarted?source=coast-fire-calculator');
-    expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
+    expect(requested('/auth/calculator-lead')).toBe(true);
+    expect(screen.getByText(/choose a password and your coast fire plan opens as your first decision/i)).toBeInTheDocument();
   });
 
-  /* Nothing stored is a 503: an error to retry, and no answer on the page. */
-  it('asks for a retry, and shows no answer, when nothing was stored', async () => {
+  /*
+   * Nothing stored is a 503: an error to retry. The answer is the page's own,
+   * so it stays where it is and nothing leaves.
+   */
+  it('asks for a retry, and stays on the answer, when nothing was stored', async () => {
     mockApi({
       send: { error: 'We could not save your result just now. Please try again in a moment.' },
       sendStatus: 503,
@@ -220,7 +225,8 @@ describe('Coast FIRE calculator', () => {
     giveEmail();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not save your result/i);
-    expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
+    expect(screen.getByText(COAST_FIRE_NUMBER)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeEnabled();
     expect(leaveForSignup).not.toHaveBeenCalled();
   });
 
@@ -235,16 +241,17 @@ describe('Coast FIRE calculator', () => {
     calculate();
     giveEmail();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/check your email/i);
-    expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/check your email for a link to open this plan in ask linc/i);
+    expect(screen.getByText(COAST_FIRE_NUMBER)).toBeInTheDocument();
     expect(leaveForSignup).not.toHaveBeenCalled();
   });
 
   /*
-   * Every run goes to Ask Linc, including a second in the same tab. The
-   * address is remembered so the next form does not ask for it again.
+   * A second run in the same tab answers on the page and gets its own lock
+   * and form. The address is remembered so the next form does not ask for it
+   * again.
    */
-  it('holds the next run back too, with the address already filled in', async () => {
+  it('answers the next run too, with the address already filled in', async () => {
     render(<CoastFireCalculator />);
     calculate();
     giveEmail();
@@ -252,7 +259,9 @@ describe('Coast FIRE calculator', () => {
 
     calculate();
 
-    expect(screen.getByText('Your result is ready.')).toBeInTheDocument();
+    expect(screen.getByText(COAST_FIRE_NUMBER)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeEnabled();
+    expect(screen.queryByText('Taking you to Ask Linc…')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
     expect(window.sessionStorage.getItem(CALCULATOR_EMAIL_STORAGE_KEY)).toBe('reader@example.com');
   });
@@ -319,15 +328,20 @@ describe('retirement calculator', () => {
     return render(<RetirementQuickPlan headline="Can I retire at 60?" initialRetirementAge={60} />);
   }
 
-  it('holds the verdict back for Ask Linc', async () => {
+  const VERDICT = 'Retiring at 60 worked in 736 of 800 retirements in market history.';
+
+  it('shows the verdict, with what Ask Linc adds locked beside it', async () => {
     mockApi({ plan: PLAN });
     renderPage();
     await runTheModel();
 
-    expect(await screen.findByText('Your result is ready.')).toBeInTheDocument();
-    expect(screen.queryByText(/retiring at 60 worked in/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/how much you could spend each year/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/the two levers these numbers can pull/i)).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: VERDICT })).toBeInTheDocument();
+    expect(screen.getByText('How much you could spend each year')).toBeInTheDocument();
+    expect(screen.getByText('The two levers these numbers can pull')).toBeInTheDocument();
+    expect(screen.getByText('HOW THE ENGINE READ THIS ASSET MIX')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Make it your plan.' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeInTheDocument();
+    // The engine's own figures: a plan answer asks no model for a reading.
     expect(requested('/interpretation')).toBe(false);
     // The page's own CTA does not carry the run into signup either.
     expect(screen.getByRole('link', { name: 'Build my retirement plan' })).toBeInTheDocument();
@@ -337,23 +351,25 @@ describe('retirement calculator', () => {
     mockApi({ plan: PLAN });
     renderPage();
     await runTheModel();
-    await screen.findByText('Your result is ready.');
+    await screen.findByRole('button', { name: 'Unlock in Ask Linc' });
     giveEmail();
 
     expect(await destination()).toContain('/getstarted?source=retirement-calculator');
     expect(readRetirementSignupContext()?.sourceToken).toBe(REF);
-    expect(screen.queryByText(/retiring at 60 worked in/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Taking you to Ask Linc…' })).toBeInTheDocument();
+    expect(screen.getByText(/choose a password and your retirement plan opens as your first decision/i)).toBeInTheDocument();
   });
 
   it('sends an existing account to sign in with the run', async () => {
     mockApi({ plan: PLAN, send: { message: 'sent', ref: REF, existingAccount: true } });
     renderPage();
     await runTheModel();
-    await screen.findByText('Your result is ready.');
+    await screen.findByRole('button', { name: 'Unlock in Ask Linc' });
     giveEmail();
 
     expect(await destination()).toBe('/login?source=retirement-calculator');
     expect(readRetirementSignupContext()?.sourceToken).toBe(REF);
+    expect(screen.getByText(/sign in and your retirement plan opens as a new decision/i)).toBeInTheDocument();
   });
 
   it('attaches the run for a visitor already signed in and opens it in the app', async () => {
@@ -361,15 +377,19 @@ describe('retirement calculator', () => {
     mockApi({ plan: PLAN, send: { message: 'sent', ref: REF, existingAccount: true }, signedInAs: 'reader@example.com' });
     renderPage();
     await runTheModel();
-    await screen.findByText('Your result is ready.');
+    await screen.findByRole('button', { name: 'Unlock in Ask Linc' });
     await waitFor(() => expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com'));
     fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
     expect(await destination()).toBe('/app');
-    expect(screen.queryByText(/retiring at 60 worked in/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Your retirement plan is saved in your account. Opening it…')).toBeInTheDocument();
   });
 
-  it('asks for a retry, and shows no verdict, when nothing was stored', async () => {
+  /*
+   * Nothing stored is a 503: an error to retry. The verdict is the page's
+   * own, so it stays where it is and nothing leaves.
+   */
+  it('asks for a retry, and stays on the verdict, when nothing was stored', async () => {
     mockApi({
       plan: PLAN,
       send: { error: 'We could not save your result just now. Please try again in a moment.' },
@@ -377,11 +397,12 @@ describe('retirement calculator', () => {
     });
     renderPage();
     await runTheModel();
-    await screen.findByText('Your result is ready.');
+    await screen.findByRole('button', { name: 'Unlock in Ask Linc' });
     giveEmail();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not save your result/i);
-    expect(screen.queryByText(/retiring at 60 worked in/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: VERDICT })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeEnabled();
     expect(leaveForSignup).not.toHaveBeenCalled();
   });
 
@@ -389,17 +410,17 @@ describe('retirement calculator', () => {
     mockApi({ plan: PLAN, send: { message: 'sent', ref: null } });
     renderPage();
     await runTheModel();
-    await screen.findByText('Your result is ready.');
+    await screen.findByRole('button', { name: 'Unlock in Ask Linc' });
     giveEmail();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/check your email/i);
-    expect(screen.queryByText(/retiring at 60 worked in/i)).not.toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/check your email for a link to open this plan in ask linc/i);
+    expect(screen.getByRole('heading', { name: VERDICT })).toBeInTheDocument();
     expect(leaveForSignup).not.toHaveBeenCalled();
   });
 
   /*
    * A rates answer says nothing about the visitor's own plan and has no run
-   * to save, so there is nothing to hold back.
+   * to save, so there is nothing to lock and no form to unlock it.
    */
   it('shows a rates-only answer, which has no run to save', async () => {
     mockApi({ plan: RATES });
@@ -407,7 +428,8 @@ describe('retirement calculator', () => {
     await runTheModel();
 
     expect(await screen.findByText(/what this mix sustained/i)).toBeInTheDocument();
-    expect(screen.queryByText('Your result is ready.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Make it your plan.' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Email address')).not.toBeInTheDocument();
   });
 
   it('fills in the address the other calculator was given', async () => {
@@ -416,7 +438,7 @@ describe('retirement calculator', () => {
     renderPage();
     await runTheModel();
 
-    expect(await screen.findByText('Your result is ready.')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Unlock in Ask Linc' })).toBeInTheDocument();
     expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
   });
 });

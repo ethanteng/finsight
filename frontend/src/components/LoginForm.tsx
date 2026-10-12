@@ -416,7 +416,7 @@ function LoginFormContent() {
                 <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#477064]">Secure sign in</p>
                 <h1 id="login-heading" className="text-4xl font-semibold tracking-[-0.04em] text-[#123c2f]">Welcome back.</h1>
                 <p className="mt-3 text-base leading-7 text-[#50695f]">Sign in to see your plans and ask Linc a question.</p>
-                {calculatorRun && <div className="mt-5 flex gap-3 rounded-2xl border border-[#719632]/25 bg-[#eaf5d5] p-4 text-sm text-[#34551c]" role="status"><Check className="mt-0.5 shrink-0" size={18} /><div><strong className="block">Your {calculatorRun.label} result is ready.</strong><span className="mt-1 block text-[#4d6a35]">Sign in and it opens as a new decision in your account.</span></div></div>}
+                {calculatorRun && <div className="mt-5 flex gap-3 rounded-2xl border border-[#719632]/25 bg-[#eaf5d5] p-4 text-sm text-[#34551c]" role="status"><Check className="mt-0.5 shrink-0" size={18} /><div><strong className="block">Your {calculatorRun.label} plan is saved.</strong><span className="mt-1 block text-[#4d6a35]">Sign in and it opens as a new decision in your account.</span></div></div>}
                 {subscriptionContext && <div className="mt-5 flex gap-3 rounded-2xl border border-[#719632]/25 bg-[#eaf5d5] p-4 text-sm text-[#34551c]" role="status"><Check className="mt-0.5 shrink-0" size={18} /><div><strong className="block">Your subscription is ready.</strong><span className="mt-1 block text-[#4d6a35]">Sign in to open your workspace.</span></div></div>}
               </div>
 

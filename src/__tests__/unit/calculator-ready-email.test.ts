@@ -1,5 +1,5 @@
 /**
- * The "your result is ready in Ask Linc" email.
+ * The "your plan is waiting in Ask Linc" email.
  *
  * Its one job is to bring someone back into signup without handing them the
  * answer, so what matters is what it leaves out: no verdict and no figure the
@@ -58,13 +58,13 @@ describe('calculator ready email', () => {
   });
 
   it('names the calculator it came from', () => {
-    expect(build().subject).toBe('Your Coast FIRE result is ready in Ask Linc');
+    expect(build().subject).toBe('Your Coast FIRE plan is waiting in Ask Linc');
     expect(buildCalculatorReadyEmail({
       calculator: 'retirement',
       inputs: [],
       email: 'reader@example.com',
       ctaUrl: CTA,
-    }).subject).toBe('Your retirement result is ready in Ask Linc');
+    }).subject).toBe('Your retirement plan is waiting in Ask Linc');
   });
 
   it('asks an existing account to sign in rather than choose a password', () => {

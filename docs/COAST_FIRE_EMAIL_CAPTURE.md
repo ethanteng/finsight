@@ -5,27 +5,27 @@
 > handover, and what must not fail the visitor applies identically there.
 
 The `/coast-fire-calculator` page is the acquisition wedge for the Coast FIRE
-beachhead experiment. It computes the free question — "have I reached Coast
-FIRE?" — in the browser, but answers it in Ask Linc: the visitor gives an
-email address, chooses a password, and sees the result as their account's first
-decision. See **The answer opens in Ask Linc**. The goal is that more people
-experience the value inside the product, not in a calculator outside it. The
-page never shows the answer itself, in any case. This document covers that
-hand-off, the sign-in path for an address that already has an account, and
-the email that brings back anyone who leaves before the password.
+beachhead experiment. It answers the free question — "have I reached Coast
+FIRE?" — in the browser, on the page, with no address asked. What it locks is
+the plan beyond that answer: the details Ask Linc plans with that seven numbers
+leave out. The visitor gives an email address, chooses a password, and the run
+opens as their account's first decision with those details as a form under it.
+See **The plan opens in Ask Linc**. This document covers that hand-off, the
+sign-in path for an address that already has an account, and the email that
+brings back anyone who leaves before the password.
 
 ## The flow
 
 1. A visitor submits the seven inputs. The number is calculated in the browser
-   but not rendered: a locked card stands in for it.
-2. The email capture appears beside the locked card. It appears only after a
-   submitted run: the page opens with empty personal figures and no result, so
-   there is nothing to save until the visitor asks for an answer — and
-   collecting an address against figures nobody entered would attach their
-   address to our assumptions, not theirs.
+   and the result replaces the form.
+2. Beside it, the locked plan appears with the email capture above it. It
+   appears only after a submitted run: the page opens with empty personal
+   figures and no result, so there is nothing to save until the visitor asks
+   for an answer — and collecting an address against figures nobody entered
+   would attach their address to our assumptions, not theirs.
 3. `POST /api/coast-fire/email-results` receives the seven inputs and an email
    address. It recomputes the result server-side, stores a `CoastFireLead` row
-   with a random token, and sends the "result ready" email through Resend. That
+   with a random token, and sends the "plan waiting" email through Resend. That
    email states no figures; see **The email**.
 4. It then stamps `tokenDisclosedAt` on that row and returns the token as
    `ref`. The page stores the run in sessionStorage and takes it to one of
@@ -46,7 +46,7 @@ the email that brings back anyone who leaves before the password.
    with access to the MailerLite account can open the run until it expires,
    as anyone with access to the inbox can.
 6. `/getstarted` renders the Coast FIRE variant of the signup page with the
-   email prefilled: "Choose a password to see it", what they saved, their
+   email prefilled: "Choose a password to unlock it", what they saved, their
    retirement age and spending — and no result. Arriving straight from the
    page skips the token exchange, because the stored context already carries
    the same token, and is reported as `calculator_results_page_cta_opened`.
@@ -54,7 +54,7 @@ the email that brings back anyone who leaves before the password.
    skips the verification code, skips the sign-in form, and opens `/app` on the
    session registration returns. `/app` waits for the decision and opens it.
    See **Saving a run to an account**.
-8. The email's call to action, "See my result in Ask Linc", links to
+8. The email's call to action, "Open my plan in Ask Linc", links to
    `/coast-fire/continue?ref=<token>`. This is what someone who left the signup
    page comes back to, and the only route for a visitor whose browser refused
    the cookie. That route handler moves the token into a short-lived
@@ -62,36 +62,53 @@ the email that brings back anyone who leaves before the password.
    `/getstarted?source=coast-fire-calculator`, which exchanges it through
    `GET /api/coast-fire/signup-context/:token` and continues from step 6.
 
-The page's own "Stress-test my Coast FIRE plan" button carries no run while
-the result is held back. It reaches signup like any other no-card visitor.
+The page's own "Stress-test my Coast FIRE plan" button carries no run: the
+email form is the way into Ask Linc with one. It reaches signup like any other
+no-card visitor.
 
-## The answer opens in Ask Linc
+## The plan opens in Ask Linc
 
-Neither calculator shows its answer, in any case. A submitted run renders
-`CalculatorLockedResult` in place of the result card: an illustrative card,
-blurred, with fixed figures that are never the visitor's own, and "Your result
-is ready" on top. The capture beside it asks for an email address, and its
-button reads "See my result in Ask Linc".
+A submitted run shows its answer on the page: the verdict, the Coast FIRE
+number, how much of it is funded, the target and the no-contribution
+projection (`ResultPanel`). The answer is the browser's own run of the formula
+and nothing is asked for it.
 
-Nothing that restates the answer runs on the page: not the figures, not the
-model reading, not the return comparison or the retirement charts, and not the
-page's own signup CTA, which carries no run. The signup and sign-in pages state
-no result either. The first place the visitor sees their answer is a decision
-in their account.
+Beside the answer, `CalculatorLockedPlan` shows what the formula leaves out and
+Ask Linc plans with, greyed out under one lock: Your numbers' own fields, in
+its own groups (your retirement plan, your partner, taxes and health coverage),
+four to a group (`lib/calculator-locked-plan.ts`). They are never filled in and
+cannot be focused. One small lock sits on the rule above them, and the email
+capture is a bar between the heading and the fields, its button reading "Unlock
+in Ask Linc". It sat on a card over the fields at first, which hid the very
+thing it was offering.
 
-Every run is held back, including a second run in the same tab.
+Unlocking is the hand-off below. The run becomes the account's first decision,
+and that decision carries the full set of details as an all-optional
+`input_request` form under the answer (`services/calculator-plan-details.ts`),
+so what the lock promised is the first thing the visitor can do there.
+Submitting the form is the ordinary path: one sentence per filled field, sent
+as the user's next message, and Coast FIRE runs again with them.
+
+The form asks only for what the seven inputs did not say. The calculator's one
+income figure ("income available at retirement") may be Social Security, a
+pension or both, so a run with one is asked only when it starts and whether it
+rises with inflation, with the amount named in the sentence; asking for Social
+Security or a pension beside it would invite the planner to count the same
+dollars twice, and it is told never to work out a remainder. A run with no
+income is asked for both from scratch. The page's preview follows the same
+rule.
+
+Every run gets a fresh capture, including a second run in the same tab.
 `lib/calculator-email-memory.ts` remembers the address in session storage so a
-later form on either calculator is prefilled.
+later form on either calculator is prefilled. There is no run limit.
 
-**It is a nudge, not a control**, like the run limit. The Coast FIRE formula
-runs in the browser, and the retirement model's response reaches the browser
-before the page hides it. Anyone who opens devtools can read the answer. What
-the page guarantees is only that its rendered content does not contain it.
+The signup and sign-in pages state no result: they say the plan is saved and
+what unlocking adds.
 
-A retirement `rates` answer is shown, with its reading. It has no run to save,
-because the email endpoint refuses a run with no portfolio or spending level.
-It says nothing about the visitor's own plan, and its job is to ask for the
-two numbers that produce a plan result, which is held back.
+A retirement `rates` answer is shown with its reading and has no lock. It has
+no run to save, because the email endpoint refuses a run with no portfolio or
+spending level, and its job is to ask for the two numbers that produce a plan
+result.
 
 ### Where the run goes
 
@@ -142,21 +159,13 @@ ignored when it returns.
 
 The visitor's next question is about this run, and they have linked nothing. Ask Linc answers it from their figures rather than asking them to link an account first: the `coast_fire` calculator for Coast FIRE, and the `stated_retirement_plan` calculator for a retirement-calculator plan. Linking is offered at the end of the answer as what would make it better. See "Before anything is linked" in `docs/SCENARIO_MODELING.md`.
 
-## Three runs, then the save
-
-The Calculate button locks after three completed runs, and a line under it
-points at the capture instead. Shared with `/retirement-calculator` through
-`lib/calculator-run-limit.ts`, including the `NEXT_PUBLIC_CALCULATOR_RUN_LIMIT`
-setting that moves the number; the reasoning, and why it is a nudge rather than
-a control, is in `docs/RETIREMENT_QUICKPLAN.md`.
-
 ## No reading on this page
 
-The Coast FIRE page shows no result, so it no longer asks a model to describe
-one, and the `POST /api/coast-fire/interpretation` endpoint that did so has
-been removed. The answer the visitor sees in Ask Linc is the deterministic
-first decision. The only calculator reading left is the retirement page's
-published-rates mode; see `docs/RETIREMENT_QUICKPLAN.md`.
+The Coast FIRE page shows the formula's figures and asks no model to describe
+them; the `POST /api/coast-fire/interpretation` endpoint that once did was
+removed. The answer in Ask Linc is the deterministic first decision. The only
+calculator reading left is the retirement page's published-rates mode; see
+`docs/RETIREMENT_QUICKPLAN.md`.
 
 ## Saving a run to an account
 
@@ -258,13 +267,13 @@ other side's tests.
 ## The email
 
 The ordinary message is `email/calculator-ready.ts`, shared by both
-calculators: "Your Coast FIRE result is ready in Ask Linc", the link back into
-signup, and what the visitor entered. It states no verdict and no figure the
-calculator produced. Mailing the answer would let the inbox stand in for the
-account, and the account is the point. It goes to every new address.
+calculators: "Your Coast FIRE plan is waiting in Ask Linc", what unlocking adds,
+the link back into signup, and what the visitor entered. It states no verdict
+and no figure the calculator produced: the page already showed the answer, and
+the plan continues in the account, not the inbox. It goes to every new address.
 
 An address that already has an account gets the same message, worded for
-sign-in ("Sign in to your Ask Linc account and your result opens there as a new
+sign-in ("Sign in to your Ask Linc account and your run opens there as a new
 decision"), and its link carries `&to=sign-in`. `/coast-fire/continue` then
 redirects to `/login?source=coast-fire-calculator` instead of signup, with the
 handover cookie scoped to `/login`. The sign-in form spends that cookie, fills
@@ -286,7 +295,6 @@ browser" stub. The HTML uses the shared email shell in `src/email/templates.ts`.
 | `COAST_FIRE_CONTEXT_RATE_LIMIT` | 30 | Token lookups per caller per minute, on its own window so a send does not spend it. |
 | `COAST_FIRE_TRUSTED_PROXIES` | 1 | How many proxies sit in front of this process. See `routes/fixed-window-rate-limit.ts`. |
 | `RESEND_API_KEY` | — | Unset means no mail is sent and the endpoint reports success, matching the rest of the auth email path in development. |
-| `NEXT_PUBLIC_CALCULATOR_RUN_LIMIT` | 3 | Runs before the Calculate button locks, shared with the retirement calculator. **Frontend, so it is inlined at build time** — changing it needs a rebuild and redeploy, not a restart. Anything but a positive integer — unset, empty, `0`, `-1`, `2.5` — falls back to 3. There is no value meaning "no limit"; turning the nudge off belongs in code (or a very large number, which will read oddly in the lock copy). |
 
 ## Recalculating after sending
 

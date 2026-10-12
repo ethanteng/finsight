@@ -316,18 +316,6 @@ export function pushCalculatorResultsPageCtaOpened(
   });
 }
 
-/** The three-run nudge is visible; this is not a failed calculation or a conversion. */
-export function pushCalculatorRunLimitReached(calculator: 'retirement' | 'coast_fire'): void {
-  if (typeof window === 'undefined') return;
-  trackContentsquareEvent('calculator_run_limit_reached');
-  pushToDataLayer({
-    event: 'calculator_run_limit_reached',
-    source_page: window.location.pathname,
-    content_type: `${calculator}_calculator`,
-    calculator_type: calculator,
-  });
-}
-
 export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
   if (typeof window === 'undefined') return;
 

@@ -54,7 +54,15 @@ paused until the separately agreed budget and end-to-end signup checks are done.
 
 ## Run-limit measurement
 
-`calculator_run_limit_reached` fires once per calculator page mount when the
+**Retired October 2026.** Both calculators now show their result on the page
+and lock the plan beyond it instead, so there is no run limit and the page no
+longer sends `calculator_run_limit_reached`. The GTM trigger above still matches
+the name, harmlessly, and the reports that read it (`calculator-repeat-usage`,
+the BigQuery adapter, `analytics-session-reports.sql`,
+`calculator-signup-routes.sql`) see only events from before the change. What
+follows describes the event as it was.
+
+`calculator_run_limit_reached` fired once per calculator page mount when the
 three-run lock is visible, including a lock restored from sessionStorage.
 Payload: fixed calculator type, content type, pathname only. No form values,
 email, token, credentials, or result figures. Contentsquare receives only the
