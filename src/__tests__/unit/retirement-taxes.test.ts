@@ -124,7 +124,7 @@ describe('a year of a retired household\'s cash', () => {
     const roth = planYearCash({
       spending: 40_000, ordinaryIncome: 0, socialSecurity: 0, balances: { ...none, roth: 1_000_000 },
       taxableBasis: 0, requiredDistribution: 0, tax: single,
-      healthcare: { fixedPremiums: 0, marketplaceBenchmark: benchmark, householdSize: 1 },
+      healthcare: { fixedPremiums: 0, marketplaceBenchmark: benchmark, marketplacePeople: 1, householdSize: 1 },
     });
     expect(roth.premiumTaxCredit).toBeCloseTo(benchmark, 6);
     expect(roth.draws.roth).toBeCloseTo(40_000, 1);
@@ -132,10 +132,49 @@ describe('a year of a retired household\'s cash', () => {
     const pretax = planYearCash({
       spending: 60_000, ordinaryIncome: 0, socialSecurity: 0, balances: { ...none, pretax: 2_000_000 },
       taxableBasis: 0, requiredDistribution: 0, tax: single,
-      healthcare: { fixedPremiums: 0, marketplaceBenchmark: benchmark, householdSize: 1 },
+      healthcare: { fixedPremiums: 0, marketplaceBenchmark: benchmark, marketplacePeople: 1, householdSize: 1 },
     });
     expect(pretax.premiumTaxCredit).toBe(0);
     expect(pretax.premiums).toBeCloseTo(benchmark, 6);
+  });
+
+  it('prefers a below-cliff draw when one covers spending after the premium credit', () => {
+    // $50k spend with $20k Social Security from all pre-tax money: a ~$41k
+    // draw keeps MAGI under 400% of the poverty line; naive bisection jumps
+    // past the cliff to ~$54k with no credit.
+    const benchmark = marketplaceBenchmarkPremium(62);
+    const plan = planYearCash({
+      spending: 50_000, ordinaryIncome: 0, socialSecurity: 20_000, balances: { ...none, pretax: 1_000_000 },
+      taxableBasis: 0, requiredDistribution: 0, tax: single,
+      healthcare: { fixedPremiums: 0, marketplaceBenchmark: benchmark, marketplacePeople: 1, householdSize: 1 },
+    });
+    expect(plan.premiumTaxCredit).toBeGreaterThan(10_000);
+    expect(plan.draws.pretax).toBeLessThan(45_000);
+    expect(plan.draws.pretax).toBeGreaterThan(38_000);
+  });
+
+  it('credits only marketplace enrollees when an unmarried couple files two returns', () => {
+    const benchmark = marketplaceBenchmarkPremium(60);
+    const both = planYearCash({
+      spending: 40_000, ordinaryIncome: 0, socialSecurity: 0, balances: { ...none, roth: 1_000_000 },
+      taxableBasis: 0, requiredDistribution: 0,
+      tax: { household: 'separate_singles', peopleAged65: 0, stateRate: 0, priceLevel: 1 },
+      healthcare: { fixedPremiums: 0, marketplaceBenchmark: benchmark * 2, marketplacePeople: 2, householdSize: 2 },
+    });
+    const one = planYearCash({
+      spending: 40_000, ordinaryIncome: 0, socialSecurity: 0, balances: { ...none, roth: 1_000_000 },
+      taxableBasis: 0, requiredDistribution: 0,
+      tax: { household: 'separate_singles', peopleAged65: 1, stateRate: 0, priceLevel: 1 },
+      healthcare: {
+        fixedPremiums: MEDICARE_ANNUAL_PREMIUM,
+        marketplaceBenchmark: benchmark,
+        marketplacePeople: 1,
+        householdSize: 2,
+      },
+    });
+    // One marketplace enrollee must not be priced as two half-benchmarks.
+    expect(one.premiumTaxCredit).toBeGreaterThan(both.premiumTaxCredit / 2 - 1);
+    expect(one.premiums).toBeLessThan(MEDICARE_ANNUAL_PREMIUM + benchmark - both.premiumTaxCredit / 2 + 1);
   });
 
   it('reports what it could not cover', () => {
@@ -167,7 +206,7 @@ describe('the simulation with taxes and premiums', () => {
     };
   };
   const taxes = (accounts: SimulatedTaxes['accounts'], extra: Partial<SimulatedTaxes> = {}): SimulatedTaxes => ({
-    accounts, taxableBasisShare: 0, filing: 'single', stateRate: 0, requiredDistributionAge: 75, ...extra,
+    accounts, taxableBasisShare: 0, filing: 'single', stateRate: 0, asOfYear: 2026, ...extra,
   });
 
   it('matches the untaxed simulation for Roth money and costs the tax for pre-tax money', () => {

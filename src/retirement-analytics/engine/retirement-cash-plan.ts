@@ -42,6 +42,12 @@ export interface YearCashInput {
     fixedPremiums: number;
     /** The marketplace benchmark premiums of everyone covered there, before any credit. */
     marketplaceBenchmark: number;
+    /**
+     * How many people the benchmark covers this year (can be fractional when
+     * someone turns 65 mid-year). Used so an unmarried couple's credit is not
+     * split across a Medicare enrollee who has no marketplace premium.
+     */
+    marketplacePeople: number;
     /** People in the household, for the poverty line. */
     householdSize: number;
   };
@@ -128,10 +134,18 @@ function evaluate(input: YearCashInput, discretionary: number): Evaluation {
   let credit = 0;
   const health = input.healthcare;
   if (health) {
-    if (input.tax?.household === 'separate_singles' && health.householdSize > 1) {
-      credit = 2 * premiumTaxCredit({
-        benchmarkPremium: health.marketplaceBenchmark / 2,
-        modifiedAdjustedGrossIncome: tax.modifiedAdjustedGrossIncome / 2,
+    const marketplacePeople = Math.max(0, health.marketplacePeople);
+    if (
+      input.tax?.household === 'separate_singles' &&
+      health.householdSize > 1 &&
+      marketplacePeople > 0
+    ) {
+      // Each unmarried partner files alone. Only people on the marketplace
+      // share that credit; a Medicare enrollee is not given a phantom half
+      // of the benchmark.
+      credit = marketplacePeople * premiumTaxCredit({
+        benchmarkPremium: health.marketplaceBenchmark / marketplacePeople,
+        modifiedAdjustedGrossIncome: tax.modifiedAdjustedGrossIncome / health.householdSize,
         householdSize: 1,
       });
     } else {
@@ -172,6 +186,33 @@ function plan(input: YearCashInput, result: Evaluation, shortfall: number): Year
   };
 }
 
+/**
+ * Smallest discretionary draw in [lowBound, highBound] whose cash covers
+ * spending. Cash must be non-decreasing on that interval. Null when even
+ * highBound cannot cover.
+ */
+function smallestCovering(
+  input: YearCashInput,
+  spending: number,
+  lowBound: number,
+  highBound: number
+): YearCashPlan | null {
+  if (!(highBound >= lowBound)) return null;
+  const atHigh = evaluate(input, highBound);
+  if (atHigh.cash < spending) return null;
+  const atLow = evaluate(input, lowBound);
+  if (atLow.cash >= spending) return plan(input, atLow, 0);
+
+  let low = lowBound;
+  let high = highBound;
+  for (let i = 0; i < 64 && high - low > 1e-4; i++) {
+    const middle = (low + high) / 2;
+    if (evaluate(input, middle).cash >= spending) high = middle;
+    else low = middle;
+  }
+  return plan(input, evaluate(input, high), 0);
+}
+
 /** The year's draws, taxes and premiums, in today's dollars. */
 export function planYearCash(input: YearCashInput): YearCashPlan {
   const spending = Math.max(0, input.spending);
@@ -182,15 +223,25 @@ export function planYearCash(input: YearCashInput): YearCashPlan {
   const all = evaluate(input, total);
   if (all.cash < spending) return plan(input, all, spending - all.cash);
 
-  // Cash rises with the draw, since no tax or credit takes all of a dollar,
-  // except where losing the premium credit at 400% of the poverty line costs
-  // more than a dollar; the search then settles on a draw past that point.
-  let low = 0;
-  let high = total;
-  for (let i = 0; i < 64 && high - low > 1e-4; i++) {
-    const middle = (low + high) / 2;
-    if (evaluate(input, middle).cash >= spending) high = middle;
-    else low = middle;
+  // Cash usually rises with the draw, but losing the premium tax credit at
+  // 400% of the poverty line can drop cash: a below-cliff draw may cover
+  // spending when a larger one does not. Prefer the smallest covering draw
+  // that keeps a credit when one exists; only clear the cliff when that
+  // window cannot cover.
+  const marketplace = input.healthcare?.marketplaceBenchmark ?? 0;
+  if (marketplace > 0 && base.premiumTaxCredit > 0) {
+    let low = 0;
+    let high = total;
+    for (let i = 0; i < 64 && high - low > 1e-4; i++) {
+      const middle = (low + high) / 2;
+      if (evaluate(input, middle).premiumTaxCredit > 0) low = middle;
+      else high = middle;
+    }
+    const below = smallestCovering(input, spending, 0, low);
+    if (below) return below;
+    const above = smallestCovering(input, spending, high, total);
+    if (above) return above;
   }
-  return plan(input, evaluate(input, high), 0);
+
+  return smallestCovering(input, spending, 0, total) ?? plan(input, all, 0);
 }

@@ -27,7 +27,7 @@ import {
 } from '../types';
 import { mappingFromResolvedExposures } from './portfolio-mapper';
 import { planYearCash, type TaxHousehold, type YearCashPlan } from './retirement-cash-plan';
-import { uniformLifetimeDivisor } from './taxes';
+import { requiredDistributionAge, uniformLifetimeDivisor } from './taxes';
 import {
   COBRA_ANNUAL_PREMIUM,
   COBRA_MONTHS,
@@ -105,8 +105,12 @@ export interface SimulatedTaxes {
   filing: TaxHousehold;
   /** State income tax on withdrawals, pensions and gains. */
   stateRate: number;
-  /** The age, the user's, from which required minimum distributions come out of pre-tax money. */
-  requiredDistributionAge: number;
+  /**
+   * Calendar year at month 0. Required-distribution ages follow SECURE 2.0 by
+   * birth year; the owner is the user while alive, then the survivor, each on
+   * their own age at that year.
+   */
+  asOfYear: number;
 }
 
 export interface SimulatedHealthcare {
@@ -212,8 +216,12 @@ export function simulateWithdrawals(
   if (taxes) {
     const { taxable, pretax, roth } = taxes.accounts;
     const shares = [taxable, pretax, roth, taxes.taxableBasisShare, taxes.stateRate];
-    if (shares.some((share) => !Number.isFinite(share) || share < 0) || Math.abs(taxable + pretax + roth - 1) > 1e-6) {
-      throw new Error('Account shares must be non-negative and sum to 1, with a finite basis share and state rate');
+    if (
+      shares.some((share) => !Number.isFinite(share) || share < 0) ||
+      Math.abs(taxable + pretax + roth - 1) > 1e-6 ||
+      !Number.isFinite(taxes.asOfYear)
+    ) {
+      throw new Error('Account shares must be non-negative and sum to 1, with a finite basis share, state rate and as-of year');
     }
   }
   // Every account holds the same mix, so each simply grows with the portfolio.
@@ -264,6 +272,7 @@ export function simulateWithdrawals(
 
     let fixedPremiums = 0;
     let marketplaceBenchmark = 0;
+    let marketplacePeople = 0;
     if (healthcare && month >= healthcare.startMonth) {
       for (const person of alive) {
         const age = ageOf(person);
@@ -276,20 +285,27 @@ export function simulateWithdrawals(
         }
         if (healthcare.coverage === 'marketplace') {
           marketplaceBenchmark += marketplaceBenchmarkPremium(age) * monthsBeforeMedicare / 12;
+          marketplacePeople += monthsBeforeMedicare / 12;
         } else if (healthcare.coverage === 'cobra') {
           const cobraMonths = Math.min(monthsBeforeMedicare, Math.max(0, COBRA_MONTHS - (month - healthcare.startMonth)));
           fixedPremiums += COBRA_ANNUAL_PREMIUM * cobraMonths / 12;
-          marketplaceBenchmark += marketplaceBenchmarkPremium(age) * (monthsBeforeMedicare - cobraMonths) / 12;
+          const marketplaceMonths = monthsBeforeMedicare - cobraMonths;
+          marketplaceBenchmark += marketplaceBenchmarkPremium(age) * marketplaceMonths / 12;
+          marketplacePeople += marketplaceMonths / 12;
         }
         // An employer retiree plan with no stated premium, or a spouse's
         // plan, adds nothing; the answer says so.
       }
     }
 
-    // Required distributions follow the user while alive, then the survivor.
+    // Required distributions follow the user while alive, then the survivor,
+    // each on their own birth year (SECURE 2.0).
     const owner = alive[0];
     const ownerAge = owner ? ageOf(owner) : undefined;
-    const divisor = taxes && ownerAge !== undefined && ownerAge >= taxes.requiredDistributionAge
+    const ownerRmdAge = owner && taxes
+      ? requiredDistributionAge(taxes.asOfYear - Math.floor(owner.age))
+      : undefined;
+    const divisor = ownerAge !== undefined && ownerRmdAge !== undefined && ownerAge >= ownerRmdAge
       ? uniformLifetimeDivisor(ownerAge)
       : undefined;
     const pretax = pretaxAccount / priceLevel;
@@ -310,7 +326,12 @@ export function simulateWithdrawals(
         },
       }),
       ...(healthcare && {
-        healthcare: { fixedPremiums, marketplaceBenchmark, householdSize: Math.max(1, alive.length) },
+        healthcare: {
+          fixedPremiums,
+          marketplaceBenchmark,
+          marketplacePeople,
+          householdSize: Math.max(1, alive.length),
+        },
       }),
     });
   };
@@ -514,13 +535,15 @@ export function simulateWithdrawals(
 
     portfolioValues.push(portfolioValue);
     if (plannedYears) {
-      // Keep the accounts summing to the portfolio the sleeves hold.
+      // Keep the accounts summing to the portfolio the sleeves hold, and scale
+      // basis with the taxable account so a crash cannot inflate the basis share.
       const accounts = taxableAccount + pretaxAccount + rothAccount;
       if (accounts > 0) {
         const scale = portfolioValue / accounts;
         taxableAccount *= scale;
         pretaxAccount *= scale;
         rothAccount *= scale;
+        taxableBasis *= scale;
       }
       taxableBasis = Math.min(Math.max(0, taxableBasis), taxableAccount);
     }

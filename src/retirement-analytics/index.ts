@@ -256,9 +256,10 @@ export async function analyzeRetirementPortfolio(
     }] : []),
   ];
   const asOfYear = typeof asOfDate === 'number' ? asOfDate : Number(String(asOfDate).slice(0, 4));
+  const taxAsOfYear = Number.isFinite(asOfYear) ? asOfYear : new Date().getUTCFullYear();
   const simulatedTaxes: SimulatedTaxes | undefined = input.taxes && {
     ...input.taxes,
-    requiredDistributionAge: requiredDistributionAge((Number.isFinite(asOfYear) ? asOfYear : new Date().getUTCFullYear()) - input.currentAge),
+    asOfYear: taxAsOfYear,
   };
   const simulatedHealthcare: SimulatedHealthcare | undefined = input.healthcare && {
     coverage: input.healthcare.coverage,
@@ -268,12 +269,13 @@ export async function analyzeRetirementPortfolio(
   if (simulatedTaxes) {
     const { taxable, pretax, roth } = simulatedTaxes.accounts;
     const share = (value: number) => `${Math.round(value * 100)}%`;
+    const userRmdAge = requiredDistributionAge(taxAsOfYear - input.currentAge);
     assumptions.push(
       `Income tax on each year's draws and income at 2026 federal rates held level in today's dollars ` +
       `(${simulatedTaxes.filing === 'joint' ? 'married filing jointly' : simulatedTaxes.filing === 'separate_singles' ? 'two single returns' : 'single'}` +
       `${simulatedTaxes.stateRate > 0 ? `, plus ${(simulatedTaxes.stateRate * 100).toFixed(2)}% state tax` : ''}); ` +
       `accounts ${share(taxable)} taxable, ${share(pretax)} pre-tax and ${share(roth)} Roth, drawn in that order, with ` +
-      `required minimum distributions from ${simulatedTaxes.requiredDistributionAge}`
+      `required minimum distributions from ${userRmdAge}`
     );
   }
   if (simulatedHealthcare) {
