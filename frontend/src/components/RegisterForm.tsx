@@ -149,41 +149,41 @@ const COAST_FIRE_TRIAL_COPY = {
 };
 
 /**
- * The two calculator arrivals that hold a saved run, and so arrive with a
- * result waiting. The calculators no longer show their answer on the page or
- * in the inbox; the account is where it opens, as the first decision. This
- * page is the last step before it, so it says what is behind the password and
- * that nothing else stands in the way: registration skips the code step for a
- * resolved lead (see `auth/routes`).
+ * The two calculator arrivals that hold a saved run. The calculators show
+ * their answer on the page and lock the details Ask Linc adds; the account is
+ * where those open, with the run as the first decision. This page is the last
+ * step before it, so it says what is behind the password and that nothing else
+ * stands in the way: registration skips the code step for a resolved lead (see
+ * `auth/routes`). Like the email, it states no figure from the run.
  */
 const COAST_FIRE_RESULT_WAITING_COPY = {
   ...COAST_FIRE_TRIAL_COPY,
-  eyebrow: 'Your Coast FIRE result is ready',
-  title: 'Choose a password to see it.',
+  eyebrow: 'Your Coast FIRE plan is saved',
+  title: 'Choose a password to unlock it.',
   description:
-    'Your Coast FIRE number, and what it means for your plan, opens in Ask Linc as soon as your account exists. There is no code to enter.',
+    'Your run opens in Ask Linc as your first decision, ready for the details the calculator leaves out. There is no code to enter.',
   benefits: [
-    'See your Coast FIRE result as your first decision',
-    'Stress-test it against real market sequences, not one flat return',
+    'Pick up from your Coast FIRE result as your first decision',
+    'Add what you still save, Social Security, a partner, taxes and health coverage',
     'Full access for 30 days — no credit card',
   ],
-  submit: 'Create account and see my result',
-  submitting: 'Opening your result…',
+  submit: 'Create account and unlock my plan',
+  submitting: 'Opening your plan…',
 };
 
 const RETIREMENT_RESULT_WAITING_COPY = {
   ...RETIREMENT_TRIAL_COPY,
-  eyebrow: 'Your retirement result is ready',
-  title: 'Choose a password to see it.',
+  eyebrow: 'Your retirement plan is saved',
+  title: 'Choose a password to unlock it.',
   description:
-    'How your plan held up against market history opens in Ask Linc as soon as your account exists. There is no code to enter.',
+    'Your run opens in Ask Linc as your first decision, ready for the details the calculator leaves out. There is no code to enter.',
   benefits: [
-    'See your retirement result as your first decision',
-    'Replace estimated assets and allocation with real holdings',
+    'Pick up from your retirement result as your first decision',
+    'Add a pension, a partner, taxes and health coverage',
     'Full access for 30 days — no credit card',
   ],
-  submit: 'Create account and see my result',
-  submitting: 'Opening your result…',
+  submit: 'Create account and unlock my plan',
+  submitting: 'Opening your plan…',
 };
 
 const ACCOUNT_COPY = {

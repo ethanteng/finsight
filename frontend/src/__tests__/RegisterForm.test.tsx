@@ -139,7 +139,7 @@ describe('RegisterForm', () => {
       expect(within(summary).getByText('$1.2M')).toBeInTheDocument();
       expect(within(summary).getByText('$95K')).toBeInTheDocument();
       expect(screen.getByText('No credit card required')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Create account and (continue|see my result)/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Create account and (continue|unlock my plan)/i })).toBeInTheDocument();
     });
 
     /** What `/coast-fire/continue` leaves behind after stripping the URL. */
@@ -169,8 +169,9 @@ describe('RegisterForm', () => {
 
       const summary = screen.getByRole('region', { name: 'Your Coast FIRE scenario' });
       expect(summary).toHaveAttribute('data-cs-mask');
-      // What they entered, never what it produced: the answer opens in the
-      // account, so the $545,371 these inputs give is not stated here.
+      // What they entered, never what it produced: the calculator page showed
+      // the answer and the account reopens it, so the $545,371 these inputs
+      // give is not restated here.
       expect(within(summary).getByText('$400K')).toBeInTheDocument();
       expect(within(summary).queryByText('$545K')).not.toBeInTheDocument();
       expect(within(summary).queryByText(/reached|not yet/i)).not.toBeInTheDocument();
@@ -436,7 +437,7 @@ describe('RegisterForm', () => {
       await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
 
       fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
-      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|see my result)/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|unlock my plan)/i }));
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
       const registerCall = (fetchMock as unknown as jest.Mock).mock.calls.find(
@@ -560,7 +561,7 @@ describe('RegisterForm', () => {
       render(<RegisterForm variant="trial" />);
       await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
       fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
-      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|see my result)/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|unlock my plan)/i }));
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
       expect(push).not.toHaveBeenCalledWith('/verify-email?signup_flow=free_trial');
@@ -587,7 +588,7 @@ describe('RegisterForm', () => {
      * A token the calculator page was handed proves nothing about the inbox,
      * so the server records the address as unverified — but it still resolved
      * the lead and sent no code, and says so. Nothing should stand between
-     * the password and the result the calculator sent them here to see.
+     * the password and the plan the calculator sent them here to unlock.
      */
     it('opens the workspace for a calculator handoff the server accepted', async () => {
       const token = 'd'.repeat(48);
@@ -616,7 +617,7 @@ describe('RegisterForm', () => {
       render(<RegisterForm variant="trial" />);
       await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
       fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
-      fireEvent.click(screen.getByRole('button', { name: /Create account and see my result/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create account and unlock my plan/i }));
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
       expect(push).not.toHaveBeenCalledWith('/verify-email?signup_flow=free_trial');
@@ -627,7 +628,7 @@ describe('RegisterForm', () => {
     /*
      * An address with an account cannot register, so the run cannot be seeded
      * here. Sign-in attaches it instead, so the page points there with the run
-     * — and states no result itself: the answer belongs in Ask Linc.
+     * — and states no result itself: the plan opens in Ask Linc.
      */
     it('points an existing account at sign-in with the run, showing no result', async () => {
       const token = 'd'.repeat(48);
@@ -653,7 +654,7 @@ describe('RegisterForm', () => {
       render(<RegisterForm variant="trial" />);
       await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
       fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
-      fireEvent.click(screen.getByRole('button', { name: /Create account and see my result/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create account and unlock my plan/i }));
 
       expect(await screen.findByText(/you already have an ask linc account/i)).toBeInTheDocument();
       expect(screen.queryByText(/lasted/)).not.toBeInTheDocument();
@@ -691,7 +692,7 @@ describe('RegisterForm', () => {
       render(<RegisterForm variant="trial" />);
       await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
       fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
-      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|see my result)/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|unlock my plan)/i }));
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
     });
@@ -759,7 +760,7 @@ describe('RegisterForm', () => {
         // claimed for whichever address is finally submitted.
         fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'reader@example.com' } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
-        fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|see my result)/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|unlock my plan)/i }));
 
         await waitFor(() => expect(push).toHaveBeenCalled());
         const registerCall = (fetchMock as unknown as jest.Mock).mock.calls.find(
@@ -816,8 +817,9 @@ describe('RegisterForm', () => {
     });
 
     /*
-     * The answer opens in the account, so the page before it states none —
-     * not even a verdict an older backend still returns from the lookup.
+     * The plan opens in the account, so the page before it states no figure
+     * from the run — not even a verdict an older backend still returns from
+     * the lookup.
      */
     it('states no verdict, even one an older lookup returns', async () => {
       searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
@@ -836,7 +838,8 @@ describe('RegisterForm', () => {
       const summary = await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
       expect(within(summary).queryByText(/lasted/)).not.toBeInTheDocument();
       // A saved run is promised as waiting behind the password.
-      expect(screen.getByRole('heading', { name: 'Choose a password to see it.' })).toBeInTheDocument();
+      expect(screen.getByText('Your retirement plan is saved')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Choose a password to unlock it.' })).toBeInTheDocument();
     });
 
     /* A same-tab click-through has no emailed verdict, so it claims none. */
@@ -984,7 +987,7 @@ describe('RegisterForm', () => {
 
       render(<RegisterForm variant="trial" />);
       fillForm();
-      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|see my result)|Start planning/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|unlock my plan)|Start planning/i }));
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
       const registerCall = (global.fetch as jest.Mock).mock.calls.find(
@@ -1156,7 +1159,7 @@ describe('RegisterForm', () => {
       expect(screen.getByRole('heading', { name: 'Your subscription is ready.' })).toBeInTheDocument();
 
       fillForm();
-      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|see my result)/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|unlock my plan)/i }));
 
       await waitFor(() => expect(global.fetch).toHaveBeenCalled());
       const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body as string);

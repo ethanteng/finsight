@@ -114,55 +114,30 @@ same sourcing is still in the assumptions disclosure, which a visitor only
 reaches by running the model, so the page no longer credits its data sources to
 someone who reads it without running anything.
 
-## The answer opens in Ask Linc
+## The plan opens in Ask Linc
 
-A plan result is not shown on this page. The visitor gives an email address,
-chooses a password, and sees it as the first decision in their account, with no
-verification code in between. An address that already has an account signs in
-instead and the run is attached as a new decision; a visitor already signed in
-as that address goes straight to `/app`. If the run cannot be saved the page
-asks for a retry rather than showing the verdict. A `rates` result is shown,
-because it has no run to save. The same applies to the Coast FIRE page. See **The answer opens in Ask
-Linc** in `COAST_FIRE_EMAIL_CAPTURE.md`.
+A plan result is shown on this page, free and without an address: the verdict,
+the survival bar and the four figures, then what the savings alone could
+sustain, the two levers and how the engine read the preset mix. It gets no
+model reading; only a `rates` result does.
 
-## Three runs, then the save
+Beside the verdict, the details the six numbers leave out sit greyed out under
+one lock: a pension, a spending cut in a bad market, the planning horizon, a
+partner, taxes and health coverage, in Your numbers' own words. The email form
+in a bar above them unlocks them. The visitor gives an address, chooses a password,
+and the run opens as the first decision in their account, with no verification
+code in between and with those details as an all-optional form under the
+answer. An address that already has an account signs in instead and the run is
+attached as a new decision; a visitor already signed in as that address goes
+straight to `/app`. If the run cannot be saved the page asks for a retry. A
+`rates` result has no lock, because it has no run to save. The same applies to
+the Coast FIRE page. See **The plan opens in Ask Linc** in
+`COAST_FIRE_EMAIL_CAPTURE.md`.
 
-The Calculate button locks after three completed runs, and the sentence under
-it points at the capture instead. Three answers the question the page asks —
-the plan as it stands, plus the two obvious what-ifs — and past that the page
-is being used as a free modelling tool rather than as an argument for the
-product.
-
-`lib/calculator-run-limit.ts` holds it, shared with the Coast FIRE page. The
-count lives in session storage, so it survives a reload and goes when the tab
-does: a new tab gets a fresh allowance, and someone returning tomorrow is not
-still locked out.
-
-**Three is the default, not a finding.** `NEXT_PUBLIC_CALCULATOR_RUN_LIMIT`
-sets it, and the copy under the button is built from whatever it says.
-Anything that is not a positive integer — unset, empty, `0`, `-1`, `2.5` —
-falls back to three, so a typo loosens nothing and tightens nothing.
-
-Two things about that variable are worth knowing before reaching for it.
-**It is read at build time**, the way every `NEXT_PUBLIC_` value is: Next.js
-compiles the reference into a literal, so changing it needs a frontend rebuild
-and redeploy, not a restart. And **there is no value meaning "no limit"** —
-turning the nudge off is a product decision that belongs in the code, where it
-is visible, rather than inferred from an unset variable. **It is a nudge, not a control.** The calculation itself runs in
-the browser, the count is client-side, and blocked storage reads as zero — the
-direction something persuasive should fail. The endpoints behind the page keep
-their own rate limits, which are the actual limits.
-
-The count is read after mount rather than during render, because the page is
-server-rendered and session storage does not exist there. A reload that should
-find the button locked therefore shows it live for one frame.
-
-**Only a run that produced a verdict is counted.** A validation refusal, an
-unreachable backend, and a rates-only answer are all free. The last of those is
-the one worth stating: a `rates` result has no capture form and is deliberately
-not handed to signup, so counting them would let three lock the page while the
-copy tells the visitor to save a result that cannot be saved — and leave no way
-to enter the full plan that would have been savable.
+There is no run limit. The page used to lock its button after three runs while
+the answer was held back for Ask Linc; with the answer on the page, the lock on
+the plan is the nudge, and a visitor who wants to try a fourth retirement age
+can.
 
 ## The closing CTA
 
@@ -388,10 +363,10 @@ without affecting any answer in the product.
 
 ## Saving a run to a new account
 
-The capture under the locked result asks for an email, then takes the visitor
-straight to signup with the address prefilled ("See my result in Ask Linc").
-Submitting also sends a figure-free **"Your result is ready in Ask Linc"**
-email whose link lands on the same signup page — what someone who leaves before
+The capture above the locked plan asks for an email, then takes the visitor
+straight to signup with the address prefilled ("Unlock in Ask Linc").
+Submitting also sends a figure-free **"Your retirement plan is waiting in Ask
+Linc"** email whose link lands on the same signup page — what someone who leaves before
 choosing a password comes back to. The run becomes the first decision in the
 new account either way, and a password is the only thing left. See **Saving a
 run to an account** in `COAST_FIRE_EMAIL_CAPTURE.md` for the shared rules; the
@@ -420,7 +395,7 @@ the code was never what guarded the workspace. The owner of an address someone
 else registered can take the account back by resetting the password from their
 own inbox. If the stamp cannot be written, no token is returned and the page
 asks the visitor to use the emailed link — there is no run to seed from the
-page, and the page never shows the result itself.
+page.
 
 Going straight there also means no `/signup-context` exchange: the page stores
 the run in sessionStorage next to the cookie, carrying the same token, so

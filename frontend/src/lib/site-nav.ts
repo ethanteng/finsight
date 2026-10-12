@@ -11,10 +11,12 @@ export const GET_STARTED_HREF = '/getstarted';
  * to it. The desktop nav and the mobile menu render this list twice, so the
  * mobile copies get their own suffixed values — one value per placement,
  * never shared, or the two placements' data merges.
+ *
+ * `badge` is a short label shown after the link's text in both placements.
  */
-export const PRIMARY_NAV_LINKS = [
+export const PRIMARY_NAV_LINKS: Array<{ href: string; label: string; csOverrideId: string; badge?: string }> = [
   { href: '/features', label: 'How It Works', csOverrideId: 'nav-features' },
-  { href: '/use-cases', label: 'What You Can Ask', csOverrideId: 'nav-what-you-can-ask' },
+  { href: '/cash-flow-forecast', label: 'Cash Flow Forecast', csOverrideId: 'nav-cash-flow-forecast', badge: 'New' },
   { href: '/coast-fire-calculator', label: 'Coast FIRE', csOverrideId: 'nav-coast-fire' },
   { href: '/retirement-calculator', label: 'Retirement', csOverrideId: 'nav-retirement' },
   { href: '/vs', label: 'Compare', csOverrideId: 'nav-compare' },

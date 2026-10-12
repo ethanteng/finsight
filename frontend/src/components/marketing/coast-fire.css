@@ -187,22 +187,6 @@
   font-size: 14px;
 }
 
-/*
- * Not an error. The run limit is reached, the button below it is spent, and
- * the sentence is pointing at the save form — so it reads as the next step
- * rather than as something that went wrong.
- */
-.coast-fire-page .cf-form-locked {
-  margin: 14px 0 0;
-  padding: 13px 15px;
-  border-left: 3px solid #1f6f5c;
-  border-radius: 4px 10px 10px 4px;
-  background: #e8f4f0;
-  color: #1c4d42;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
 .coast-fire-page .cf-calculate-button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -219,6 +203,171 @@
      further down, and the point of this row's height budget is that the band
      lands above the fold on a laptop. */
   scroll-margin-top: 8px;
+}
+
+/* ------------------------------------------------------- the result card */
+
+/*
+ * The answer, on the dark card: the verdict, the Coast FIRE number, how much
+ * of it is funded, and the two figures behind it. The locked plan beside it
+ * is on paper, like every other input on this page.
+ */
+.coast-fire-page .cf-result-card {
+  border: 1px solid #bfc7ba;
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgba(20, 47, 32, 0.09);
+}
+
+.coast-fire-page .cf-result-card {
+  flex: 1;
+  overflow: hidden;
+  padding: 24px;
+  border-color: #0b1a12;
+  background: var(--cf-dark);
+  color: white;
+}
+
+.coast-fire-page .cf-result-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.coast-fire-page .cf-result-topline > span {
+  color: #a6b8ac;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.coast-fire-page .cf-result-topline > strong {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.coast-fire-page .cf-result-topline .is-reached {
+  background: var(--lime);
+  color: var(--ink);
+}
+
+.coast-fire-page .cf-result-topline .is-building {
+  background: #f7d6a0;
+  color: #533708;
+}
+
+.coast-fire-page .cf-result-card h2 {
+  margin: 16px 0 0;
+  color: white;
+  font-size: clamp(26px, 2.6vw, 34px);
+  line-height: 1.08;
+}
+
+.coast-fire-page .cf-result-lead {
+  margin: 10px 0 18px;
+  color: var(--cf-dark-body);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.coast-fire-page .cf-number-block {
+  display: grid;
+  padding: 16px 18px;
+  border: 1px solid var(--cf-dark-rule);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.coast-fire-page .cf-number-block > span {
+  color: var(--cf-dark-body);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.coast-fire-page .cf-number-block strong {
+  margin-top: 4px;
+  color: var(--lime);
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(34px, 4vw, 44px);
+  letter-spacing: -0.055em;
+}
+
+.coast-fire-page .cf-number-block small {
+  margin-top: 2px;
+  color: var(--cf-dark-muted);
+  font-size: 12px;
+}
+
+.coast-fire-page .cf-progress-label {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
+  color: var(--cf-dark-body);
+  font-size: 13px;
+}
+
+.coast-fire-page .cf-progress-label b {
+  color: white;
+}
+
+.coast-fire-page .cf-progress {
+  overflow: hidden;
+  height: 12px;
+  margin-top: 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.coast-fire-page .cf-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #88cda4, var(--lime));
+}
+
+.coast-fire-page .cf-current-savings {
+  display: block;
+  margin-top: 9px;
+  font-family: var(--font-display), sans-serif;
+  font-size: 19px;
+}
+
+.coast-fire-page .cf-result-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 18px 0 0;
+  border-block: 1px solid var(--cf-dark-rule);
+}
+
+.coast-fire-page .cf-result-metrics div {
+  padding: 18px 12px 18px 0;
+}
+
+.coast-fire-page .cf-result-metrics div + div {
+  padding-left: 18px;
+  border-left: 1px solid var(--cf-dark-rule);
+}
+
+.coast-fire-page .cf-result-metrics dt {
+  color: var(--cf-dark-muted);
+  font-size: 12px;
+}
+
+.coast-fire-page .cf-result-metrics dd {
+  margin: 6px 0 0;
+  font-family: var(--font-display), sans-serif;
+  font-size: 21px;
+  font-weight: 750;
+}
+
+.coast-fire-page .cf-result-note {
+  margin: 14px 0 0;
+  color: var(--cf-dark-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
 /* --------------------------------------------- the results email capture */

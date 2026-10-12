@@ -9,7 +9,6 @@ import {
 } from "@/lib/coast-fire";
 import {
   pushCoastFireCalculated,
-  pushCalculatorRunLimitReached,
   pushCoastFireResultsEmailed,
   pushStartFreeClick,
 } from "@/lib/dataLayer";
@@ -18,11 +17,9 @@ import {
   COAST_FIRE_SIGNUP_HREF,
 } from "@/lib/coast-fire-signup-context";
 import { leaveForSignup } from "@/lib/calculator-handover";
-import { CALCULATOR_RUN_LIMIT, runLimitPhrase } from "@/lib/calculator-run-limit";
 
 jest.mock("@/lib/dataLayer", () => ({
   pushCoastFireCalculated: jest.fn(),
-  pushCalculatorRunLimitReached: jest.fn(),
   pushCoastFireResultsEmailed: jest.fn(),
   pushStartFreeClick: jest.fn(),
 }));
@@ -112,9 +109,8 @@ describe("Coast FIRE calculator page", () => {
   /**
    * Give the email form an address and return the inputs it sent.
    *
-   * The page never shows its answer, so what it computed from the form is
-   * checked where it goes: the run posted to the server, which opens it in
-   * Ask Linc.
+   * What the page read from the form is checked where it goes as well as on
+   * the page: the run posted to the server, which opens it in Ask Linc.
    */
   async function sendToAskLinc(): Promise<Record<string, unknown>> {
     fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
@@ -172,8 +168,8 @@ describe("Coast FIRE calculator page", () => {
 
     expect(screen.getByText(/Seven inputs. All amounts in today’s dollars./)).toBeInTheDocument();
     expect(screen.getByText(/income that starts on your retirement date/)).toBeInTheDocument();
-    // And the page says up front where the answer opens.
-    expect(screen.getByText(/your result opens in Ask Linc/i)).toBeInTheDocument();
+    // And the page says up front that the answer shows here, no email needed.
+    expect(screen.getByText(/your result shows right here. No email needed to see it./i)).toBeInTheDocument();
   });
 
   /*
@@ -189,18 +185,23 @@ describe("Coast FIRE calculator page", () => {
   });
 
   /*
-   * The answer is computed, and held for Ask Linc: the page shows the locked
-   * card and the form that takes it there, never the figure.
+   * The answer is shown on the page, in place of the form. What Ask Linc adds
+   * sits locked beside it, with the form that unlocks it.
    */
-  it("answers once the visitor has entered their own numbers, in Ask Linc", () => {
+  it("answers on the page once the visitor has entered their own numbers", () => {
     const { container } = render(<CoastFireCalculator />);
 
     fillForm();
     fireEvent.submit(container.querySelector("form")!);
 
-    expect(screen.getByText("Your result is ready.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "You’ve reached Coast FIRE." })).toBeInTheDocument();
+    expect(screen.getByText("$369,128")).toBeInTheDocument();
+    expect(screen.getByText("Target at 65")).toBeInTheDocument();
+    expect(screen.getByText("If you add $0")).toBeInTheDocument();
     expect(pushCoastFireCalculated).toHaveBeenCalledWith("reached", 25);
-    expect(document.body).not.toHaveTextContent("$369,128");
+    // Beside it, the locked plan and the way past the lock.
+    expect(screen.getByRole("heading", { name: "Make it your plan." })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unlock in Ask Linc" })).toBeInTheDocument();
   });
 
   /*
@@ -232,14 +233,15 @@ describe("Coast FIRE calculator page", () => {
     fillForm();
     fireEvent.submit(container.querySelector("form")!);
     expect(screen.getByLabelText("Email address")).toBeInTheDocument();
-    expect(screen.getByText("Your result is ready.")).toBeInTheDocument();
+    expect(screen.getByText("$369,128")).toBeInTheDocument();
 
     // Clear a figure the formula needs and ask again.
     fireEvent.change(screen.getByLabelText("Retirement savings today"), { target: { value: "" } });
     fireEvent.submit(container.querySelector("form")!);
 
     expect(screen.getByRole("alert")).toHaveTextContent("Enter your retirement savings today");
-    expect(screen.queryByText("Your result is ready.")).not.toBeInTheDocument();
+    expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
+    expect(screen.queryByText("Make it your plan.")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Could your savings take it from here/ })).toBeInTheDocument();
   });
@@ -250,13 +252,14 @@ describe("Coast FIRE calculator page", () => {
 
     fillForm();
     fireEvent.submit(container.querySelector("form")!);
-    expect(screen.getByText("Your result is ready.")).toBeInTheDocument();
+    expect(screen.getByText("$369,128")).toBeInTheDocument();
 
     fillForm({ "Annual spending in retirement": "50000000" });
     fireEvent.submit(container.querySelector("form")!);
 
     expect(screen.getByRole("alert")).toHaveTextContent("Annual spending must be $10,000,000 or less.");
-    expect(screen.queryByText("Your result is ready.")).not.toBeInTheDocument();
+    expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
+    expect(screen.queryByText("Make it your plan.")).not.toBeInTheDocument();
   });
 
   /* The kicker generalises with the list under it. */
@@ -486,7 +489,7 @@ describe("Coast FIRE calculator page", () => {
       fireEvent.submit(container.querySelector("form")!);
 
       expect(screen.getByLabelText("Email address")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "See my result in Ask Linc" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Unlock in Ask Linc" })).toBeInTheDocument();
     });
 
     /*
@@ -519,10 +522,11 @@ describe("Coast FIRE calculator page", () => {
     });
 
     /*
-     * Nothing stored is a 503, so no account could open the run. The answer
-     * belongs in Ask Linc, not here, so the form asks for a retry.
+     * Nothing stored is a 503, so no account could open the run. The form asks
+     * for a retry; the answer is the page's own, so it stays where it is and
+     * nothing leaves for signup.
      */
-    it("asks for a retry, and shows no answer, when nothing was stored", async () => {
+    it("asks for a retry, and keeps the answer on the page, when nothing was stored", async () => {
       mockSend({
         ok: false,
         status: 503,
@@ -536,31 +540,31 @@ describe("Coast FIRE calculator page", () => {
       fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
 
       expect(await screen.findByRole("alert")).toHaveTextContent(/could not save your result/i);
-      expect(document.body).not.toHaveTextContent("$369,128");
+      expect(screen.getByText("$369,128")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Unlock in Ask Linc" })).toBeEnabled();
       expect(jest.mocked(leaveForSignup)).not.toHaveBeenCalled();
     });
 
     /*
-     * Three runs answer the question the page asks. Past that it is being used
-     * as a free modelling tool, and the only thing left is to save the result.
+     * The calculator no longer rations runs. The answer is free on the page,
+     * so every re-run answers too, and the lock is on what Ask Linc adds, not
+     * on the formula.
      */
-    it("locks the calculator after three runs and points at the save form", () => {
+    it("keeps answering however many times the visitor runs it", () => {
       const { container } = render(<CoastFireCalculator />);
 
       fillForm();
-      for (let run = 0; run < CALCULATOR_RUN_LIMIT; run += 1) {
+      for (let run = 0; run < 5; run += 1) {
         const edit = screen.queryByRole('button', { name: /edit inputs.*run again/i });
         if (edit) fireEvent.click(edit);
         fireEvent.submit(container.querySelector("form")!);
+        expect(screen.getByText("$369,128")).toBeInTheDocument();
       }
 
-      expect(screen.queryByRole("button", { name: /calculate my coast fire number/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /edit inputs.*run again/i })).not.toBeInTheDocument();
-      expect(screen.getByText(/you’ve used your free runs/i)).toBeVisible();
-      expect(pushCalculatorRunLimitReached).toHaveBeenCalledTimes(1);
-      expect(pushCalculatorRunLimitReached).toHaveBeenCalledWith('coast_fire');
-      // The save form is still there: it is what the lock is pointing at.
-      expect(screen.getByRole("button", { name: "See my result in Ask Linc" })).toBeEnabled();
+      expect(pushCoastFireCalculated).toHaveBeenCalledTimes(5);
+      fireEvent.click(screen.getByRole('button', { name: /edit inputs.*run again/i }));
+      expect(screen.getByRole("button", { name: /calculate my coast fire number/i })).toBeEnabled();
+      expect(screen.queryByText(/free runs/i)).not.toBeInTheDocument();
     });
 
     it("posts the seven inputs and never the figures computed from them", async () => {
@@ -617,23 +621,52 @@ describe("Coast FIRE calculator page", () => {
       fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
 
       expect(await screen.findByRole("alert")).toHaveTextContent("Enter a valid email address.");
-      expect(screen.getByRole("button", { name: "See my result in Ask Linc" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Unlock in Ask Linc" })).toBeEnabled();
       expect(pushCoastFireResultsEmailed).not.toHaveBeenCalled();
     });
 
     /*
-     * The form and the result are one row of matched cards; the capture is a
-     * band across both. Inside the result column it made that column taller
-     * than the form and the row read as lopsided.
+     * The capture is the way past the lock, so it sits on the locked plan
+     * beside the result rather than in the form's column or the row of
+     * actions under the answer.
      */
-    it("keeps the save action with the combined result", () => {
+    it("keeps the save action on the lock beside the result", () => {
       const { container } = render(<CoastFireCalculator />);
       fillForm();
       fireEvent.submit(container.querySelector("form")!);
 
       const capture = screen.getByLabelText("Email address").closest("form")!;
       expect(container.querySelector(".cf-result-column")).not.toContainElement(capture);
-      expect(capture.closest(".calculator-result-actions")).toBeInTheDocument();
+      expect(capture.closest(".calculator-locked-plan")).toBeInTheDocument();
+      expect(capture.closest(".calculator-result-grid")).toBeInTheDocument();
+      expect(capture.closest(".calculator-result-actions")).toBeNull();
+    });
+
+    /*
+     * With an income entered, the lock offers only its timing: Social Security
+     * and a pension beside that one figure would invite the same dollars to be
+     * counted twice. Without one, both incomes are offered from scratch.
+     */
+    it("locks the income's timing when one was entered, and both incomes when none was", () => {
+      const { container } = render(<CoastFireCalculator />);
+      fillForm();
+      fireEvent.submit(container.querySelector("form")!);
+
+      expect(screen.getByLabelText("Age that income starts")).toBeDisabled();
+      expect(screen.getByLabelText("Does that income rise with inflation?")).toBeDisabled();
+      expect(screen.queryByLabelText("Social Security a year")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Pension or other income a year")).not.toBeInTheDocument();
+
+      fillForm({ "Annual income available at retirement": "" });
+      fireEvent.submit(container.querySelector("form")!);
+
+      expect(screen.getByLabelText("Social Security a year")).toBeDisabled();
+      expect(screen.getByLabelText("Age Social Security starts")).toBeDisabled();
+      expect(screen.getByLabelText("Pension or other income a year")).toBeDisabled();
+      expect(screen.queryByLabelText("Age that income starts")).not.toBeInTheDocument();
+      // The groups after the plan's own are the same either way.
+      expect(screen.getByText("Your partner")).toBeInTheDocument();
+      expect(screen.getByText("Taxes and health coverage")).toBeInTheDocument();
     });
 
     it("keeps the typed address out of Contentsquare recordings", () => {

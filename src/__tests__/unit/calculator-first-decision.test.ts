@@ -188,7 +188,9 @@ describe('the answer a calculator run becomes', () => {
 
     expect(answer).toContain('balanced preset');
     expect(answer).toContain('taxes, fees and account types are not modeled');
-    expect(answer).toContain('Connect your accounts');
+    // The details form under the answer, then linking.
+    expect(answer).toContain('Add any of the details below and I will run it again');
+    expect(answer).toContain('connect your accounts');
   });
 });
 
@@ -258,7 +260,8 @@ describe('the answer a Coast FIRE run becomes', () => {
 
     expect(answer).toContain('a single straight line: 5% every year');
     expect(answer).toContain('no taxes, fees, account types, healthcare, uneven markets');
-    expect(answer).toContain('Connect your accounts');
+    expect(answer).toContain('Add any of the details below and I will run it again');
+    expect(answer).toContain('connect your accounts');
   });
 
   /*
@@ -444,6 +447,33 @@ describe('seedFirstDecisionFromLead', () => {
     expect(call[0].data.answer).toContain('$577,221');
   });
 
+  /*
+   * The calculator page locked these details beside the result; unlocking
+   * them is what opened the account, so the first decision carries them as
+   * a form. Stored the way a live answer stores its own, so it renders again
+   * on reload, with the answer itself as the summary.
+   */
+  it('carries the details form under the answer', async () => {
+    await seedFirstDecisionFromLead({
+      userId: 'user-1',
+      lead: { kind: 'retirement', lead: lead() },
+    });
+
+    const [call] = db.create.mock.calls as Array<[{ data: {
+      answer: string;
+      showTheMathData: { structuredResponse: { summary: string; input_request: { calculatorId: string; question: string; fields: Array<{ id: string; required: boolean }> } } };
+    } }]>;
+    const stored = call[0].data.showTheMathData.structuredResponse;
+    expect(stored.summary).toBe(call[0].data.answer);
+    expect(stored.input_request.calculatorId).toBe('stated_retirement_plan');
+    expect(stored.input_request.question).toBe('Can I retire at 60?');
+    expect(stored.input_request.fields.every((field) => field.required === false)).toBe(true);
+    expect(stored.input_request.fields.map((field) => field.id)).toEqual(expect.arrayContaining([
+      'pensionAnnual', 'partnerAge', 'partnerSocialSecurityStartAge',
+      'rothSavingsPercent', 'preMedicareCoverage', 'preMedicareAnnualPremium',
+    ]));
+  });
+
   it('does nothing, quietly, for a signup that resolved no lead', async () => {
     expect(await seedFirstDecisionFromLead({ userId: 'user-1', lead: null })).toBe('no-lead');
     expect(db.create).not.toHaveBeenCalled();
@@ -511,6 +541,9 @@ describe('attachCalculatorLeadToAccount', () => {
     expect(outcome).toBe('attached');
     expect(db.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       userId: 'user-1', origin: 'calculator_retirement', calculatorLeadToken: 'a'.repeat(48),
+      showTheMathData: { structuredResponse: expect.objectContaining({
+        input_request: expect.objectContaining({ calculatorId: 'stated_retirement_plan' }),
+      }) },
     }) });
   });
 

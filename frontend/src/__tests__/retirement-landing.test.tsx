@@ -157,9 +157,9 @@ describe('retirement landing page', () => {
       const { container } = render(<React.StrictMode><RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} /></React.StrictMode>);
       expect(trackContentsquareEvent).not.toHaveBeenCalledWith('retirement_model_run');
       fireEvent.submit(container.querySelector('form')!);
-      // A run is counted when it commits, which no longer waits on the email
-      // form that stands in front of the answer.
-      await screen.findByText('Your result is ready.');
+      // A run is counted when it commits, which does not wait on the email
+      // form beside the answer.
+      await screen.findByRole('heading', { name: /retiring at 60 worked in 90 of 100/i });
       const successes = () => jest.mocked(trackContentsquareEvent).mock.calls.filter(([event]) => event === 'retirement_model_run');
       await waitFor(() => expect(successes()).toHaveLength(1));
       fireEvent.submit(container.querySelector('form')!);
@@ -170,9 +170,9 @@ describe('retirement landing page', () => {
   });
 
   /*
-   * The page's own CTA carries no run any more: a plan answer is never shown
-   * here, and the email form is the way into Ask Linc with one. What it still
-   * owes is clean analytics — no financial figure in the event.
+   * The page's own CTA carries no run any more: the email form on the locked
+   * plan is the way into Ask Linc with one. What it still owes is clean
+   * analytics — no financial figure in the event.
    */
   it('reports the plan CTA without carrying the run or any financial field', async () => {
     const result = {
@@ -215,7 +215,7 @@ describe('retirement landing page', () => {
     try {
       const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} />);
       fireEvent.submit(container.querySelector('form')!);
-      await screen.findByText('Your result is ready.');
+      await screen.findByRole('button', { name: 'Unlock in Ask Linc' });
 
       const cta = screen.getByRole('link', { name: 'Build my retirement plan' });
       expect(cta).toHaveAttribute('data-cs-override-id', 'cta-start-free-trial-quickplan');

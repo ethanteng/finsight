@@ -1,23 +1,23 @@
 # Retirement results email
 
-`/retirement-calculator` runs its model but shows the answer in Ask Linc rather
-than on the page. This is the step that gets the visitor there: an email
-address, a password, and the run waiting as their first decision.
+`/retirement-calculator` shows its model's answer on the page and locks the
+plan beyond it. This is the step that unlocks it: an email address, a
+password, and the run waiting as their first decision, with the details the
+page locked as a form under the answer.
 
 It mirrors the Coast FIRE flow documented in `COAST_FIRE_EMAIL_CAPTURE.md` and
 shares its machinery. This page covers what differs.
 
 ## The flow
 
-1. A visitor runs the model. A plan result is held back
-   (`COAST_FIRE_EMAIL_CAPTURE.md`, **The answer opens in Ask Linc**): a locked
-   card and the capture render in its place, and nothing else about the
-   verdict does.
+1. A visitor runs the model. A plan result is shown, with the locked plan and
+   the capture beside it (`COAST_FIRE_EMAIL_CAPTURE.md`, **The plan opens in
+   Ask Linc**).
 2. `POST /api/retirement-quickplan/email-results` re-runs the model from the
    submitted figures and stores a `RetirementLead` row with a random token. If
    the lead does not store, it answers 503, sends nothing, and the page asks
-   the visitor to try again: the page never shows the verdict itself.
-3. For a new address it sends the figure-free "result ready" email through
+   the visitor to try again.
+3. For a new address it sends the figure-free "plan waiting" email through
    Resend as HTML and plain text, and the page takes the returned token
    straight to `/getstarted?source=retirement-calculator&entry=results_page`,
    where the visitor chooses a password. Registration skips the code and opens

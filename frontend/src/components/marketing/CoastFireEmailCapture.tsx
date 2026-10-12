@@ -1,12 +1,13 @@
 "use client";
 
 /**
- * "See your result in Ask Linc": the form that stands where the result would.
+ * "Unlock in Ask Linc": the form on the lock beside the result.
  *
- * Neither calculator shows its answer on its own page, in any case. The
- * visitor gives an address and the run opens in Ask Linc as a decision in
- * their account, which is the point of the page. Where it goes depends on who
- * they are (`chooseCalculatorHandoff`):
+ * The page shows the answer. What it locks is everything the formula leaves
+ * out, which Ask Linc plans with: the visitor gives an address and the run
+ * opens in Ask Linc as a decision in their account, with those details as a
+ * form under the answer. Where it goes depends on who they are
+ * (`chooseCalculatorHandoff`):
  *
  * - Already signed in: the run is attached to that account and `/app` opens.
  * - An address with an account: sign-in, which attaches the run.
@@ -26,7 +27,7 @@
  *
  * The server answers without a lead token only when it could not store the
  * run. There is then nothing any account could open, so the form says so and
- * stays ready to retry, rather than showing the answer here.
+ * stays ready to retry.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -144,8 +145,8 @@ export function CoastFireEmailCapture({
          */
         setError(
           body?.existingAccount === true
-            ? "Check your email for a sign-in link to open this result in Ask Linc."
-            : "Check your email for a link to open this result in Ask Linc.",
+            ? "Check your email for a sign-in link to open this plan in Ask Linc."
+            : "Check your email for a link to open this plan in Ask Linc.",
         );
         setStatus("idle");
         return;
@@ -189,17 +190,17 @@ export function CoastFireEmailCapture({
     return (
       <div className="cf-email-capture is-sent" role="status" aria-live="polite">
         <p className="section-kicker">OPENING ASK LINC</p>
-        <h3>Taking you to your result…</h3>
+        <h3>Taking you to Ask Linc…</h3>
         {destination === "app" ? (
-          <p>Your Coast FIRE result is saved in your account. Opening it…</p>
+          <p>Your Coast FIRE plan is saved in your account. Opening it…</p>
         ) : destination === "sign-in" ? (
           <p>
-            You already have an Ask Linc account. Sign in and your Coast FIRE result opens as a new
+            You already have an Ask Linc account. Sign in and your Coast FIRE plan opens as a new
             decision in it.
           </p>
         ) : (
           <p>
-            Choose a password and your Coast FIRE result opens as your first decision. We’ve also
+            Choose a password and your Coast FIRE plan opens as your first decision. We’ve also
             emailed <strong>{email.trim()}</strong> a link back, in case you finish later.
           </p>
         )}
@@ -210,10 +211,10 @@ export function CoastFireEmailCapture({
   return (
     <form className={`cf-email-capture${compact ? " is-compact" : ""}`} onSubmit={handleSubmit} aria-busy={status === "sending"}>
       <div className="cf-email-copy">
-        <p className="section-kicker">YOUR RESULT IS READY</p>
-        <h3>See your Coast FIRE number in Ask Linc</h3>
+        <p className="section-kicker">UNLOCK YOUR PLAN</p>
+        <h3>Unlock these in Ask Linc</h3>
         <p className="cf-email-lead">
-          Enter your email to see your result in Ask Linc. New here? Just choose a password, with no code to enter and no credit card.
+          New here? Just choose a password, with no code to enter and no credit card.
         </p>
       </div>
 
@@ -243,7 +244,7 @@ export function CoastFireEmailCapture({
             disabled={status === "sending"}
             data-cs-override-id="coast-fire-email-results"
           >
-            {status === "sending" ? "Saving…" : "See my result in Ask Linc"}
+            {status === "sending" ? "Saving…" : "Unlock in Ask Linc"}
           </button>
         </div>
 

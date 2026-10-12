@@ -892,3 +892,214 @@
     font-size: 19px;
   }
 }
+
+/* ------------------------------------- the plan answer, shown on the page */
+
+/* The survival bar, the two levers, and how the engine read the preset mix. */
+
+.quickplan-page .qp-survival-bar[data-outcome="mixed"] .qp-survival-fill {
+  background: linear-gradient(90deg, #c07c15, #d99b2f);
+}
+
+.quickplan-page .qp-survival-bar[data-outcome="weak"] .qp-survival-fill {
+  background: linear-gradient(90deg, #a8322a, #c14a3f);
+}
+
+.quickplan-page .qp-survival-bar {
+  position: relative;
+  height: 42px;
+  overflow: hidden;
+  border: 1px solid #cfd6cb;
+  border-radius: 999px;
+  background: #e8e6da;
+}
+
+.quickplan-page .qp-survival-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2b8f5d, #3faa72);
+}
+
+.quickplan-page .qp-survival-label {
+  position: absolute;
+  top: 50%;
+  left: 18px;
+  transform: translateY(-50%);
+  color: white;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 780;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 2px rgba(16, 35, 25, 0.35);
+}
+
+.quickplan-page .qp-scenarios {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 60px;
+  align-items: center;
+  padding-block: 44px;
+  border-top: 1px solid rgba(16, 35, 25, 0.12);
+}
+
+.quickplan-page .qp-scenarios-copy h3 {
+  margin: 0 0 14px;
+  font-family: var(--font-display);
+  font-size: 31px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.quickplan-page .qp-scenarios-copy p {
+  margin: 0;
+  color: #55635a;
+  font-size: 15px;
+  line-height: 1.68;
+}
+
+.quickplan-page .qp-scenario-list {
+  margin: 0;
+  padding: 20px 24px;
+  border: 1px solid #d9ddd3;
+  border-radius: 18px;
+  background: var(--cream);
+  list-style: none;
+}
+
+.quickplan-page .qp-scenario-list li {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.9fr) minmax(0, 1.4fr) 62px;
+  gap: 16px;
+  align-items: center;
+  padding: 13px 0;
+  border-bottom: 1px solid rgba(16, 35, 25, 0.09);
+}
+
+.quickplan-page .qp-scenario-list li:last-child {
+  border-bottom: 0;
+}
+
+.quickplan-page .qp-scenario-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.quickplan-page .qp-scenario-label strong {
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.quickplan-page .qp-scenario-label span {
+  color: #74807a;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.quickplan-page .qp-scenario-track {
+  height: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8e6da;
+}
+
+.quickplan-page .qp-scenario-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #8fbfa3;
+}
+
+.quickplan-page .qp-scenario-list li.is-primary .qp-scenario-fill {
+  background: var(--forest);
+}
+
+.quickplan-page .qp-scenario-list b {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 780;
+  letter-spacing: -0.03em;
+  text-align: right;
+}
+
+.quickplan-page .qp-observation {
+  padding: 26px 28px;
+  border: 1px solid #d9ddd3;
+  border-radius: 18px;
+  background: var(--cream);
+}
+
+.quickplan-page .qp-observation-quote {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.quickplan-page .qp-observation-detail {
+  margin: 0;
+  color: #55635a;
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+.quickplan-page .qp-characteristics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 24px 0 0;
+}
+
+.quickplan-page .qp-characteristics div {
+  padding: 12px 14px;
+  border: 1px solid #e0e3da;
+  border-radius: 12px;
+  background: #f6f5ec;
+}
+
+.quickplan-page .qp-characteristics dt {
+  color: #778178;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.quickplan-page .qp-characteristics dd {
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  text-transform: capitalize;
+}
+
+.quickplan-page .qp-observation-scope {
+  margin: 14px 0 0;
+  color: #74807a;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .quickplan-page .qp-characteristics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .quickplan-page .qp-scenarios {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px;
+  }
+  .quickplan-page .qp-scenario-list li {
+    grid-template-columns: minmax(0, 1fr) 62px;
+  }
+  .quickplan-page .qp-scenario-track {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+}
+
+@media (max-width: 620px) {
+  .quickplan-page .qp-characteristics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -10,7 +10,7 @@
  * split the ranking for the same query.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   calculateCoastFire,
@@ -19,14 +19,7 @@ import {
   type CoastFireResult,
 } from "@/lib/coast-fire";
 import { pushCoastFireCalculated } from "@/lib/dataLayer";
-import { useCalculatorLimitTracking } from "@/lib/use-calculator-limit-tracking";
-import {
-  COAST_FIRE_RUN_COUNT_KEY,
-  runLimitPhrase,
-  isRunLimitReached,
-  readRunCount,
-  recordRun,
-} from "@/lib/calculator-run-limit";
+import { coastFireLockedPlan } from "@/lib/calculator-locked-plan";
 import { fromGrouped, withCommas } from "@/lib/number-input";
 import {
   clearCoastFireSignupContext,
@@ -35,7 +28,8 @@ import {
 import { CoastFireEmailCapture } from "./CoastFireEmailCapture";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { SiteFooter, SiteHeader } from "./SiteShell";
-import { CalculatorSteps, CalculatorPreview, CalculatorNextQuestion, CalculatorRunAgain, CalculatorLockedResult } from "./CalculatorStory";
+import { CalculatorSteps, CalculatorPreview, CalculatorNextQuestion, CalculatorRunAgain } from "./CalculatorStory";
+import { CalculatorLockedPlan } from "./CalculatorLockedPlan";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 
 type FormState = Record<keyof CoastFireInputs, string>;
@@ -116,6 +110,11 @@ function dollars(value: number): string {
   }).format(Math.round(value));
 }
 
+function percent(value: number): string {
+  if (!Number.isFinite(value)) return "Fully covered";
+  return `${Math.round(value * 100)}%`;
+}
+
 /**
  * Read the form back as numbers.
  *
@@ -155,6 +154,72 @@ function EmptyResultPanel() {
    * appears.
    */
   return <CalculatorPreview coast />;
+}
+
+/**
+ * The answer, on the page.
+ *
+ * Every figure here is the browser's own run of the formula on the seven
+ * inputs, and the card claims no more than that: the note under it names the
+ * two assumptions the answer rides on, and the locked plan beside it names
+ * what the formula leaves out.
+ */
+function ResultPanel({ result }: { result: CoastFireResult }) {
+  const progress = Number.isFinite(result.fundedRatio)
+    ? Math.min(100, Math.max(0, result.fundedRatio * 100))
+    : 100;
+
+  return (
+    <aside className="cf-result-card" aria-live="polite" data-cs-mask>
+      <div className="cf-result-topline">
+        <h2>{result.hasReachedCoastFire ? "You’ve reached Coast FIRE." : "You haven’t reached Coast FIRE yet."}</h2>
+        <strong className={result.hasReachedCoastFire ? "is-reached" : "is-building"}>
+          {result.hasReachedCoastFire ? "Reached" : "Not yet"}
+        </strong>
+      </div>
+      <p className="cf-result-lead">
+        {result.portfolioSpendingNeed === 0
+          ? "The retirement income you entered covers your planned spending, so this formula does not require portfolio withdrawals."
+          : result.hasReachedCoastFire
+            ? `You are ${dollars(result.differenceToday)} above the amount this formula says you need invested today.`
+            : `You are ${dollars(Math.abs(result.differenceToday))} short of your Coast FIRE number today.`}
+      </p>
+
+      <div className="cf-number-block">
+        <span>Your Coast FIRE number</span>
+        <strong>{dollars(result.coastFireNumber)}</strong>
+        <small>in today’s dollars</small>
+      </div>
+
+      <div className="cf-progress-label">
+        <span>Current retirement savings</span>
+        <b>{percent(result.fundedRatio)}</b>
+      </div>
+      <div
+        className="cf-progress"
+        role="img"
+        aria-label={`${percent(result.fundedRatio)} of the Coast FIRE number funded`}
+      >
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <strong className="cf-current-savings">{dollars(result.currentSavings)}</strong>
+
+      <dl className="cf-result-metrics">
+        <div>
+          <dt>Target at {result.retirementAge}</dt>
+          <dd>{dollars(result.retirementTarget)}</dd>
+        </div>
+        <div>
+          <dt>If you add $0</dt>
+          <dd>{dollars(result.projectedSavingsAtRetirement)}</dd>
+        </div>
+      </dl>
+      <p className="cf-result-note">
+        Assumes {result.realReturnRate}% annual growth after inflation for {result.yearsToRetirement} years
+        and a {result.withdrawalRate}% starting withdrawal rate.
+      </p>
+    </aside>
+  );
 }
 
 function CalculatorField({
@@ -228,15 +293,11 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
    *
    * The page used to open on a worked example already answered, which reads as
    * a result they have rather than an illustration of one — and everything
-   * downstream inherited that. The answer itself is never shown here now; it
-   * opens in Ask Linc. This gates the locked card and the email form.
+   * downstream inherited that. A run shows its answer in place of the form,
+   * with the locked plan and the email form that unlocks it beside it.
    */
   const [result, setResult] = useState<CoastFireResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  /** Runs this visitor has spent in this tab. Hydrated from storage on mount. */
-  const [runCount, setRunCount] = useState(0);
-  const locked = isRunLimitReached(runCount);
-  useCalculatorLimitTracking('coast_fire', locked);
   const resultRef = useRef<HTMLDivElement>(null);
   /*
    * Counts accepted runs, so the capture remounts for every one, even for an
@@ -267,18 +328,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
     setResult(null);
   }
 
-  /*
-   * Read after mount rather than during render: the page is server-rendered,
-   * and session storage does not exist there. The button is therefore live for
-   * one frame on a reload that should find it locked, which is the right cost
-   * for a nudge — see `calculator-run-limit`.
-   */
-  useEffect(() => {
-    setRunCount(readRunCount(COAST_FIRE_RUN_COUNT_KEY));
-  }, []);
-
   function editInputs() {
-    if (locked) return;
     setShowInputs(true);
     requestAnimationFrame(() => {
       formRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
@@ -288,7 +338,6 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (locked) return;
 
     // Named before the formula runs, so a visitor who left two boxes empty is
     // told about both rather than about whichever one the formula reached
@@ -309,9 +358,6 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       setRunId((current) => current + 1);
       setShowInputs(false);
       setError(null);
-      // Only a run that produced a number counts. A refused form does not come
-      // out of this visitor's allowance.
-      setRunCount(recordRun(COAST_FIRE_RUN_COUNT_KEY, runCount));
       pushCoastFireCalculated(
         nextResult.hasReachedCoastFire ? "reached" : "not_yet",
         nextResult.yearsToRetirement,
@@ -335,7 +381,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
         <p className="cf-hero-sub">
           Add a few numbers. See whether your savings could grow to your retirement target without more contributions—and which assumptions make the difference.
         </p>
-        <p className="calculator-access">Free. Your result opens in Ask Linc with just your email and a password.</p>
+        <p className="calculator-access">Free, and your result shows right here. No email needed to see it.</p>
         <CalculatorSteps />
       </section>
 
@@ -369,16 +415,10 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           <button
             className="button button-primary cf-calculate-button"
             type="submit"
-            disabled={locked}
             data-cs-override-id="coast-fire-calculate"
           >
             Calculate my Coast FIRE number <span aria-hidden="true">→</span>
           </button>
-          {locked && (
-            <p className="cf-form-locked" role="status">
-              That is {runLimitPhrase()}. Save this result to a free account to keep exploring and add your connected accounts.
-            </p>
-          )}
         </form>
 
         <div className="cf-result-column">{showInputs && <EmptyResultPanel />}</div>
@@ -387,17 +427,19 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       <div ref={resultRef} className="calculator-result-focus" tabIndex={-1} hidden={showInputs} aria-label="Your Coast FIRE result">
         {result && <div className="calculator-result-grid shell">
           <div className="calculator-result-summary">
-            <CalculatorLockedResult coast />
+            <ResultPanel result={result} />
           </div>
           <div className="calculator-result-actions">
+            <CalculatorRunAgain onEdit={editInputs} />
+          </div>
+          <CalculatorLockedPlan groups={coastFireLockedPlan(result.annualRetirementIncome > 0)}>
             <CoastFireEmailCapture compact
               // Remount for every run, so a prior run's state cannot claim to
               // belong to the one now on screen.
               key={runId}
               result={result}
             />
-            <CalculatorRunAgain locked={locked} onEdit={editInputs} />
-          </div>
+          </CalculatorLockedPlan>
         </div>}
       </div>
 

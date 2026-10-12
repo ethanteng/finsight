@@ -105,7 +105,7 @@
 .calculator-result-summary { grid-area: summary; min-width: 0; }
 .calculator-result-actions { grid-area: actions; min-width: 0; }
 .marketing-site.calculator-story .calculator-result-answer { grid-area: answer; width: 100%; min-width: 0; margin: 0; padding: 0; border: 0; }
-.calculator-result-grid:not(:has(.calculator-answer)) { grid-template-columns: minmax(0, 760px); grid-template-areas: "summary" "actions"; justify-content: center; }
+.calculator-result-grid:not(:has(.calculator-answer, .calculator-locked-plan)) { grid-template-columns: minmax(0, 760px); grid-template-areas: "summary" "actions"; justify-content: center; }
 .marketing-site.calculator-story .calculator-result-summary.qp-results { padding: 20px; margin: 0; border: 1px solid #d5dccf; border-radius: 20px; background: #fffdf5; }
 .marketing-site.calculator-story .calculator-result-summary .qp-verdict { font-size: 24px; line-height: 1.25; margin: 8px 0 10px; }
 .marketing-site.calculator-story .calculator-result-summary .qp-verdict-sub { font-size: 12px; line-height: 1.55; margin: 0 0 10px; }
@@ -123,31 +123,45 @@
 .marketing-site.calculator-story .calculator-result-summary .cf-result-metrics { margin-top: 12px; padding: 0; }
 .marketing-site.calculator-story .calculator-result-summary .cf-result-metrics div { padding-block: 12px; }
 .marketing-site.calculator-story .calculator-result-summary .cf-result-note { margin: 14px 0 0; font-size: 12px; }
-.marketing-site.calculator-story .calculator-result-actions :is(.qp-email-capture, .cf-email-capture) { display: block; margin: 0; padding: 18px; box-shadow: none; border-radius: 18px; background: #e6eddb; border-color: #c7d6b9; }
-.marketing-site.calculator-story .calculator-result-actions :is(.qp-email-copy, .cf-email-copy) .section-kicker { display: none; }
-.marketing-site.calculator-story .calculator-result-actions :is(.qp-email-copy, .cf-email-copy) h3 { display: none; font-size: 19px; margin: 0 0 7px; line-height: 1.25; }
-.marketing-site.calculator-story .calculator-result-actions :is(.qp-email-lead, .cf-email-lead) { font-size: 13px; line-height: 1.5; margin: 0 0 14px; color: #455b48; }
-.marketing-site.calculator-story .calculator-result-actions :is(.qp-email-row, .cf-email-row) { display: grid; grid-template-columns: 1fr; gap: 10px; }
-.marketing-site.calculator-story .calculator-result-actions :is(.qp-email-row, .cf-email-row) input { min-height: 44px; padding: 10px 13px; }
-.marketing-site.calculator-story .calculator-result-actions .button-primary { font-size: 18px; padding: 16px 20px; min-height: 64px; }
-/* The result held back for an email address: an illustrative card, blurred, with the ask on top. */
-.calculator-locked-result { position: relative; overflow: hidden; border: 1px solid #d5dccf; border-radius: 20px; background: #fffdf5; min-height: 280px; }
-.calculator-locked-preview { padding: 20px; filter: blur(7px); opacity: .7; user-select: none; pointer-events: none; }
-.calculator-locked-preview .section-kicker { margin: 0 0 10px; }
-.calculator-locked-figure { display: block; font-size: 40px; line-height: 1.1; color: #173d2a; }
-.calculator-locked-bar { display: block; height: 14px; margin: 18px 0; border-radius: 999px; background: #dce0d4; }
-.calculator-locked-bar > i { display: block; width: 72%; height: 100%; border-radius: inherit; background: #2b8f5d; }
-.calculator-locked-preview dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
-.calculator-locked-preview dt { font-size: 12px; color: #52634f; }
-.calculator-locked-preview dd { margin: 4px 0 0; font-size: 22px; font-weight: 700; color: #173d2a; }
-.calculator-locked-message { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 20px; text-align: center; background: rgba(255, 253, 245, .55); color: #173d2a; }
-.marketing-site.calculator-story .calculator-locked-message h2 { margin: 4px 0 0; font-size: 24px; line-height: 1.2; }
-.calculator-locked-message p { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.5; color: #455b48; }
+/*
+ * Beside the result: what Ask Linc adds, greyed out under one lock, with the
+ * email form in a bar under the heading. Only the lock shares the fields' grid
+ * cell; the form sits above them, so it never hides what it unlocks.
+ */
+.calculator-locked-plan { grid-area: answer; min-width: 0; padding: 20px 22px; border: 1px solid #d5dccf; border-radius: 20px; background: #fffdf5; }
+.calculator-locked-plan-head .section-kicker { margin: 0 0 8px; font-size: 12px; }
+.marketing-site.calculator-story .calculator-locked-plan-head h2 { margin: 0; font-size: 26px; line-height: 1.15; }
+.calculator-locked-plan-head p:not(.section-kicker) { margin: 8px 0 0; color: #52634f; font-size: 14px; line-height: 1.5; }
+.calculator-locked-unlock { margin: 14px 0 0; padding: 14px; border: 1px solid #c7d6b9; border-radius: 16px; background: #eef4e2; }
+.calculator-locked-plan-stack { display: grid; margin-top: 28px; padding-top: 32px; border-top: 1px solid #dce0d4; }
+.calculator-locked-plan-stack > * { grid-area: 1 / 1; }
+.calculator-locked-fields { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 16px; opacity: .62; filter: grayscale(1); pointer-events: none; user-select: none; }
+.calculator-locked-group-title { margin: 0 0 8px; color: #173d2a; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.calculator-locked-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.calculator-locked-field { display: grid; align-content: end; gap: 6px; min-width: 0; }
+.calculator-locked-field label { color: #284433; font-size: 12.5px; font-weight: 600; line-height: 1.35; }
+.calculator-locked-input, .calculator-locked-field select { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; padding: 0 12px; border: 1px solid #c4cdbf; border-radius: 10px; background: #f3f2e9; color: #7d8a82; font-size: 14px; }
+.calculator-locked-input i { font-style: normal; }
+.calculator-locked-input input { flex: 1; min-width: 0; padding: 0; border: 0; background: none; }
+/* The one lock, on the rule above the fields: it marks the whole set without covering any of it. */
+.calculator-locked-icon { position: relative; z-index: 1; align-self: start; justify-self: center; margin-top: -56px; display: grid; place-items: center; width: 48px; height: 48px; border: 4px solid #fffdf5; border-radius: 50%; background: var(--lime, #d9ff6f); color: #173d2a; box-shadow: 0 6px 18px rgba(16, 35, 25, .18); }
+/* The capture in the bar: the address and the button on one row, the reassurance under them. */
+.marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-capture, .cf-email-capture) { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-copy, .cf-email-copy) { order: 2; }
+.marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-copy, .cf-email-copy) :is(.section-kicker, h3) { display: none; }
+.marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-lead, .cf-email-lead) { max-width: none; margin: 0; color: #455b48; font-size: 12.5px; line-height: 1.5; }
+.marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-label, .cf-email-label) { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-row, .cf-email-row) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-row, .cf-email-row) input { min-height: 48px; padding: 10px 13px; }
+.marketing-site.calculator-story .calculator-locked-unlock .button-primary { width: auto; min-height: 48px; padding: 0 20px; font-size: 15px; white-space: nowrap; }
+.marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-error, .cf-email-error) { margin-top: 8px; }
+.marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-capture, .cf-email-capture).is-sent .section-kicker { display: none; }
+.marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-capture, .cf-email-capture).is-sent h3 { margin: 0; font-size: 18px; line-height: 1.25; }
+.marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-capture, .cf-email-capture).is-sent p:not(.section-kicker) { margin: 0; font-size: 13.5px; }
 .marketing-site.calculator-story .calculator-run-again { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; width: 100%; margin-top: 12px; border: 0; background: transparent; color: #244632; font-size: 14px; font-weight: 650; text-decoration: none; cursor: pointer; }
 .calculator-run-again > span { text-decoration: underline; text-underline-offset: 4px; }
 .calculator-run-again > svg { flex: none; }
 .calculator-run-again:focus-visible { outline: 2px solid #397052; outline-offset: 2px; border-radius: 8px; }
-.calculator-run-limit { margin: 16px 0 0; color: #52634f; font-size: 13px; line-height: 1.5; text-align: center; }
 .calculator-answer.is-compact { padding: 23px; }
 .calculator-answer.is-compact .calculator-answer-author { margin-bottom: 22px; }
 .calculator-answer.is-compact .calculator-conversation { gap: 20px; }
@@ -161,4 +175,12 @@
   .marketing-site.calculator-story .calculator-result-summary .qp-stat { padding: 10px 0; }
   .marketing-site.calculator-story .calculator-result-summary .qp-stat strong { font-size: 21px; }
   .calculator-answer.is-compact { padding: 18px; }
+  .calculator-locked-plan { padding: 18px; }
+}
+/* On a phone the fields stack, so each group shows its first three, and the button goes under the address. */
+@media (max-width: 560px) {
+  .calculator-locked-grid { grid-template-columns: minmax(0, 1fr); }
+  .calculator-locked-field:nth-child(n + 4) { display: none; }
+  .marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-row, .cf-email-row) { grid-template-columns: minmax(0, 1fr); }
+  .marketing-site.calculator-story .calculator-locked-unlock .button-primary { width: 100%; }
 }

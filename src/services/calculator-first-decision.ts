@@ -33,9 +33,11 @@
  * throwing.
  */
 
+import type { Prisma } from '@prisma/client';
 import { getPrismaClient } from '../prisma-client';
 import { readRetirementLead, type RetirementLeadRecord } from './retirement-leads';
 import { readCoastFireLead, type CoastFireLeadRecord } from './coast-fire-leads';
+import { planDetailsInputRequest } from './calculator-plan-details';
 
 /** Why a run did not become a decision, for the log and for the tests. */
 export type FirstDecisionOutcome =
@@ -162,8 +164,9 @@ export function buildDecisionAnswer(lead: RetirementLeadRecord): string {
     '',
     `This came from the free retirement calculator, so the asset mix behind it is the ` +
     `${inputs.allocation} preset rather than anything you own — and taxes, fees and account ` +
-    `types are not modeled at all. Connect your accounts and ask me this again to replace the ` +
-    `preset with your actual holdings.`
+    `types are not modeled at all. Add any of the details below and I will run it again with ` +
+    `them, or connect your accounts and ask me this again to replace the preset with your ` +
+    `actual holdings.`
   );
 
   return lines.join('\n');
@@ -275,9 +278,9 @@ function coastFireLimitations(realReturnRate: number): string {
   return (
     `This came from the free Coast FIRE calculator, so it is a single straight line: ` +
     `${rate(realReturnRate)} every year, with no taxes, fees, account types, healthcare, ` +
-    `uneven markets, or income starting later than retirement modeled at all. Connect your ` +
-    `accounts and ask me this again to run it against your actual holdings and a century of ` +
-    `real market sequences.`
+    `uneven markets, or income starting later than retirement modeled at all. Add any of the ` +
+    `details below and I will run it again with them, or connect your accounts and ask me this ` +
+    `again to run it against your actual holdings and a century of real market sequences.`
   );
 }
 
@@ -345,9 +348,22 @@ export async function resolveCalculatorLead(params: {
   }
 }
 
-/** The question and answer one resolved lead becomes. */
-function composeDecision(resolved: CalculatorLead): { question: string; answer: string } {
-  return resolved.kind === 'retirement'
+/**
+ * The decision one resolved lead becomes: its question, its answer, and the
+ * stored response that carries the details form under the answer.
+ *
+ * The form is what the calculator page's locked preview promised, so it is
+ * written with the run rather than left for a follow-up to offer. It is
+ * stored the way a live answer stores its own (`showTheMathData` holding only
+ * `structuredResponse`), which is what makes it render again on reload; the
+ * summary is the answer itself, so nothing else on the decision changes.
+ */
+function composeDecision(resolved: CalculatorLead): {
+  question: string;
+  answer: string;
+  showTheMathData: Prisma.InputJsonValue;
+} {
+  const { question, answer } = resolved.kind === 'retirement'
     ? {
       question: buildDecisionQuestion(resolved.lead),
       answer: buildDecisionAnswer(resolved.lead),
@@ -356,6 +372,12 @@ function composeDecision(resolved: CalculatorLead): { question: string; answer: 
       question: buildCoastFireQuestion(resolved.lead),
       answer: buildCoastFireAnswer(resolved.lead),
     };
+  const input_request = planDetailsInputRequest(resolved);
+  return {
+    question,
+    answer,
+    showTheMathData: { structuredResponse: { summary: answer, input_request } } as unknown as Prisma.InputJsonValue,
+  };
 }
 
 function isUniqueViolation(error: unknown): boolean {

@@ -1,8 +1,10 @@
 /**
  * The model's reading of a run, on the page.
  *
- * Only a rates-only answer is shown on this page now: a plan answer opens in
- * Ask Linc, and is never read here. Three things are worth holding down, and
+ * Only a rates-only answer is read now: a plan answer is the engine's own
+ * figures on the page, with the locked plan where a reading used to sit, and
+ * Ask Linc explains it once the run opens there. Three things are worth
+ * holding down about the reading, and
  * none of them is the prose. The panel must not delay the deterministic
  * answer, it must disappear rather than apologise when no reading was
  * produced, and it must ask about the plan the visitor submitted rather than
@@ -71,7 +73,7 @@ const PLAN_RESULT = {
   limitations: [],
 };
 
-/** No portfolio given, so a rates answer: the one this page still shows. */
+/** No portfolio given, so a rates answer: the one this page still reads. */
 const RATES_RESULT = { ...PLAN_RESULT, mode: 'rates', primary: null, missing: ['investableAssets'] };
 
 const READING = {
@@ -104,8 +106,8 @@ function renderPage() {
 }
 
 /**
- * Run the model without a portfolio, which answers in rates: the answer this
- * page shows, and so the only one it reads.
+ * Run the model without a portfolio, which answers in rates: the only answer
+ * this page asks a model to read.
  */
 async function run() {
   fireEvent.change(screen.getByLabelText(/current age/i), { target: { value: '52' } });
@@ -214,10 +216,11 @@ it('asks about the plan as submitted, not the normalized one', async () => {
 });
 
 /*
- * A plan answer opens in Ask Linc and is never shown here, so reading it
- * would be a model call for a panel that does not exist.
+ * A plan answer is shown here as the engine's own figures, with the locked
+ * plan beside it where a reading used to sit. Reading it would be a model
+ * call for a panel that does not exist.
  */
-it('asks for no reading of a plan answer, which this page does not show', async () => {
+it('asks for no reading of a plan answer, which the page shows as the engine computed it', async () => {
   const urls: string[] = [];
   global.fetch = jest.fn().mockImplementation((url: string, init?: RequestInit) => {
     if (!init?.method) {
@@ -233,7 +236,10 @@ it('asks for no reading of a plan answer, which this page does not show', async 
   fireEvent.change(screen.getByLabelText(/annual spending in retirement/i), { target: { value: '95000' } });
   fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
 
-  expect(await screen.findByText('Your result is ready.')).toBeInTheDocument();
-  expect(screen.queryByText(/retirements in market history/i)).not.toBeInTheDocument();
+  expect(await screen.findByRole('heading', {
+    name: 'Retiring at 60 worked in 736 of 800 retirements in market history.',
+  })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Make it your plan.' })).toBeInTheDocument();
+  expect(screen.queryByText(/reading your result/i)).not.toBeInTheDocument();
   expect(urls.some((url) => url.includes('/interpretation'))).toBe(false);
 });

@@ -1,19 +1,19 @@
 /**
- * The "your result is ready in Ask Linc" message, for both public calculators.
+ * The "your plan is waiting in Ask Linc" message, for both public calculators.
  *
- * The calculators no longer show their answer on the page or in the inbox. The
- * visitor gives an address, chooses a password, and sees the result as the
- * first decision in their Ask Linc account. This message is what someone who
- * leaves the signup page comes back to, so it carries the link back in and
- * reminds them what they asked, but states no verdict and no figure the
- * calculator produced. Mailing the answer would let the inbox stand in for
- * the account, and the account is the point.
+ * The calculators show their answer on the page. Beside it they show, locked,
+ * the details Ask Linc plans with that the calculator never asked for, and an
+ * email address and a password unlock them: the run becomes the first decision
+ * in the visitor's account, with those details as a form under the answer.
+ * This message is what someone who leaves the signup page comes back to, so it
+ * carries the link back in and reminds them what they entered, but states no
+ * verdict and no figure the calculator produced. The page already showed the
+ * answer; the inbox is not where the plan continues, the account is.
  *
  * Sent only when the lead stored, because only then does the link resolve to a
  * run an account can open. A new address is linked to signup, where the run
  * becomes the account's first decision; an address that already has an
  * account is linked to sign-in, where the run is attached as a new decision.
- * Either way the inbox never holds the answer.
  *
  * Every value shown is something the visitor typed, echoed back. The inputs
  * are not results, and they are what makes the message recognisably theirs.
@@ -39,26 +39,28 @@ export interface CalculatorReadyEmailOptions {
   existingAccount?: boolean;
 }
 
-const CTA_LABEL = 'See my result in Ask Linc';
+const CTA_LABEL = 'Open my plan in Ask Linc';
 
-const COPY: Record<ReadyCalculator, { subject: string; heading: string; calculatorName: string }> = {
+const COPY: Record<ReadyCalculator, { subject: string; heading: string; calculatorName: string; details: string }> = {
   coast_fire: {
-    subject: 'Your Coast FIRE result is ready in Ask Linc',
-    heading: 'Your Coast FIRE result is ready',
+    subject: 'Your Coast FIRE plan is waiting in Ask Linc',
+    heading: 'Your Coast FIRE plan is waiting',
     calculatorName: 'Coast FIRE calculator',
+    details: 'what you still save, Social Security and a pension, a partner, taxes and health coverage',
   },
   retirement: {
-    subject: 'Your retirement result is ready in Ask Linc',
-    heading: 'Your retirement result is ready',
+    subject: 'Your retirement plan is waiting in Ask Linc',
+    heading: 'Your retirement plan is waiting',
     calculatorName: 'retirement calculator',
+    details: 'a pension, a partner, taxes and health coverage',
   },
 };
 
 const NEXT_STEP =
-  'Choose a password and your result opens as the first decision in your account. There is no code to enter. Free for 30 days, no credit card required.';
+  'Choose a password and your run opens as the first decision in your account. There is no code to enter. Free for 30 days, no credit card required.';
 
 const EXISTING_ACCOUNT_NEXT_STEP =
-  'Sign in to your Ask Linc account and your result opens there as a new decision.';
+  'Sign in to your Ask Linc account and your run opens there as a new decision.';
 
 function escapeHtml(value: string): string {
   return value
@@ -74,6 +76,7 @@ export function buildCalculatorReadyEmail(options: CalculatorReadyEmailOptions):
   const nextStep = options.existingAccount ? EXISTING_ACCOUNT_NEXT_STEP : NEXT_STEP;
   const ctaUrl = escapeHtml(options.ctaUrl);
   const footerNote = `This message was sent to ${options.email} at your request from the Ask Linc ${copy.calculatorName}.`;
+  const description = `Your run is saved in Ask Linc, ready for the details the calculator leaves out: ${copy.details}.`;
 
   const content = `
       <div class="welcome-message">
@@ -81,7 +84,7 @@ export function buildCalculatorReadyEmail(options: CalculatorReadyEmailOptions):
       </div>
 
       <div class="description">
-        We ran the numbers you entered. Your answer, and what it means for your plan, is waiting in Ask Linc.
+        ${escapeHtml(description)}
       </div>
 
       <div class="button-wrap" style="margin: 28px 0; text-align: center;">
@@ -116,7 +119,7 @@ export function buildCalculatorReadyEmail(options: CalculatorReadyEmailOptions):
 
   const text = `${copy.heading.toUpperCase()}
 
-We ran the numbers you entered. Your answer, and what it means for your plan, is waiting in Ask Linc.
+${description}
 
 ${CTA_LABEL}:
 ${options.ctaUrl}

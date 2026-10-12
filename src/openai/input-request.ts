@@ -141,10 +141,34 @@ export function buildInputRequest(
   };
 }
 
+/**
+ * A form for an answer that already stands, so every field is optional and
+ * shows what the calculator assumes without it. The spec's order is kept.
+ */
+export function buildOptionalInputRequest(spec: InputRequestSpec): InputRequest {
+  return {
+    calculatorId: spec.calculatorId,
+    title: spec.title,
+    question: spec.question,
+    submitLabel: spec.submitLabel,
+    fields: spec.fields.map((field) => ({
+      id: field.id,
+      label: field.label,
+      kind: field.kind,
+      required: false,
+      ...(field.minimum !== undefined && { minimum: field.minimum }),
+      ...(field.maximum !== undefined && { maximum: field.maximum }),
+      ...(field.options && { options: field.options.map((option) => ({ ...option })) }),
+      ...(field.defaultNote && { defaultNote: field.defaultNote }),
+      sentence: field.sentence,
+    })),
+  };
+}
+
 const FIELD_KINDS: readonly InputRequestFieldKind[] = ['age', 'usd', 'usd_per_year', 'percent', 'choice'];
-// A calculator's twelve fields, a partner's age, and the five tax and
-// coverage fields a run would otherwise assume.
-const MAX_FIELDS = 20;
+// A calculator run's details form can ask for the plan, a partner (including
+// their Social Security timing), and taxes/coverage (including the premium).
+const MAX_FIELDS = 22;
 const MAX_OPTIONS = 8;
 
 function text(value: unknown, max: number): string | undefined {

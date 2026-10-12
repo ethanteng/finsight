@@ -39,8 +39,7 @@ export type ContentsquareEvent =
   | 'cash_flow_sample_requested'
   | 'retirement_results_emailed'
   | 'calculator_results_email_cta_opened'
-  | 'calculator_results_page_cta_opened'
-  | 'calculator_run_limit_reached';
+  | 'calculator_results_page_cta_opened';
 
 /** Custom page events do not create artificial pageviews or alter bounce rates. */
 export function trackContentsquareEvent(event: ContentsquareEvent): void {

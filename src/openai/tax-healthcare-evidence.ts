@@ -19,7 +19,7 @@ import { TAX_FIGURES_YEAR } from '../retirement-analytics/engine/taxes';
 import { EARLY_WITHDRAWAL_AGE } from '../retirement-analytics/engine/retirement-cash-plan';
 import { savedOn, STATED_FIGURE_DEFINITIONS } from '../services/stated-figures';
 import type { CanonicalFactUnit } from './canonical-facts';
-import type { InputFieldSpec, InputRequest, InputRequestSpec } from './input-request';
+import { buildOptionalInputRequest, type InputFieldSpec, type InputRequest, type InputRequestSpec } from './input-request';
 
 /** The first withdrawal year's tax and premiums, medians in today's dollars. */
 export interface FirstYearCosts {
@@ -257,7 +257,7 @@ export function describeTaxAndHealthcareAsks(resolutions: TaxAndHealthcare): str
   return ` To make the tax and health figures yours, tell me ${list}.`;
 }
 
-const ROTH_FIELD: InputFieldSpec = {
+export const ROTH_FIELD: InputFieldSpec = {
   id: 'rothSavingsPercent',
   label: 'Share of your savings in Roth accounts',
   kind: 'percent',
@@ -267,7 +267,7 @@ const ROTH_FIELD: InputFieldSpec = {
   defaultNote: 'If left blank, I count it as pre-tax',
 };
 
-const TAXABLE_FIELD: InputFieldSpec = {
+export const TAXABLE_FIELD: InputFieldSpec = {
   id: 'taxableSavingsPercent',
   label: 'Share in taxable brokerage accounts',
   kind: 'percent',
@@ -277,7 +277,7 @@ const TAXABLE_FIELD: InputFieldSpec = {
   defaultNote: 'If left blank, I count it as pre-tax',
 };
 
-const STATE_FIELD: InputFieldSpec = {
+export const STATE_FIELD: InputFieldSpec = {
   id: 'stateIncomeTaxPercent',
   label: 'Your state income tax rate on retirement income',
   kind: 'percent',
@@ -287,7 +287,7 @@ const STATE_FIELD: InputFieldSpec = {
   defaultNote: 'If left blank, I count no state income tax',
 };
 
-const COVERAGE_FIELD: InputFieldSpec = {
+export const COVERAGE_FIELD: InputFieldSpec = {
   id: 'preMedicareCoverage',
   label: 'Health coverage before Medicare',
   kind: 'choice',
@@ -301,7 +301,7 @@ const COVERAGE_FIELD: InputFieldSpec = {
   defaultNote: 'If left blank, I assume a marketplace plan',
 };
 
-const IN_SPENDING_FIELD: InputFieldSpec = {
+export const IN_SPENDING_FIELD: InputFieldSpec = {
   id: 'healthcareInSpending',
   label: 'Does your retirement spending include health premiums?',
   kind: 'choice',
@@ -343,23 +343,13 @@ export function taxAndHealthcareInputRequest(
 ): InputRequest | null {
   const fields = taxAndHealthcareFields(resolutions);
   if (fields.length === 0) return null;
-  return {
+  return buildOptionalInputRequest({
     calculatorId,
     title: 'Make the tax and health figures yours',
     question,
     submitLabel: 'Update my plan',
-    fields: fields.map((field) => ({
-      id: field.id,
-      label: field.label,
-      kind: field.kind,
-      required: false,
-      ...(field.minimum !== undefined && { minimum: field.minimum }),
-      ...(field.maximum !== undefined && { maximum: field.maximum }),
-      ...(field.options && { options: field.options.map((option) => ({ ...option })) }),
-      ...(field.defaultNote && { defaultNote: field.defaultNote }),
-      sentence: field.sentence,
-    })),
-  };
+    fields,
+  });
 }
 
 /** A fact a calculator publishes about taxes or premiums, before its own id prefix and source. */
