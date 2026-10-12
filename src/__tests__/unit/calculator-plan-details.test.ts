@@ -116,6 +116,24 @@ describe('planDetailsInputRequest', () => {
   });
 
   /*
+   * Each sits beside the figure it qualifies, on both calculators' forms, and
+   * a blank premium says what it counts: nothing for retiree or spouse
+   * coverage, which is not "priced".
+   */
+  it('puts the claim age and the premium beside what they qualify', () => {
+    for (const request of [
+      planDetailsInputRequest({ kind: 'coast-fire', lead: coastFireLead(0) }),
+      planDetailsInputRequest({ kind: 'retirement', lead: retirementLead() }),
+    ]) {
+      const fields = ids(request);
+      expect(fields.indexOf('partnerSocialSecurityStartAge')).toBe(fields.indexOf('partnerSocialSecurityAnnual') + 1);
+      expect(fields.indexOf('preMedicareAnnualPremium')).toBe(fields.indexOf('preMedicareCoverage') + 1);
+      expect(request.fields.find((field) => field.id === 'preMedicareAnnualPremium')?.defaultNote)
+        .toContain('no premium for retiree or spouse coverage');
+    }
+  });
+
+  /*
    * One figure that may be Social Security, a pension, or both: asking for
    * either beside it would count the same dollars twice, so only its timing
    * is asked, with the amount named in the sentence.

@@ -42,6 +42,7 @@ import {
 import { COAST_FIRE_CALCULATOR_ID } from '../scenarios/coast-fire-scenario';
 import { STATED_RETIREMENT_PLAN_CALCULATOR_ID } from '../scenarios/stated-retirement-plan-scenario';
 import { DEFAULT_LIFE_EXPECTANCY, DEFAULT_SOCIAL_SECURITY_START_AGE } from './retirement-quickplan';
+import { DEFAULT_PARTNER_SOCIAL_SECURITY_START_AGE } from './household';
 import { STATED_FIGURE_DEFINITIONS } from './stated-figures';
 import type { CalculatorLead } from './calculator-first-decision';
 import type { CoastFireLeadRecord } from './coast-fire-leads';
@@ -184,7 +185,7 @@ const PARTNER_FIELDS: InputFieldSpec[] = [
     kind: 'age',
     ...bounds('partnerSocialSecurityStartAge'),
     sentence: 'My partner claims Social Security at {value}.',
-    defaultNote: `${DEFAULT_SOCIAL_SECURITY_START_AGE} if left blank`,
+    defaultNote: `${DEFAULT_PARTNER_SOCIAL_SECURITY_START_AGE} if left blank`,
   },
   {
     id: 'survivorAnnualSpending',
@@ -198,13 +199,18 @@ const PARTNER_FIELDS: InputFieldSpec[] = [
 
 /* ---- Taxes and health coverage ----------------------------------- */
 
+/**
+ * What the chosen coverage costs. Left blank, a marketplace or COBRA plan is
+ * priced and retiree or spouse coverage counts nothing, which flatters a plan
+ * whose retiree coverage is not free; the note says which.
+ */
 const PREMIUM_FIELD: InputFieldSpec = {
   id: 'preMedicareAnnualPremium',
   label: 'What that coverage costs a year per person',
   kind: 'usd_per_year',
   ...bounds('preMedicareAnnualPremium'),
   sentence: 'That health coverage costs {value} a year per person before Medicare.',
-  defaultNote: 'If left blank, I price the coverage you chose',
+  defaultNote: 'If left blank, I price a marketplace or COBRA plan and count no premium for retiree or spouse coverage',
 };
 
 const TAX_AND_HEALTH_FIELDS: InputFieldSpec[] = [
