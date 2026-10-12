@@ -308,6 +308,21 @@ describe('the simulation with taxes and premiums', () => {
     expect(half.firstYearCosts!.federalTax).toBeLessThan(early.firstYearCosts!.federalTax);
   });
 
+  it('does not charge the additional tax once the original owner has died', () => {
+    const run = (people: Array<{ age: number; endMonth?: number }>) =>
+      simulateWithdrawals(mapping, 1_000_000, flat(24), 40_000, {
+        taxes: taxes({ taxable: 0, pretax: 1, roth: 0 }),
+        people,
+      });
+    // Owner dies after year 1; the survivor is under 59½. Death distributions
+    // are excepted, so year 2 must not pay the 10% tax.
+    const excepted = run([{ age: 60, endMonth: 12 }, { age: 50 }]);
+    // Same ages, but the under-59½ person is the original owner for the whole plan.
+    const charged = run([{ age: 50 }, { age: 60, endMonth: 12 }]);
+    expect(excepted.firstYearCosts!.federalTax).toBeLessThan(charged.firstYearCosts!.federalTax);
+    expect(excepted.finalValue).toBeGreaterThan(charged.finalValue);
+  });
+
   it('files single once a partner\'s plan ends', () => {
     const couple = (endMonth?: number) => simulateWithdrawals(mapping, 2_000_000, flat(24), 80_000, {
       taxes: taxes({ taxable: 0, pretax: 1, roth: 0 }, { filing: 'joint' }),

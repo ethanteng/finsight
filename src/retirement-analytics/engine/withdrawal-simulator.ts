@@ -310,6 +310,14 @@ export function simulateWithdrawals(
       : undefined;
     const pretax = pretaxAccount / priceLevel;
     const household: TaxHousehold = taxes && alive.length >= 2 ? taxes.filing : 'single';
+    // The 10% additional tax applies only while the original owner is alive.
+    // After death, distributions are excepted (IRC 72(t)(2)(A)(ii)); charging
+    // a younger survivor would overstate tax for the rest of the plan.
+    const original = people[0];
+    const originalAlive = Boolean(
+      original && (original.endMonth === undefined || month < original.endMonth)
+    );
+    const earlyAge = originalAlive ? ageOf(original) : undefined;
     return planYearCash({
       spending,
       ordinaryIncome,
@@ -323,9 +331,8 @@ export function simulateWithdrawals(
           peopleAged65: alive.filter((person) => ageOf(person) >= 65).length,
           stateRate: taxes.stateRate,
           priceLevel,
-          // The pre-tax money's owner is the one the distributions follow.
-          ...(ownerAge !== undefined && ownerAge < EARLY_WITHDRAWAL_AGE && {
-            earlyWithdrawalShare: Math.min(12, Math.round((EARLY_WITHDRAWAL_AGE - ownerAge) * 12)) / 12,
+          ...(earlyAge !== undefined && earlyAge < EARLY_WITHDRAWAL_AGE && {
+            earlyWithdrawalShare: Math.min(12, Math.round((EARLY_WITHDRAWAL_AGE - earlyAge) * 12)) / 12,
           }),
         },
       }),
