@@ -212,7 +212,7 @@ export function generateDisclaimers(
   disclaimers.push('Monthly rolling historical windows overlap; their survival share is descriptive and is not an estimate based on independent observations.');
   disclaimers.push('Analysis assumes fixed real-dollar withdrawals. Adaptive withdrawal strategies may improve outcomes.');
   disclaimers.push('Portfolio mapped to broad market indices for historical simulation. Your actual holdings may behave differently.');
-  disclaimers.push('Analysis does not account for taxes, fees, or transaction costs.');
+  disclaimers.push('Fund fees are taken out of returns only where a fund\'s expense ratio is known; transaction costs are not modeled.');
   disclaimers.push('This analysis is for informational purposes only and does not constitute financial advice.');
 
   if (dataQuality.completeness < 0.8) {

@@ -26,6 +26,13 @@ import {
 } from './household-evidence';
 import type { InputRequest } from './input-request';
 import { describeSpendingCut, describeSpendingFlexibilityResults } from './spending-flexibility-evidence';
+import {
+  describeFirstYearCosts,
+  describeHealthcare,
+  describeTaxAndHealthcareAsks,
+  describeTaxes,
+  taxAndHealthcareInputRequest,
+} from './tax-healthcare-evidence';
 import type { RetirementContributionOrigin } from './retirement-contributions';
 import { savedOn } from '../services/stated-figures';
 import { describeClaimingAdjustmentBriefly } from '../services/social-security-claiming';
@@ -90,7 +97,12 @@ function formatQuote(quote: string): string | null {
 export function retirementHouseholdRequest(
   snapshot: Pick<FinancialContextSnapshot, 'retirementAnalysis'>
 ): InputRequest | null {
-  return householdInputRequest(snapshot.retirementAnalysis?._household, RETIREMENT_CALCULATOR_ID, 'Am I on track for retirement?');
+  const analysis = snapshot.retirementAnalysis;
+  const question = 'Am I on track for retirement?';
+  // The partner first: without them the plan is someone else's. Then what
+  // the run had to assume about taxes and coverage.
+  return householdInputRequest(analysis?._household, RETIREMENT_CALCULATOR_ID, question) ??
+    (analysis ? taxAndHealthcareInputRequest({ taxes: analysis._taxes, healthcare: analysis._healthcare }, RETIREMENT_CALCULATOR_ID, question) : null);
 }
 
 /**
@@ -142,6 +154,12 @@ export function describeRetirementAssumptions(
     countedIncomes
   ));
   parts.push(...describeContribution(values, analysis._contributionOrigin));
+  const fees = describeFees(analysis.feesDeducted);
+  if (fees) parts.push(fees);
+  const taxes = describeTaxes(analysis._taxes, values.withdrawalStartAge);
+  if (taxes) parts.push(taxes);
+  const healthcare = describeHealthcare(analysis._healthcare);
+  if (healthcare) parts.push(healthcare);
   const spendingCut = describeSpendingCut(analysis._spendingFlexibility);
   if (spendingCut) parts.push(spendingCut);
   if (parts.length === 0) return null;
@@ -156,11 +174,34 @@ export function describeRetirementAssumptions(
       survivalRate: analysis.stressTest.survivalRate,
     })
     : '';
-  return `This projection assumes ${parts.join('; ')}. Tell me if any of that is wrong and I will re-run it.${flexibility}`;
+  // What tax and premiums cost in the first year, and what the run had to
+  // assume about them: engine figures and resolved inputs, never the model's.
+  const resolutions = { taxes: analysis._taxes, healthcare: analysis._healthcare };
+  const costs = describeFirstYearCosts(analysis.firstYearCosts, resolutions);
+  const asks = describeTaxAndHealthcareAsks(resolutions);
+  return `This projection assumes ${parts.join('; ')}. Tell me if any of that is wrong and I will re-run it.${flexibility}${costs}${asks}`;
 }
 
 function money(value: number): string {
   return `$${Math.round(value).toLocaleString('en-US')}`;
+}
+
+/**
+ * The fund fees the projection took out of its returns, with how much of the
+ * portfolio they were known for. Analyses before fees were deducted say
+ * nothing either way.
+ */
+function describeFees(fees: { annualRate: number; coverage: number } | undefined): string | null {
+  if (!fees) return null;
+  const covered = Math.round(fees.coverage * 100);
+  if (!(fees.annualRate > 0)) {
+    return covered > 0
+      ? `no fund fees taken out of returns, since none of the funds with a known fee (${covered}% of your holdings) charges one`
+      : 'no fund fees taken out of returns, since none of your holdings has a known expense ratio';
+  }
+  const rest = covered >= 100 ? '' : `; the other ${100 - covered}% is counted as costing nothing`;
+  return `fund fees of ${(fees.annualRate * 100).toFixed(2)}% a year taken out of returns, from the expense ratios ` +
+    `of ${covered}% of your holdings${rest}`;
 }
 
 /**

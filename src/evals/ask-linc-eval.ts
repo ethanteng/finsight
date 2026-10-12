@@ -5,6 +5,8 @@ import { normalizeContextPacks, questionNeedsFromPacks } from '../openai/context
 import type { ContextPlan } from '../openai/context-planner';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { householdIncomeStreams, householdTimeline } from '../services/household';
+import { resolveRetirementTaxes } from '../services/retirement-taxes';
+import { resolveHealthcare } from '../services/retirement-healthcare';
 
 export type AskLincEvalCategory =
   | 'numerical_accuracy'
@@ -364,6 +366,36 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
     },
   });
   const flexibleFacts = flexible.showTheMathData!.evidenceManifest.facts;
+
+  // Income tax and health premiums: linked accounts by their own types, the
+  // Texas address Linc remembers meaning no state tax, coverage before
+  // Medicare assumed and asked about -- every figure the engine's.
+  const taxedSnapshot = retirementSnapshot();
+  taxedSnapshot.retirementAnalysis = {
+    ...taxedSnapshot.retirementAnalysis!,
+    _taxes: resolveRetirementTaxes({
+      linked: { taxable: 100_000, pretax: 350_000, roth: 50_000, unknown: 0, taxableBasis: 60_000, taxableWithoutBasis: 0 },
+      stateOrProvince: 'TX',
+    }),
+    _healthcare: resolveHealthcare({ preMedicareYears: true }),
+    firstYearCosts: { federalTax: 4_200, stateTax: 0, healthcarePremiums: 3_100, premiumTaxCredit: 12_400 },
+  };
+  const taxed = await runAskLincAnalysis({
+    question: 'Will my money last in retirement?',
+    enableValidation: false,
+    evaluation: {
+      snapshot: taxedSnapshot,
+      skipToneConfig: true,
+      model: () => jsonResponse(
+        'Your plan lasts in 80% of historical sequences after income tax and health premiums; the first year of withdrawals pays $4,200 of federal income tax.',
+        {
+          survival: { value: 80, unit: 'percent', provenance: 'survival_rate' },
+          first_year_tax: { value: 4_200, unit: 'usd', provenance: 'retirement_tax_first_year_federal' },
+        }
+      ),
+    },
+  });
+  const taxedFacts = taxed.showTheMathData!.evidenceManifest.facts;
 
   // A married couple: the partner's benefit on both ages, the plan run until
   // the younger reaches their planning age, and from the first death the
@@ -809,6 +841,27 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
       detail: 'With no stated flexibility the plan keeps fixed spending, and a disclosed 20% cut is reported beside it with how often it would have been in force; the answer can cite it.',
     },
     {
+      id: 'taxes-and-premiums-reach-the-projection',
+      category: 'retirement',
+      passed: taxed.structuredResponse.summary.includes(
+        'savings 70% pre-tax, 20% taxable, 10% Roth by your linked accounts\' types; no state income tax, since Texas has none'
+      ) &&
+        taxed.structuredResponse.summary.includes(
+          'In the first year of withdrawals, at the median of the historical sequences, the plan pays $4,200 of federal ' +
+          'income tax and $3,100 of health premiums after a $12,400 premium tax credit'
+        ) &&
+        taxed.structuredResponse.summary.includes(
+          'To make the tax and health figures yours, tell me what health coverage you will have before Medicare and ' +
+          'whether your spending already includes health premiums.'
+        ) &&
+        keyNumberValue(taxed, 'first_year_tax') === 4_200 &&
+        taxedFacts.some(fact => fact.id === 'retirement_healthcare_first_year_premium_tax_credit' && fact.value === 12_400) &&
+        taxedFacts.some(fact => fact.id === 'historical_withdrawal_rate_p50' && fact.label.includes('before income tax and health premiums')) &&
+        taxed.structuredResponse.input_request?.title === 'Make the tax and health figures yours' &&
+        taxed.showTheMathData!.evidenceManifest.validation.deterministic.valid,
+      detail: 'Income tax and health premiums are disclosed with where each input came from and what they cost in the first year, the answer can cite them, and what was assumed is asked for in words and in a form.',
+    },
+    {
       id: 'partner-incomes-and-horizon-reach-the-projection',
       category: 'retirement',
       passed: couple.structuredResponse.summary.includes(
@@ -867,7 +920,9 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
       passed: savedPlanSummary.includes('From Your numbers: retiring at 55 and spending $80,000 a year in retirement, saved Sep 14, 2026.') &&
         savedPlanFacts.some(fact => fact.id === 'saved_retirement_age' && fact.value === 55) &&
         savedPlanFacts.some(fact => fact.id.endsWith('_coast_fire_number')) &&
-        !savedPlan.structuredResponse.input_request &&
+        // Nothing asks for the saved figures again; only taxes and coverage the test assumed.
+        (!savedPlan.structuredResponse.input_request ||
+          savedPlan.structuredResponse.input_request.title === 'Make the tax and health figures yours') &&
         JSON.stringify(savedPlan.structuredResponse.save_offer?.items.map(item => item.key)) === JSON.stringify(['investedBalance']),
       detail: 'A new decision plans with the figures saved in Your numbers, names them with their date, and offers to keep only the newly stated savings.',
     },

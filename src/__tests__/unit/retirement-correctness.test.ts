@@ -1296,3 +1296,21 @@ describe('spending cut in a bad market', () => {
     });
   });
 });
+
+describe('fund fees', () => {
+  it('takes the annual expense ratio out of returns, a twelfth at a time', () => {
+    // Flat returns and nothing spent: a 1% fee leaves 99% after a year and
+    // 98.01% after two.
+    const outcome = simulateWithdrawals(balancedMapping, 1_000, flatSequence(24), 0, { annualFeeRate: 0.01 });
+    expect(outcome.finalValue).toBeCloseTo(1_000 * 0.99 * 0.99, 6);
+    expect(simulateWithdrawals(balancedMapping, 1_000, flatSequence(24), 0).finalValue).toBeCloseTo(1_000, 6);
+    expect(() => simulateWithdrawals(balancedMapping, 1_000, flatSequence(12), 0, { annualFeeRate: -0.01 })).toThrow();
+  });
+
+  it('lowers the sustainable-spending range the same way', () => {
+    const sequences = [flatSequence(360)];
+    const gross = computeHistoricalWithdrawalRates(sequences, balancedMapping, 1_000);
+    const net = computeHistoricalWithdrawalRates(sequences, balancedMapping, 1_000, undefined, 0.01);
+    expect(net.p50).toBeLessThan(gross.p50);
+  });
+});

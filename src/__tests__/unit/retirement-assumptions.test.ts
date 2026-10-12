@@ -34,6 +34,22 @@ describe('describeRetirementAssumptions', () => {
     expect(line).toContain('Tell me if any of that is wrong');
   });
 
+  it('names the fund fees the projection took out of returns, and how much of the portfolio they cover', () => {
+    const withFees = (feesDeducted: unknown) => describeRetirementAssumptions({
+      retirementAnalysis: { _storedInputParams: { annualWithdrawalAmount: 80_000 }, feesDeducted },
+    } as any);
+    expect(withFees({ annualRate: 0.0012, coverage: 0.85 })).toContain(
+      'fund fees of 0.12% a year taken out of returns, from the expense ratios of 85% of your holdings; ' +
+      'the other 15% is counted as costing nothing'
+    );
+    expect(withFees({ annualRate: 0.0003, coverage: 1 })).toContain(
+      'fund fees of 0.03% a year taken out of returns, from the expense ratios of 100% of your holdings. Tell me'
+    );
+    expect(withFees({ annualRate: 0, coverage: 0 })).toContain('none of your holdings has a known expense ratio');
+    // An analysis from before fees were deducted says nothing about them.
+    expect(withFees(undefined)).not.toContain('fund fees');
+  });
+
   it('still names a value that carries no quote', () => {
     // Ages often come from the stored profile rather than anything said in this
     // decision. The number was still used, so it is still stated.

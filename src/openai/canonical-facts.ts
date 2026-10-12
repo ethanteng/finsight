@@ -7,6 +7,7 @@ import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 import { incomeOfStream } from '../services/household';
 import { householdIncomeFactRows, householdSocialSecurityFactRows, householdTimelineFactRows } from './household-evidence';
 import { spendingFlexibilityFactRows } from './spending-flexibility-evidence';
+import { taxAndHealthcareFactRows } from './tax-healthcare-evidence';
 import { questionMentionsSecurity } from './security-question-match';
 import {
   STATED_FIGURE_DEFINITIONS,
@@ -763,11 +764,16 @@ export function buildCanonicalFactPack(
     addSnapshotFact('survival_rate_ratio', 'Historical rolling-window survival share source ratio', retirement.stressTest.survivalRate, 'ratio', 'retirementAnalysis.stressTest.survivalRate', false);
     addCalculatedFact('survival_rate', 'Historical rolling-window survival share', retirement.stressTest.survivalRate * 100, 'percent', 'input * 100', ['survival_rate_ratio']);
     addSnapshotFact('historical_sequence_count', 'Historical sequence count', retirement.stressTest.totalSequences, 'count', 'retirementAnalysis.stressTest.totalSequences');
+    // The solver finds rates on withdrawals alone, so when the run counted
+    // tax or premiums its rates say they come before them.
+    const beforeCosts = retirement._taxes || retirement._healthcare?.kind === 'counted'
+      ? ' (before income tax and health premiums)'
+      : '';
     for (const percentile of ['p10', 'p25', 'p50', 'p75', 'p90'] as const) {
       const withdrawalRate = retirement.metrics.historicalWithdrawalRates[percentile];
       const ratioId = `historical_withdrawal_rate_${percentile}_ratio`;
       addSnapshotFact(ratioId, `${percentile} historical withdrawal rate source ratio`, withdrawalRate, 'ratio', `retirementAnalysis.metrics.historicalWithdrawalRates.${percentile}`, false);
-      addCalculatedFact(`historical_withdrawal_rate_${percentile}`, `${percentile} historical withdrawal rate`, withdrawalRate * 100, 'percent', 'input * 100', [ratioId]);
+      addCalculatedFact(`historical_withdrawal_rate_${percentile}`, `${percentile} historical withdrawal rate${beforeCosts}`, withdrawalRate * 100, 'percent', 'input * 100', [ratioId]);
       addSnapshotFact(
         `depletion_years_${percentile}`,
         `${percentile} years until depletion`,
@@ -856,6 +862,14 @@ export function buildCanonicalFactPack(
       comparison: retirement.spendingFlexibilityComparison,
     })) {
       addSnapshotFact(`retirement_${row.suffix}`, `${row.label} in the retirement projection`, row.value, row.unit, `retirementAnalysis.spendingFlexibility.${row.suffix}`);
+    }
+    // How the money is taxed and what coverage costs, and both in the first
+    // year of withdrawals.
+    for (const row of taxAndHealthcareFactRows(
+      { taxes: retirement._taxes, healthcare: retirement._healthcare },
+      retirement.firstYearCosts
+    )) {
+      addSnapshotFact(`retirement_${row.suffix}`, `${row.label} in the retirement projection`, row.value, row.unit, `retirementAnalysis.taxesAndHealthcare.${row.suffix}`);
     }
     // A partner's incomes, when each income stops, and the couple's timeline.
     if (household) {

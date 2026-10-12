@@ -22,6 +22,8 @@ import {
   analyzeRetirementPortfolio,
   type RetirementAnalysisOutput,
   type RetirementIncomeStream,
+  type RetirementHealthcare,
+  type RetirementTaxes,
   type SpendingFlexibility,
   type SpendingFlexibilityOutcome,
 } from '../retirement-analytics';
@@ -304,6 +306,8 @@ export interface RetirementQuickPlanResult {
   spendingFlexibility?: SpendingFlexibilityOutcome;
   /** The plan as entered with the comparison cut, beside its fixed spending. */
   spendingFlexibilityComparison?: SpendingFlexibilityOutcome;
+  /** The first withdrawal year's tax and premiums for the plan as entered, when the run counted them. */
+  firstYearCosts?: { federalTax: number; stateTax: number; healthcarePremiums: number; premiumTaxCredit: number };
 }
 
 /**
@@ -315,7 +319,18 @@ export interface RetirementQuickPlanResult {
 export interface QuickPlanFlexibility {
   spendingFlexibility?: SpendingFlexibility;
   spendingFlexibilityComparison?: SpendingFlexibility;
+  /**
+   * Income tax and health premiums (`services/retirement-taxes.ts`,
+   * `services/retirement-healthcare.ts`), the same in every case. Ask Linc's
+   * calculators pass them; the public calculator never does, and its runs stay
+   * untaxed as its page says.
+   */
+  taxes?: RetirementTaxes;
+  healthcare?: RetirementHealthcare;
 }
+
+/** Everything a quick plan takes beyond the request and the household. */
+export type QuickPlanOptions = QuickPlanFlexibility;
 
 /**
  * A partner to plan for as well, already resolved on their own ages
@@ -659,7 +674,8 @@ function toScenario(
 function buildLimitations(
   inputs: RetirementQuickPlanResult['inputs'],
   allocation: QuickPlanAllocation,
-  history: RetirementQuickPlanResult['history']
+  history: RetirementQuickPlanResult['history'],
+  counted: { taxes: boolean; healthcare: boolean } = { taxes: false, healthcare: false }
 ): string[] {
   const limitations = [
     `Every tested plan began in a month between ${readableMonth(history.firstStartMonth)} and ` +
@@ -671,9 +687,15 @@ function buildLimitations(
     `Your asset mix is the "${allocation.label}" preset (${allocation.description}), not your actual holdings. ` +
       'Sequence risk depends heavily on the real mix.',
     'Fund fees are not modeled. A portfolio paying 0.75% a year keeps materially less than one paying 0.05%.',
-    'Taxes, account types, required minimum distributions, and Roth conversions are not modeled.',
-    'Health insurance before Medicare, one-off expenses, and changes in spending over retirement are not modeled — ' +
-      'spending is held constant in real terms.',
+    counted.taxes
+      ? 'Income tax uses 2026 federal rules held level in today\'s dollars; Roth conversions, tax-loss harvesting and ' +
+        'any tax law change are not modeled.'
+      : 'Taxes, account types, required minimum distributions, and Roth conversions are not modeled.',
+    counted.healthcare
+      ? 'Health premiums are counted, but not deductibles, out-of-pocket costs or long-term care; one-off expenses and ' +
+        'changes in spending over retirement are not modeled — spending is held constant in real terms.'
+      : 'Health insurance before Medicare, one-off expenses, and changes in spending over retirement are not modeled — ' +
+        'spending is held constant in real terms.',
     inputs.pensionAnnual > 0
       ? 'Home equity, rental income, other pensions, and inheritances are not included.'
       : 'Home equity, rental income, pensions other than the income you entered, and inheritances are not included.',
@@ -812,6 +834,18 @@ async function computeRetirementQuickPlan(
   // entered. A `rates` run has no spending level to cut.
   const statedCut = mode === 'plan' ? flexibility?.spendingFlexibility : undefined;
   const comparisonCut = mode === 'plan' && !statedCut ? flexibility?.spendingFlexibilityComparison : undefined;
+  // Taxes and premiums follow each person to their own planning age.
+  const people = timeline && household
+    ? {
+      userPlanThroughAge: inputs.lifeExpectancy,
+      partner: { age: household.partner.age, planEndsAtUserAge: timeline.partnerPlanThroughAge },
+    }
+    : undefined;
+  const costs = {
+    ...(flexibility?.taxes && { taxes: flexibility.taxes }),
+    ...(flexibility?.healthcare && { healthcare: flexibility.healthcare }),
+    ...(people && (flexibility?.taxes || flexibility?.healthcare) && { people }),
+  };
   const analyze = (retirementAge: number, annualSpending: number, withComparison = false) =>
     analyzeRetirementPortfolio({
       holdings,
@@ -823,6 +857,7 @@ async function computeRetirementQuickPlan(
       annualWithdrawalAmount: annualSpending,
       annualContributionAmount: inputs.annualContributions,
       incomeStreams,
+      ...costs,
       ...(statedCut && { spendingFlexibility: statedCut }),
       ...(withComparison && comparisonCut && { spendingFlexibilityComparison: comparisonCut }),
       // Spending less is spending less in both chapters.
@@ -952,7 +987,8 @@ async function computeRetirementQuickPlan(
     sustainableSpending,
     sustainableSpendingRates,
     assumptions: primaryAnalysis.dataQuality.assumptions,
-    limitations: buildLimitations(inputs, allocation, history),
+    limitations: buildLimitations(inputs, allocation, history, { taxes: Boolean(flexibility?.taxes), healthcare: Boolean(flexibility?.healthcare) }),
+    ...(mode === 'plan' && primaryAnalysis.firstYearCosts && { firstYearCosts: primaryAnalysis.firstYearCosts }),
     ...(primaryAnalysis.spendingFlexibility && { spendingFlexibility: primaryAnalysis.spendingFlexibility }),
     ...(primaryAnalysis.spendingFlexibilityComparison && {
       spendingFlexibilityComparison: primaryAnalysis.spendingFlexibilityComparison,
@@ -1015,6 +1051,8 @@ export async function runRetirementQuickPlan(
       : null,
     flexibility?.spendingFlexibility?.cutShare ?? null,
     flexibility?.spendingFlexibilityComparison?.cutShare ?? null,
+    flexibility?.taxes ?? null,
+    flexibility?.healthcare ?? null,
   ]);
 
   const hit = planCache.get(key);

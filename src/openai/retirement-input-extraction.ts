@@ -7,6 +7,9 @@
 import { INCOME_INFLATION_OPTIONS, type IncomeInflation } from '../services/stated-figures';
 import type { StatedPartner } from '../services/household';
 import type { StatedSpendingCut } from '../services/spending-flexibility';
+import type { StatedAccountSplit } from '../services/retirement-taxes';
+import type { PreMedicareCoverage, StatedHealthcare } from '../services/retirement-healthcare';
+import { PRE_MEDICARE_COVERAGE_CHOICES } from '../services/stated-figures';
 
 export interface RetirementInputTurn {
   question: string;
@@ -51,9 +54,30 @@ export interface ExtractedRetirementInputs {
   spendingCutPercent?: number;
   spendingCutAnnual?: number;
   essentialAnnualSpending?: number;
+  /** How the user's savings are held, for taxes: dollars in each kind of account, or percentage points. */
+  pretaxSavings?: number;
+  rothSavings?: number;
+  taxableSavings?: number;
+  pretaxSavingsPercent?: number;
+  rothSavingsPercent?: number;
+  taxableSavingsPercent?: number;
+  /** The user's state income tax rate on retirement income, in percentage points. */
+  stateIncomeTaxPercent?: number;
+  /** Health coverage before Medicare, and its premium a year per person, when the user says. */
+  preMedicareCoverage?: PreMedicareCoverage;
+  preMedicareAnnualPremium?: number;
+  /** Whether the user's retirement spending already pays for health premiums. */
+  healthcareInSpending?: boolean;
   /** The words each value came from, for the answer to cite and Show the Math to display. */
-  sources: Partial<Record<ExtractedField | 'pensionInflation' | 'partnerPensionInflation' | 'partnerMarried', string>>;
+  sources: Partial<Record<ExtractedField | ExtractedChoiceField, string>>;
 }
+
+type ExtractedChoiceField =
+  | 'pensionInflation'
+  | 'partnerPensionInflation'
+  | 'partnerMarried'
+  | 'preMedicareCoverage'
+  | 'healthcareInSpending';
 
 type ExtractedField =
   | 'currentAge'
@@ -77,7 +101,15 @@ type ExtractedField =
   | 'survivorAnnualSpending'
   | 'spendingCutPercent'
   | 'spendingCutAnnual'
-  | 'essentialAnnualSpending';
+  | 'essentialAnnualSpending'
+  | 'pretaxSavings'
+  | 'rothSavings'
+  | 'taxableSavings'
+  | 'pretaxSavingsPercent'
+  | 'rothSavingsPercent'
+  | 'taxableSavingsPercent'
+  | 'stateIncomeTaxPercent'
+  | 'preMedicareAnnualPremium';
 
 const FIELDS: ExtractedField[] = [
   'currentAge',
@@ -102,6 +134,14 @@ const FIELDS: ExtractedField[] = [
   'spendingCutPercent',
   'spendingCutAnnual',
   'essentialAnnualSpending',
+  'pretaxSavings',
+  'rothSavings',
+  'taxableSavings',
+  'pretaxSavingsPercent',
+  'rothSavingsPercent',
+  'taxableSavingsPercent',
+  'stateIncomeTaxPercent',
+  'preMedicareAnnualPremium',
 ];
 
 /**
@@ -143,6 +183,15 @@ const RANGES: Record<ExtractedField, { min: number; max: number; integer: boolea
   spendingCutPercent: { min: 0, max: 100, integer: false },
   spendingCutAnnual: { min: 0, max: 100_000_000, integer: false },
   essentialAnnualSpending: { min: 0, max: 100_000_000, integer: false },
+  pretaxSavings: { min: 0, max: 100_000_000, integer: false },
+  rothSavings: { min: 0, max: 100_000_000, integer: false },
+  taxableSavings: { min: 0, max: 100_000_000, integer: false },
+  pretaxSavingsPercent: { min: 0, max: 100, integer: false },
+  rothSavingsPercent: { min: 0, max: 100, integer: false },
+  taxableSavingsPercent: { min: 0, max: 100, integer: false },
+  // Where Your numbers keeps it: no state taxes retirement income above 15%.
+  stateIncomeTaxPercent: { min: 0, max: 15, integer: false },
+  preMedicareAnnualPremium: { min: 0, max: 100_000, integer: false },
 };
 
 /** Drop anything outside the range a real plan occupies; keep the rest. */
@@ -176,6 +225,19 @@ export function validateExtractedInputs(raw: unknown): ExtractedRetirementInputs
     result.partnerMarried = married === 'yes';
     const source = rawSources.partnerMarried;
     if (typeof source === 'string' && source.trim()) result.sources.partnerMarried = source.trim();
+  }
+
+  const coverage = record.preMedicareCoverage;
+  if (typeof coverage === 'string' && (PRE_MEDICARE_COVERAGE_CHOICES as readonly string[]).includes(coverage)) {
+    result.preMedicareCoverage = coverage as PreMedicareCoverage;
+    const source = rawSources.preMedicareCoverage;
+    if (typeof source === 'string' && source.trim()) result.sources.preMedicareCoverage = source.trim();
+  }
+  const inSpending = record.healthcareInSpending;
+  if (inSpending === 'yes' || inSpending === 'no') {
+    result.healthcareInSpending = inSpending === 'yes';
+    const source = rawSources.healthcareInSpending;
+    if (typeof source === 'string' && source.trim()) result.sources.healthcareInSpending = source.trim();
   }
 
   // Withdrawals start at retirement unless the conversation said otherwise.
@@ -213,5 +275,32 @@ export function statedPartnerOf(inputs: ExtractedRetirementInputs | undefined): 
     married: inputs.partnerMarried,
   };
   const said = Object.fromEntries(Object.entries(partner).filter(([, value]) => value !== undefined)) as StatedPartner;
+  return Object.keys(said).length > 0 ? said : undefined;
+}
+
+/** How the user said their savings are held, in this decision, or undefined when they did not. */
+export function statedAccountSplitOf(inputs: ExtractedRetirementInputs | undefined): StatedAccountSplit | undefined {
+  if (!inputs) return undefined;
+  const split: StatedAccountSplit = {
+    pretaxAmount: inputs.pretaxSavings,
+    rothAmount: inputs.rothSavings,
+    taxableAmount: inputs.taxableSavings,
+    pretaxPercent: inputs.pretaxSavingsPercent,
+    rothPercent: inputs.rothSavingsPercent,
+    taxablePercent: inputs.taxableSavingsPercent,
+  };
+  const said = Object.fromEntries(Object.entries(split).filter(([, value]) => value !== undefined)) as StatedAccountSplit;
+  return Object.keys(said).length > 0 ? said : undefined;
+}
+
+/** What the user said about health coverage in this decision, or undefined when nothing. */
+export function statedHealthcareOf(inputs: ExtractedRetirementInputs | undefined): StatedHealthcare | undefined {
+  if (!inputs) return undefined;
+  const healthcare: StatedHealthcare = {
+    coverage: inputs.preMedicareCoverage,
+    annualPremium: inputs.preMedicareAnnualPremium,
+    inSpending: inputs.healthcareInSpending,
+  };
+  const said = Object.fromEntries(Object.entries(healthcare).filter(([, value]) => value !== undefined)) as StatedHealthcare;
   return Object.keys(said).length > 0 ? said : undefined;
 }

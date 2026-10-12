@@ -462,6 +462,13 @@ function resolveVariant(
     const survivorSpending = survivorSpendingFor(plan, timeline);
     if (survivorSpending) input.survivorSpending = survivorSpending;
     else delete input.survivorSpending;
+    // Taxes and premiums follow each of them to their own planning age.
+    if (input.people) {
+      input.people = {
+        userPlanThroughAge: timeline.userPlanThroughAge,
+        partner: { age: plan.age, planEndsAtUserAge: timeline.partnerPlanThroughAge },
+      };
+    }
   }
 
   return {
@@ -706,6 +713,11 @@ export async function runRetirementScenario(
     ...(stored.survivorSpending && { survivorSpending: stored.survivorSpending }),
     // The user's own cut in a bad market; a what-if never runs the comparison.
     ...(stored.spendingFlexibility && { spendingFlexibility: stored.spendingFlexibility }),
+    // The same taxes and premiums, so a what-if is not credited with the
+    // difference between a taxed baseline and an untaxed variant.
+    ...(stored.taxes && { taxes: stored.taxes }),
+    ...(stored.healthcare && { healthcare: stored.healthcare }),
+    ...(stored.people && { people: stored.people }),
     // Variants must exclude exactly what the baseline excluded, or a scenario
     // comparison would attribute a coverage difference to the change modeled.
     unmodeledInvestments: snapshot.investments?.unmodeledInvestments ?? null,
@@ -1009,6 +1021,10 @@ export function describeRetirementScenarioExecution(
       : comparisonLedgersAvailable
         ? null
         : 'no additional contributions before withdrawals begin',
+    // Every case inherits the baseline's taxes and premiums.
+    execution.scenarios.some((scenario) => scenario.analysis.firstYearCosts)
+      ? 'income tax and health premiums counted as in your plan'
+      : null,
   ].filter((item): item is string => Boolean(item));
   const changedInputs = execution.scenarios.flatMap((scenario) => {
     const currencyKeys = new Set(['annual_withdrawal_amount', 'pre_withdrawal_contributions']);

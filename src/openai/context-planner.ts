@@ -115,6 +115,14 @@ const BASELINE_PLAN_FIELDS = [
   'spendingCutPercent',
   'spendingCutAnnual',
   'essentialAnnualSpending',
+  'pretaxSavings',
+  'rothSavings',
+  'taxableSavings',
+  'pretaxSavingsPercent',
+  'rothSavingsPercent',
+  'taxableSavingsPercent',
+  'stateIncomeTaxPercent',
+  'preMedicareAnnualPremium',
 ] as const;
 
 /**
@@ -191,6 +199,14 @@ export function retirementInputsForBaseline(
     baseline.partnerMarried = inputs.partnerMarried;
     if (inputs.sources.partnerMarried) baseline.sources.partnerMarried = inputs.sources.partnerMarried;
   }
+  if (inputs.preMedicareCoverage !== undefined) {
+    baseline.preMedicareCoverage = inputs.preMedicareCoverage;
+    if (inputs.sources.preMedicareCoverage) baseline.sources.preMedicareCoverage = inputs.sources.preMedicareCoverage;
+  }
+  if (inputs.healthcareInSpending !== undefined) {
+    baseline.healthcareInSpending = inputs.healthcareInSpending;
+    if (inputs.sources.healthcareInSpending) baseline.sources.healthcareInSpending = inputs.sources.healthcareInSpending;
+  }
   return baseline;
 }
 
@@ -266,8 +282,23 @@ const RETIREMENT_FIELDS = [
   'spendingCutPercent',
   'spendingCutAnnual',
   'essentialAnnualSpending',
+  'pretaxSavings',
+  'rothSavings',
+  'taxableSavings',
+  'pretaxSavingsPercent',
+  'rothSavingsPercent',
+  'taxableSavingsPercent',
+  'stateIncomeTaxPercent',
+  'preMedicareAnnualPremium',
 ] as const;
-const RETIREMENT_SOURCE_FIELDS = [...RETIREMENT_FIELDS, 'pensionInflation', 'partnerPensionInflation', 'partnerMarried'] as const;
+const RETIREMENT_SOURCE_FIELDS = [
+  ...RETIREMENT_FIELDS,
+  'pensionInflation',
+  'partnerPensionInflation',
+  'partnerMarried',
+  'preMedicareCoverage',
+  'healthcareInSpending',
+] as const;
 const NULLABLE_NUMBER = { type: ['number', 'null'] as const };
 const NULLABLE_STRING = { type: ['string', 'null'] as const };
 
@@ -294,6 +325,8 @@ export const CONTEXT_PLAN_JSON_SCHEMA = {
         pensionInflation: { type: 'string', enum: ['unspecified', 'fixed', 'rises_with_inflation'] },
         partnerPensionInflation: { type: 'string', enum: ['unspecified', 'fixed', 'rises_with_inflation'] },
         partnerMarried: { type: 'string', enum: ['unspecified', 'yes', 'no'] },
+        preMedicareCoverage: { type: 'string', enum: ['unspecified', 'marketplace', 'cobra', 'employer_retiree', 'spouse_plan'] },
+        healthcareInSpending: { type: 'string', enum: ['unspecified', 'yes', 'no'] },
         sources: {
           type: 'object',
           additionalProperties: false,
@@ -322,7 +355,7 @@ Important boundaries:
 - needsSecondaryValidation is true for projections, comparisons, recommendations, affordability judgments, simulations, optimization, tax reasoning, or other conclusions where an independent reasoning review is useful.
 - The application enforces access, subscription, dependencies and calculations. You only plan context.
 
-Also extract retirement inputs the user actually stated in this decision. Never estimate or supply typical values. annualWithdrawalAmount means intended annual retirement spending in today's dollars, not salary, savings, portfolio value, or current spending. Convert a monthly amount only when it clearly refers to that retirement spending. socialSecurityAnnual and socialSecurityStartAge are the user's Social Security benefit per year and the age they plan to claim it, never a claiming age they only ask about as a what-if; socialSecurityAmountAge is the claiming age their Social Security figure is for, only when they say so (such as a statement showing $2,500 a month at 67), because application code applies Social Security's own claiming rules when it differs from the claiming age; annualContributionAmount is what the user adds to their investments per year until they retire, employer match included when they say so, in today's dollars (convert a monthly or per-paycheck amount only when it clearly is one), never a contribution they only ask about as a what-if; pensionAnnual and pensionStartAge are a pension, annuity or other retirement income that is not Social Security, per year, and when it starts; pensionInflation is fixed when the user says that pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has one or rises with inflation, and otherwise unspecified with a null source. When the user plans with a spouse or partner, the partner* fields are that partner's: partnerAge their age today, partnerSocialSecurityAnnual and partnerSocialSecurityStartAge their own Social Security and the age (theirs) they claim it, never a claiming age the user only asks about as a what-if, partnerSocialSecurityAmountAge the claiming age their figure is for when the user says so, partnerPensionAnnual, partnerPensionStartAge (their age) and partnerPensionInflation their pension, partnerPlanThroughAge the age (theirs) to plan through; survivorAnnualSpending is what one of them would spend a year alone, in today's dollars, only when the user says so; partnerMarried is yes when the user says they are married to that partner or calls them their husband, wife or spouse, no when they say they are not married to them (including a boyfriend, girlfriend or fiancé), and otherwise unspecified with a null source, because "partner" alone does not say. spendingCutPercent, spendingCutAnnual and essentialAnnualSpending are how much of their retirement spending the user says they could cut if markets fell, only when they say so, in the form they used: spendingCutPercent in percentage points (20 for 20%), spendingCutAnnual in dollars a year less, essentialAnnualSpending as the spending a year they could not go below; set only one, and 0 for spendingCutPercent when they say they could not cut at all. Never put a partner's figure in the user's own fields, or the other way round. Convert a monthly benefit to a year only when it clearly is one. A short answer takes its meaning from the assistant question immediately before it. The newest revision wins. Put the user's own short wording in sources; use null for an absent value and source.
+Also extract retirement inputs the user actually stated in this decision. Never estimate or supply typical values. annualWithdrawalAmount means intended annual retirement spending in today's dollars, not salary, savings, portfolio value, or current spending. Convert a monthly amount only when it clearly refers to that retirement spending. socialSecurityAnnual and socialSecurityStartAge are the user's Social Security benefit per year and the age they plan to claim it, never a claiming age they only ask about as a what-if; socialSecurityAmountAge is the claiming age their Social Security figure is for, only when they say so (such as a statement showing $2,500 a month at 67), because application code applies Social Security's own claiming rules when it differs from the claiming age; annualContributionAmount is what the user adds to their investments per year until they retire, employer match included when they say so, in today's dollars (convert a monthly or per-paycheck amount only when it clearly is one), never a contribution they only ask about as a what-if; pensionAnnual and pensionStartAge are a pension, annuity or other retirement income that is not Social Security, per year, and when it starts; pensionInflation is fixed when the user says that pension is a fixed amount or has no cost-of-living adjustment, rises_with_inflation when they say it has one or rises with inflation, and otherwise unspecified with a null source. When the user plans with a spouse or partner, the partner* fields are that partner's: partnerAge their age today, partnerSocialSecurityAnnual and partnerSocialSecurityStartAge their own Social Security and the age (theirs) they claim it, never a claiming age the user only asks about as a what-if, partnerSocialSecurityAmountAge the claiming age their figure is for when the user says so, partnerPensionAnnual, partnerPensionStartAge (their age) and partnerPensionInflation their pension, partnerPlanThroughAge the age (theirs) to plan through; survivorAnnualSpending is what one of them would spend a year alone, in today's dollars, only when the user says so; partnerMarried is yes when the user says they are married to that partner or calls them their husband, wife or spouse, no when they say they are not married to them (including a boyfriend, girlfriend or fiancé), and otherwise unspecified with a null source, because "partner" alone does not say. spendingCutPercent, spendingCutAnnual and essentialAnnualSpending are how much of their retirement spending the user says they could cut if markets fell, only when they say so, in the form they used: spendingCutPercent in percentage points (20 for 20%), spendingCutAnnual in dollars a year less, essentialAnnualSpending as the spending a year they could not go below; set only one, and 0 for spendingCutPercent when they say they could not cut at all. pretaxSavings, rothSavings and taxableSavings are dollars the user says they hold in pre-tax retirement accounts (traditional 401(k), 403(b), 457, traditional or rollover IRA, TSP), in Roth accounts (Roth IRA, Roth 401(k)) and in taxable brokerage accounts; pretaxSavingsPercent, rothSavingsPercent and taxableSavingsPercent are the same as percentage points of their savings, only when they put it that way; set only the ones they state, never a remainder they did not say. stateIncomeTaxPercent is the state income tax rate the user says applies to their retirement income, in percentage points (4.5 for 4.5%), never one you know for their state. preMedicareCoverage is the health coverage the user says they will have between retiring and Medicare at 65: marketplace for an ACA or exchange plan, cobra for COBRA from their last employer, employer_retiree for retiree coverage from an employer, spouse_plan for a spouse's or partner's employer plan, and otherwise unspecified with a null source; preMedicareAnnualPremium is what they say that coverage costs a year per person, converting a monthly premium only when it clearly is one; healthcareInSpending is yes when the user says their retirement spending figure already includes health insurance or premiums, no when they say it does not, and otherwise unspecified with a null source. Never put a partner's figure in the user's own fields, or the other way round. Convert a monthly benefit to a year only when it clearly is one. A short answer takes its meaning from the assistant question immediately before it. The newest revision wins. Put the user's own short wording in sources; use null for an absent value and source.
 
 Registered calculator contracts:
 ${scenarioCalculatorRegistry.plannerInstructions()}

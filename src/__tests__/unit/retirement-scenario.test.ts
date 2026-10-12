@@ -349,6 +349,29 @@ describe('retirement scenario runner', () => {
       ]);
     });
 
+    it('keeps the baseline\'s taxes and premiums, moving each person\'s planning age with the what-if', async () => {
+      const analyzer = jest.fn(async () => analysis(0.85));
+      const data = coupleSnapshot();
+      const taxes = { accounts: { taxable: 0.2, pretax: 0.7, roth: 0.1 }, taxableBasisShare: 0.5, filing: 'joint', stateRate: 0.05 };
+      Object.assign(data.retirementAnalysis._storedInputParams, {
+        taxes,
+        healthcare: { coverage: 'marketplace' },
+        people: { userPlanThroughAge: 95, partner: { age: 48, planEndsAtUserAge: 97 } },
+      });
+      await runRetirementScenario(data, {
+        requested: true,
+        primary: {
+          type: 'historical_cpi',
+          overrides: { lifeExpectancy: 100, sources: { lifeExpectancy: 'if I live to 100' } },
+        },
+      }, analyzer);
+
+      const input = (analyzer.mock.calls[0] as any[])[0];
+      expect(input.taxes).toEqual(taxes);
+      expect(input.healthcare).toEqual({ coverage: 'marketplace' });
+      expect(input.people).toEqual({ userPlanThroughAge: 100, partner: { age: 48, planEndsAtUserAge: 97 } });
+    });
+
     it('rejects a planning-age what-if that ends before withdrawals even when a younger partner extends the horizon', async () => {
       const data = coupleSnapshot();
       // Partner 10 years younger: household horizon stays past withdrawal start

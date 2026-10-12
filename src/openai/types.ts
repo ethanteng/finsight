@@ -7,10 +7,18 @@ import type { PlaidLiabilityDetails } from '../services/plaid-liabilities';
 import type { UnmodeledInvestmentValue } from '../services/investment-coverage';
 import type { PersonalContextValues } from '../profile/personal-context';
 import type { StatedFigures } from '../services/stated-figures';
-import type { RetirementIncomeStream, SpendingFlexibilityOutcome } from '../retirement-analytics/types';
+import type {
+  RetirementHealthcare,
+  RetirementIncomeStream,
+  RetirementPeople,
+  RetirementTaxes,
+  SpendingFlexibilityOutcome,
+} from '../retirement-analytics/types';
 import type { LinkedContributions, RetirementContributionOrigin } from './retirement-contributions';
 import type { HouseholdSocialSecurity, HouseholdTimeline, ResolvedPartner, StatedPartner } from '../services/household';
 import type { SpendingFlexibilityResolution, StatedSpendingCut } from '../services/spending-flexibility';
+import type { AccountTaxMix, RetirementTaxResolution, StatedAccountSplit } from '../services/retirement-taxes';
+import type { HealthcareResolution, StatedHealthcare } from '../services/retirement-healthcare';
 
 /**
  * The partner a retirement projection counted, with what Social Security pays
@@ -78,6 +86,12 @@ export interface InvestmentSnapshot {
    * null when the history cannot say. See `retirement-contributions.ts`.
    */
   linkedContributions?: LinkedContributions | null;
+  /**
+   * The holdings' value by how their accounts are taxed, read from each
+   * account's type when a retirement question loads it; null when there is no
+   * value to split. See `services/retirement-taxes.ts`.
+   */
+  accountTaxMix?: AccountTaxMix | null;
 }
 
 export interface InvestmentExternalData {
@@ -264,6 +278,15 @@ export interface FinancialContextSnapshot {
    * calculator.
    */
   statedSpendingCut?: StatedSpendingCut;
+  /**
+   * How the user said their savings are held, and their state tax rate, read
+   * once from the planner's retirement inputs for every retirement calculator
+   * (`services/retirement-taxes.ts`).
+   */
+  statedAccountSplit?: StatedAccountSplit;
+  statedStateTaxPercent?: number;
+  /** What the user said about health coverage before Medicare (`services/retirement-healthcare.ts`). */
+  statedHealthcare?: StatedHealthcare;
   homeValueSummary?: string;
   /** Structured RentCast value data used for fact provenance and uncertainty bounds. */
   homeValueData?: HomeData;
@@ -272,6 +295,10 @@ export interface FinancialContextSnapshot {
     spendingFlexibility?: SpendingFlexibilityOutcome;
     /** The same plan with the comparison cut, when the user has not said how much they could cut. */
     spendingFlexibilityComparison?: SpendingFlexibilityOutcome;
+    /** The fund fees taken out of the simulated returns; absent on analyses before version 13. */
+    feesDeducted?: { annualRate: number; coverage: number };
+    /** The first withdrawal year's tax and premiums, medians in today's dollars, when the run counted them. */
+    firstYearCosts?: { federalTax: number; stateTax: number; healthcarePremiums: number; premiumTaxCredit: number };
     summary: {
       characteristics: {
         growthPotential: 'high' | 'moderate' | 'low';
@@ -396,6 +423,10 @@ export interface FinancialContextSnapshot {
       survivorSpending?: { fromAge: number; annualAmount: number };
       /** The user's own cut in a bad market, which the run applied; never the comparison. */
       spendingFlexibility?: { cutShare: number };
+      /** Income tax, health premiums and who they cover, as the run counted them; absent before version 13. */
+      taxes?: RetirementTaxes;
+      healthcare?: RetirementHealthcare;
+      people?: RetirementPeople;
     };
     _evidence?: {
       recordId: string;
@@ -423,6 +454,10 @@ export interface FinancialContextSnapshot {
     _spendingFlexibility?: SpendingFlexibilityResolution;
     /** Set when the user's own planning age came from Your numbers. */
     _planThroughAgeOrigin?: { origin: 'saved'; savedAt: string };
+    /** How the run counted income tax, and where each input came from. See `services/retirement-taxes.ts`. */
+    _taxes?: RetirementTaxResolution;
+    /** How the run counted health premiums. See `services/retirement-healthcare.ts`. */
+    _healthcare?: HealthcareResolution;
     _inputSources?: {
       currentAge?: string;
       retirementAge?: string;

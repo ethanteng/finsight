@@ -99,6 +99,22 @@ import {
   describeSpendingFlexibilityResults,
   spendingFlexibilityFactRows,
 } from '../openai/spending-flexibility-evidence';
+import {
+  describeFirstYearCosts,
+  describeHealthcare,
+  describeTaxAndHealthcareAsks,
+  describeTaxes,
+  snapshotTaxAndHealthcare,
+  taxAndHealthcareEngineInputs,
+  taxAndHealthcareFactRows,
+  savableTaxAndHealthcareFigures,
+  taxAndHealthcareInputRequest,
+  withTaxAndHealthcareFields,
+  type FirstYearCosts,
+  type TaxAndHealthcare,
+} from '../openai/tax-healthcare-evidence';
+import type { RetirementTaxResolution } from '../services/retirement-taxes';
+import { hasPreMedicareYears, type HealthcareResolution } from '../services/retirement-healthcare';
 
 export const STATED_RETIREMENT_PLAN_CALCULATOR_ID = 'stated_retirement_plan' as const;
 export const STATED_RETIREMENT_PLAN_VERSION = 1 as const;
@@ -293,6 +309,11 @@ export interface StatedRetirementPlanResult {
     outcome?: SpendingFlexibilityOutcome;
     comparison?: SpendingFlexibilityOutcome;
   };
+  /**
+   * How the run counted income tax and health premiums, and what they cost in
+   * the first year of withdrawals. Absent on runs recorded before taxes.
+   */
+  taxesAndHealthcare?: TaxAndHealthcare & { firstYearCosts?: FirstYearCosts };
 }
 
 export interface CompletedStatedRetirementPlanExecution {
@@ -322,6 +343,8 @@ export interface UnavailableStatedRetirementPlanExecution {
   knownInputs?: KnownInput[];
   /** A partner to plan for whose age is not known either, so the form asks for it too. */
   partnerAgeMissing?: true;
+  /** What Linc would assume about taxes and coverage, so the form can ask for those too. */
+  taxesAndHealthcare?: TaxAndHealthcare;
   standInFor?: PresetStandInReason;
 }
 
@@ -521,6 +544,8 @@ interface ResolvedVariant {
   spendingFlexibility?: SpendingFlexibilityResolution;
   /** Why a what-if on when the partner claims could not move them; the case then cannot run as asked. */
   partnerClaimingUnavailable?: string;
+  /** Income tax and health premiums, resolved on this case's ages and partner. */
+  taxesAndHealthcare: { taxes: RetirementTaxResolution; healthcare: HealthcareResolution };
 }
 
 /**
@@ -846,6 +871,19 @@ function resolveVariant(
       timeline: householdTimeline({ currentAge: currentAge!, userPlanThroughAge: lifeExpectancy, partner: planned.plan }),
     }
     : undefined;
+  // Income tax on each year's draws and income, and health premiums from the
+  // first withdrawal: how the savings are held, the state's rate and the
+  // coverage before Medicare, from this decision, then Your numbers, then
+  // named defaults.
+  const taxesAndHealthcare = snapshotTaxAndHealthcare(snapshot, {
+    total: investableAssets,
+    partner: knownPartner ?? null,
+    preMedicareYears: hasPreMedicareYears({
+      currentAge: currentAge!,
+      withdrawalStartAge: retirementAge,
+      ...(planned && { partnerAge: planned.plan.age }),
+    }),
+  });
 
   return {
     request: {
@@ -870,6 +908,7 @@ function resolveVariant(
     userSocialSecurity,
     ...(spendingFlexibility && { spendingFlexibility }),
     ...(partnerClaimingUnavailable && { partnerClaimingUnavailable }),
+    taxesAndHealthcare,
   };
 }
 
@@ -950,6 +989,7 @@ function runInputs(variant: ResolvedVariant): Record<string, unknown> {
   return {
     ...variant.request,
     spendingCut: variant.spendingFlexibility?.kind === 'cut' ? variant.spendingFlexibility.cutShare : null,
+    ...taxAndHealthcareEngineInputs(variant.taxesAndHealthcare),
     ...(variant.household && {
       partner: variant.household.plan,
       married: variant.household.married?.value ?? null,
@@ -985,7 +1025,13 @@ function scenarioId(variant: ResolvedVariant): string {
 function unavailable(
   startedAt: number,
   reason: string,
-  missing?: { prompts: string[]; fields: StatedRetirementPlanField[]; known: KnownInput[]; partnerAgeMissing?: boolean },
+  missing?: {
+    prompts: string[];
+    fields: StatedRetirementPlanField[];
+    known: KnownInput[];
+    partnerAgeMissing?: boolean;
+    taxesAndHealthcare?: TaxAndHealthcare;
+  },
   standInFor?: PresetStandInReason
 ): UnavailableStatedRetirementPlanExecution {
   return {
@@ -1000,6 +1046,7 @@ function unavailable(
       missingFields: missing.fields,
       ...(missing.known.length > 0 && { knownInputs: missing.known }),
       ...(missing.partnerAgeMissing && { partnerAgeMissing: true as const }),
+      ...(missing.taxesAndHealthcare && { taxesAndHealthcare: missing.taxesAndHealthcare }),
     }),
     ...(standInFor && { standInFor }),
   };
@@ -1076,6 +1123,11 @@ function toResult(
         ...(run.spendingFlexibilityComparison && { comparison: run.spendingFlexibilityComparison }),
       },
     }),
+    // Spending, or none in `rates` mode: the first year's costs need a plan.
+    taxesAndHealthcare: {
+      ...variant.taxesAndHealthcare,
+      ...(evaluated && run.firstYearCosts && { firstYearCosts: run.firstYearCosts }),
+    },
     ...(includeAlternatives && run.alternatives.length > 0 && {
       alternatives: run.alternatives.map((alternative) => ({
         id: alternative.id,
@@ -1132,6 +1184,8 @@ export async function runStatedRetirementPlan(
           fields: variant.missingFields,
           known: variant.known,
           partnerAgeMissing: partnerAgeMissing(snapshot.statedPartner, snapshot.statedFigures),
+          // Before the ages are known, coverage before Medicare may matter.
+          taxesAndHealthcare: snapshotTaxAndHealthcare(snapshot, { preMedicareYears: true }),
         },
         standInFor
       );
@@ -1160,6 +1214,7 @@ export async function runStatedRetirementPlan(
         ...(index === 0 && flexibility.spendingFlexibilityComparison && {
           spendingFlexibilityComparison: flexibility.spendingFlexibilityComparison,
         }),
+        ...taxAndHealthcareEngineInputs(variant.taxesAndHealthcare),
       });
       const peer = variants[index === 0 ? 1 : 0];
       scenarios.push(toResult(variant, variantLabel(variant, peer), run, index === 0));
@@ -1284,6 +1339,16 @@ export function statedRetirementPlanCanonicalFacts(execution: StatedRetirementPl
         add(row.input ? 'scenario_input' : 'scenario_calculation', row.suffix, row.label, row.value, row.unit);
       }
     }
+    // How the savings are taxed and what coverage costs, and both in the
+    // first year of withdrawals.
+    const costs = scenario.taxesAndHealthcare;
+    if (costs) {
+      for (const row of taxAndHealthcareFactRows(costs, costs.firstYearCosts)) {
+        add(row.result ? 'scenario_calculation' : 'scenario_input', row.suffix, row.label, row.value, row.unit);
+      }
+    }
+    const counted = Boolean(costs?.taxes || costs?.healthcare?.kind === 'counted');
+    const beforeCosts = counted ? ', before income tax and health premiums' : '';
     const mix = `${scenario.allocation.label} preset`;
     add('scenario_input', 'us_stock_share', `${mix} share in US stocks`, scenario.allocation.usEquityPercent, 'percent');
     add('scenario_input', 'bond_share', `${mix} share in bonds`, scenario.allocation.bondsPercent, 'percent');
@@ -1295,7 +1360,15 @@ export function statedRetirementPlanCanonicalFacts(execution: StatedRetirementPl
       add('scenario_calculation', 'historical_survival_rate', 'Share of tested historical sequences in which the money lasted', asPercent(outcome.survivalRate), 'percent');
       add('scenario_calculation', 'historical_sequences_survived', 'Historical sequences in which the money lasted', outcome.sequencesSurvived, 'count');
       add('scenario_calculation', 'median_portfolio_at_retirement', 'Median portfolio at retirement across those sequences, in today\'s dollars', roundMoney(outcome.projectedPortfolioAtRetirement), 'usd');
-      add('scenario_calculation', 'first_year_portfolio_withdrawal', 'Spending the portfolio itself covers in the first year of retirement', roundMoney(outcome.firstYearPortfolioWithdrawal), 'usd');
+      add(
+        'scenario_calculation',
+        'first_year_portfolio_withdrawal',
+        counted
+          ? 'Withdrawn from the portfolio in the first year of retirement, tax and premiums included'
+          : 'Spending the portfolio itself covers in the first year of retirement',
+        roundMoney(outcome.firstYearPortfolioWithdrawal),
+        'usd'
+      );
       add('scenario_calculation', 'first_year_withdrawal_rate', 'First-year withdrawal rate from the median portfolio', asPercent(outcome.firstYearWithdrawalRate), 'percent');
       for (const percentile of ['p10', 'p25', 'p50'] as const) {
         add(
@@ -1308,8 +1381,8 @@ export function statedRetirementPlanCanonicalFacts(execution: StatedRetirementPl
       }
     }
     if (scenario.sustainableSpending) {
-      add('scenario_calculation', 'sustainable_spending_p10', 'Annual spending this mix sustained in the 10th-percentile sequence, in today\'s dollars', roundMoney(scenario.sustainableSpending.p10), 'usd');
-      add('scenario_calculation', 'sustainable_spending_p50', 'Annual spending this mix sustained in the median sequence, in today\'s dollars', roundMoney(scenario.sustainableSpending.p50), 'usd');
+      add('scenario_calculation', 'sustainable_spending_p10', `Annual spending this mix sustained in the 10th-percentile sequence, in today's dollars${beforeCosts}`, roundMoney(scenario.sustainableSpending.p10), 'usd');
+      add('scenario_calculation', 'sustainable_spending_p50', `Annual spending this mix sustained in the median sequence, in today's dollars${beforeCosts}`, roundMoney(scenario.sustainableSpending.p50), 'usd');
     }
     for (const alternative of scenario.alternatives ?? []) {
       const altPrefix = `alternative_${factId(alternative.id)}`;
@@ -1570,12 +1643,26 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
     : `no investment holdings are linked, so this ran the ${primary.allocation.label} preset ` +
       `(${primary.allocation.description}) rather than what you hold`;
 
+  // Income tax and premiums: the rules and inputs, what they cost in the
+  // first year, and what Linc had to assume. A run recorded before taxes
+  // says they were not modeled.
+  const costs = primary.taxesAndHealthcare;
+  const taxClause = describeTaxes(costs?.taxes, inputs.retirementAge);
+  const healthClause = describeHealthcare(costs?.healthcare);
+  const costClauses = [taxClause, healthClause].filter(Boolean).join('; ');
+  const taxNotice = costs
+    ? ` It counts ${costClauses}.${describeFirstYearCosts(costs.firstYearCosts, costs)}` +
+      (primary.mode === 'rates' && taxClause ? ' The amounts the mix sustained are before tax and premiums.' : '')
+    : '';
+  const notModeled = costs ? 'Fund fees are not modeled.' : 'Fund fees, taxes and account types are not modeled.';
+  const asks = costs ? describeTaxAndHealthcareAsks(costs) : '';
+
   return `Plan assumptions: ${standIn}, against every overlapping ` +
     `${primary.history.horizonYears}-year stretch of US market returns and inflation that began between ` +
     `${readableMonth(primary.history.firstStartMonth)} and ${readableMonth(primary.history.lastStartMonth)}.` +
     `${comparison}${retirementAgeNotice}${spendingNotice}${socialSecurity}${claimingNotice}${pension}${bridge}${saving}${horizon}${household}${mixDefault}${spendingCut}` +
-    `${assetsNotice}${ageNotice}${savedNotice}${comparisonNotice} ` +
-    'Fund fees, taxes and account types are not modeled. Change any of these and I will re-run it.';
+    `${taxNotice}${assetsNotice}${ageNotice}${savedNotice}${comparisonNotice} ` +
+    `${notModeled} Change any of these and I will re-run it.${asks}`;
 }
 
 /**
@@ -1698,17 +1785,23 @@ const STATED_RETIREMENT_PLAN_INPUT_REQUEST: InputRequestSpec = {
 export function statedRetirementPlanInputRequest(execution: StatedRetirementPlanExecution): InputRequest | null {
   // A plan that ran without the partner asks for their age alone; one that
   // could not count spousal or survivor benefits asks whether they are married.
+  // Then one whose taxes or coverage were assumed asks for those.
   if (execution.status === 'completed') {
     const primary = execution.scenarios[0];
     return householdInputRequest(
       primary?.missingPartnerAge ? { missingAge: true } : primary?.household,
       STATED_RETIREMENT_PLAN_CALCULATOR_ID,
       STATED_RETIREMENT_PLAN_INPUT_REQUEST.question
-    );
+    ) ?? (primary?.taxesAndHealthcare
+      ? taxAndHealthcareInputRequest(primary.taxesAndHealthcare, STATED_RETIREMENT_PLAN_CALCULATOR_ID, STATED_RETIREMENT_PLAN_INPUT_REQUEST.question)
+      : null);
   }
   if (!execution.missingFields?.length) return null;
+  const withPartner = execution.partnerAgeMissing
+    ? withPartnerAgeField(STATED_RETIREMENT_PLAN_INPUT_REQUEST)
+    : STATED_RETIREMENT_PLAN_INPUT_REQUEST;
   const request = buildInputRequest(
-    execution.partnerAgeMissing ? withPartnerAgeField(STATED_RETIREMENT_PLAN_INPUT_REQUEST) : STATED_RETIREMENT_PLAN_INPUT_REQUEST,
+    execution.taxesAndHealthcare ? withTaxAndHealthcareFields(withPartner, execution.taxesAndHealthcare) : withPartner,
     execution.missingFields,
     execution.knownInputs
   );
@@ -1762,6 +1855,7 @@ export function statedRetirementPlanSavableFigures(execution: StatedRetirementPl
     ...(savableSpendingCut(primary.spendingFlexibility?.resolution) !== undefined
       ? [{ key: 'spendingCutPercent' as const, value: savableSpendingCut(primary.spendingFlexibility?.resolution)! }]
       : []),
+    ...savableTaxAndHealthcareFigures(primary.taxesAndHealthcare),
   ];
 }
 

@@ -83,6 +83,10 @@ The page has a "Your partner" section: `partnerAge`, `partnerMarried` (`married`
 
 "Use these next time?" offers the partner's figures the user stated in this decision, from the stated plan or Coast FIRE (`partnerSavableFigures`), and whether they are married when the user said. A benefit moved to another claiming age is offered as paid there, with that age.
 
+## Taxes
+
+When a plan counts income tax (`docs/RETIREMENT_TAXES.md`), a married couple files jointly while both are alive. An unmarried couple files two single returns, each on half the household's income, and so does a couple whose marriage nobody has stated, since it is never assumed. Whoever outlives the other files single, each partner's health premiums stop with them, and required distributions follow the survivor. The engine takes each person's age and planning age as `RetirementAnalysisInput.people`.
+
 ## Not yet
 
 - **A pension's survivor share.** A joint-and-survivor pension keeps paying part of itself to the survivor. A pension stops with its holder here.
