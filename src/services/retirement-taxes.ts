@@ -167,25 +167,37 @@ type Shares = RetirementTaxes['accounts'];
  */
 function statedShares(split: StatedAccountSplit | undefined, total: number | undefined): { shares: Shares; unsaid: number } | undefined {
   if (!split) return undefined;
-  const fromParts = (parts: Partial<Shares>, whole: number | undefined) => {
+  const fromParts = (parts: Partial<Shares>, whole: number | undefined, remainderIsStated: boolean) => {
     const said = (parts.taxable ?? 0) + (parts.pretax ?? 0) + (parts.roth ?? 0);
     if (!(said > 0)) return undefined;
     // Amounts that come to more than the plan's total describe the split, not
     // a second portfolio: read them as proportions of what was said.
     const base = whole !== undefined && whole > said ? whole : said;
-    const unsaid = (base - said) / base;
+    const unsaid = remainderIsStated ? 0 : (base - said) / base;
+    const remainder = (base - said) / base;
     return {
       shares: {
         taxable: (parts.taxable ?? 0) / base,
-        pretax: (parts.pretax ?? 0) / base + unsaid,
+        pretax: (parts.pretax ?? 0) / base + remainder,
         roth: (parts.roth ?? 0) / base,
       },
       unsaid,
     };
   };
-  const amounts = fromParts({ taxable: split.taxableAmount, pretax: split.pretaxAmount, roth: split.rothAmount }, total);
+  const amounts = fromParts(
+    { taxable: split.taxableAmount, pretax: split.pretaxAmount, roth: split.rothAmount },
+    total,
+    // Dollar amounts against a larger total leave an unplaced share assumed pre-tax.
+    false
+  );
   if (amounts) return amounts;
-  return fromParts({ taxable: split.taxablePercent, pretax: split.pretaxPercent, roth: split.rothPercent }, 100);
+  // Percents match the form and Your numbers: Roth and taxable are what the
+  // user placed, and the rest is pre-tax by statement, not assumption.
+  return fromParts(
+    { taxable: split.taxablePercent, pretax: split.pretaxPercent, roth: split.rothPercent },
+    100,
+    true
+  );
 }
 
 function savedShares(statedFigures: StatedFigures | undefined): { shares: Shares; unsaid: number; savedAt: string } | undefined {
@@ -219,11 +231,27 @@ export function resolveAccountMix(args: {
     ? args.linked.taxable + args.linked.pretax + args.linked.roth + args.linked.unknown
     : 0;
   const stated = statedShares(args.stated, linkedTotal > 0 ? linkedTotal : args.total);
-  const saved = stated ? undefined : savedShares(args.statedFigures);
-  const fill = stated ?? saved;
+  const saved = savedShares(args.statedFigures);
+  // A partial stated dollar split (unsaid > 0) still outranks a blank, but
+  // fills what was not placed from Your numbers rather than wiping a complete
+  // saved split for an assumed all-pre-tax remainder.
+  let fill = stated;
+  if (stated && stated.unsaid > 0 && saved) {
+    const u = stated.unsaid;
+    fill = {
+      shares: {
+        taxable: stated.shares.taxable + u * saved.shares.taxable,
+        pretax: stated.shares.pretax - u + u * saved.shares.pretax,
+        roth: stated.shares.roth + u * saved.shares.roth,
+      },
+      unsaid: 0,
+    };
+  } else if (!stated) {
+    fill = saved;
+  }
   const fillOrigin: Exclude<AccountMixOrigin, 'linked'> = stated ? 'stated' : saved ? 'saved' : 'assumed';
   const fillShares: Shares = fill?.shares ?? { taxable: 0, pretax: 1, roth: 0 };
-  const savedAt = saved?.savedAt;
+  const savedAt = (!stated || stated.unsaid > 0) ? saved?.savedAt : undefined;
 
   if (args.linked && linkedTotal > 0) {
     const mix = args.linked;

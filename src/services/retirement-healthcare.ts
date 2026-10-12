@@ -69,7 +69,14 @@ export function resolveHealthcare(args: {
 }): HealthcareResolution {
   const savedInSpending = savedChoice(args.statedFigures, 'healthcareInSpending');
   if (args.stated?.inSpending === true) return { kind: 'included', origin: 'stated' };
-  if (args.stated?.inSpending === undefined && savedInSpending?.value === 'included') {
+  // Your numbers "included" only skips the premium line when this decision
+  // did not name coverage or a premium — those statements outrank the save.
+  if (
+    args.stated?.inSpending === undefined &&
+    savedInSpending?.value === 'included' &&
+    !isCoverage(args.stated?.coverage) &&
+    args.stated?.annualPremium === undefined
+  ) {
     return { kind: 'included', origin: 'saved', savedAt: savedInSpending.savedAt };
   }
   const inSpendingOrigin: FigureOrigin = args.stated?.inSpending === false

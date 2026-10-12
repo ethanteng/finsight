@@ -137,8 +137,20 @@ export function buildSaveOffer(
     if (!(STATED_FIGURE_KEYS as readonly string[]).includes(key)) continue;
     const accepted = acceptedFigureValue(key, value);
     // A stated zero (no pension, nothing saved yearly) is what a blank already
-    // means, so it is not worth a line of its own.
-    if (accepted === undefined || accepted === 0 || snapshot.statedFigures?.[key]?.value === accepted) continue;
+    // means for most plan figures. Tax and premium zeros are different: 0%
+    // state tax, 0% Roth, or a $0 stated premium are answers that stop the
+    // next run from assuming otherwise.
+    const zeroIsMeaningful = key === 'rothSavingsPercent' ||
+      key === 'taxableSavingsPercent' ||
+      key === 'stateIncomeTaxPercent' ||
+      key === 'preMedicareAnnualPremium';
+    if (
+      accepted === undefined ||
+      (accepted === 0 && !zeroIsMeaningful) ||
+      snapshot.statedFigures?.[key]?.value === accepted
+    ) {
+      continue;
+    }
     items.push({ key, label: LABELS[key], value: accepted, display: display(key, accepted) });
   }
   // One order whatever the calculator: the plan, then the balance.

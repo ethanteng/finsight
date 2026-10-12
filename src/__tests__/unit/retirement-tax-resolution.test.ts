@@ -95,6 +95,28 @@ describe('account mix', () => {
     expect(savableAccountSplit(resolution)).toEqual({ rothSavingsPercent: 20, taxableSavingsPercent: 10 });
   });
 
+  it('treats a percent split\'s blank remainder as stated pre-tax, like Your numbers', () => {
+    const resolution = resolveAccountMix({ stated: { rothPercent: 20 } });
+    expect(resolution.shares).toEqual({ taxable: 0, pretax: 0.8, roth: 0.2 });
+    expect(resolution.assumedPretaxShare).toBe(0);
+    expect(savableAccountSplit(resolution)).toEqual({ rothSavingsPercent: 20, taxableSavingsPercent: 0 });
+  });
+
+  it('fills an incomplete stated dollar split from Your numbers instead of assuming the rest is pre-tax', () => {
+    const figures: StatedFigures = { rothSavingsPercent: saved(20), taxableSavingsPercent: saved(30) };
+    const resolution = resolveAccountMix({
+      stated: { rothAmount: 100_000 },
+      total: 500_000,
+      statedFigures: figures,
+    });
+    expect(resolution.origin).toBe('stated');
+    expect(resolution.assumedPretaxShare).toBe(0);
+    // $100k Roth placed; the other $400k follows the saved 30/50/20 split.
+    expect(resolution.shares.roth).toBeCloseTo(0.2 + 0.8 * 0.2);
+    expect(resolution.shares.taxable).toBeCloseTo(0.8 * 0.3);
+    expect(resolution.shares.pretax).toBeCloseTo(0.8 * 0.5);
+  });
+
   it('falls back to Your numbers, then to all pre-tax', () => {
     const figures: StatedFigures = { rothSavingsPercent: saved(30) };
     const fromSaved = resolveAccountMix({ statedFigures: figures });
@@ -134,6 +156,19 @@ describe('healthcare', () => {
     expect(resolveHealthcare({ stated: { inSpending: true }, preMedicareYears: true })).toEqual({ kind: 'included', origin: 'stated' });
     expect(resolveHealthcare({ statedFigures: { healthcareInSpending: saved('included') }, preMedicareYears: true }))
       .toMatchObject({ kind: 'included', origin: 'saved' });
+  });
+
+  it('lets a decision-level coverage statement outrank a saved "spending includes healthcare"', () => {
+    expect(resolveHealthcare({
+      stated: { coverage: 'cobra', annualPremium: 4_000 },
+      statedFigures: { healthcareInSpending: saved('included') },
+      preMedicareYears: true,
+    })).toMatchObject({
+      kind: 'counted',
+      healthcare: { coverage: 'cobra', annualPremium: 4_000 },
+      coverageOrigin: 'stated',
+      premiumOrigin: 'stated',
+    });
   });
 
   it('assumes a marketplace plan on top of spending until told otherwise', () => {

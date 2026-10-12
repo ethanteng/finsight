@@ -49,6 +49,8 @@ import {
   describeRetirementAssumptions,
   retirementHouseholdRequest,
 } from './retirement-assumptions';
+import { buildSaveOffer } from './save-offer';
+import { savableTaxAndHealthcareFigures } from './tax-healthcare-evidence';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
 import { recordLlmAnalysisFailure } from '../observability/llm-metrics';
@@ -871,7 +873,20 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   }
   // A calculation that ran on figures the user stated offers to keep them for
   // the next decision. Only the offer: nothing is saved without their click.
-  const saveOffer = scenarioCalculatorRegistry.saveOffer(scenarioExecutions, snapshot);
+  // Scenario calculators first; the holdings projection is not one of them, so
+  // its stated tax and health figures are offered here when nothing else is.
+  const saveOffer = scenarioCalculatorRegistry.saveOffer(scenarioExecutions, snapshot) ?? (
+    plannedQuestionNeeds.needsRetirement && snapshot.retirementAnalysis
+      ? buildSaveOffer(
+        RETIREMENT_CALCULATOR_ID,
+        savableTaxAndHealthcareFigures({
+          taxes: snapshot.retirementAnalysis._taxes,
+          healthcare: snapshot.retirementAnalysis._healthcare,
+        }),
+        snapshot
+      )
+      : null
+  );
   if (saveOffer) {
     structuredResponse = { ...structuredResponse, save_offer: saveOffer };
   }
