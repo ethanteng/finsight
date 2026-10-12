@@ -179,6 +179,14 @@ const PARTNER_FIELDS: InputFieldSpec[] = [
     sentence: 'My partner expects {value} a year from Social Security, in today\'s dollars.',
   },
   {
+    id: 'partnerSocialSecurityStartAge',
+    label: 'Their age when they claim it',
+    kind: 'age',
+    ...bounds('partnerSocialSecurityStartAge'),
+    sentence: 'My partner claims Social Security at {value}.',
+    defaultNote: `${DEFAULT_SOCIAL_SECURITY_START_AGE} if left blank`,
+  },
+  {
     id: 'survivorAnnualSpending',
     label: 'What one of you would spend a year alone',
     kind: 'usd_per_year',
@@ -190,11 +198,21 @@ const PARTNER_FIELDS: InputFieldSpec[] = [
 
 /* ---- Taxes and health coverage ----------------------------------- */
 
+const PREMIUM_FIELD: InputFieldSpec = {
+  id: 'preMedicareAnnualPremium',
+  label: 'What that coverage costs a year per person',
+  kind: 'usd_per_year',
+  ...bounds('preMedicareAnnualPremium'),
+  sentence: 'That health coverage costs {value} a year per person before Medicare.',
+  defaultNote: 'If left blank, I price the coverage you chose',
+};
+
 const TAX_AND_HEALTH_FIELDS: InputFieldSpec[] = [
   ROTH_FIELD,
   TAXABLE_FIELD,
   STATE_FIELD,
   COVERAGE_FIELD,
+  PREMIUM_FIELD,
   IN_SPENDING_FIELD,
 ];
 

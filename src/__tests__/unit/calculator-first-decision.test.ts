@@ -469,7 +469,8 @@ describe('seedFirstDecisionFromLead', () => {
     expect(stored.input_request.question).toBe('Can I retire at 60?');
     expect(stored.input_request.fields.every((field) => field.required === false)).toBe(true);
     expect(stored.input_request.fields.map((field) => field.id)).toEqual(expect.arrayContaining([
-      'pensionAnnual', 'partnerAge', 'rothSavingsPercent', 'preMedicareCoverage',
+      'pensionAnnual', 'partnerAge', 'partnerSocialSecurityStartAge',
+      'rothSavingsPercent', 'preMedicareCoverage', 'preMedicareAnnualPremium',
     ]));
   });
 

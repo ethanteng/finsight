@@ -100,6 +100,22 @@ describe('planDetailsInputRequest', () => {
   });
 
   /*
+   * Partner Social Security without a claim age defaults to 67, and coverage
+   * without a premium prices employer/spouse plans as $0. Both figures are
+   * supported inputs; asking for the amount or coverage type alone is not enough.
+   */
+  it('asks when a partner claims Social Security, and what coverage costs', () => {
+    const fields = ids(planDetailsInputRequest({ kind: 'retirement', lead: retirementLead() }));
+    expect(fields).toEqual(expect.arrayContaining([
+      'partnerSocialSecurityAnnual', 'partnerSocialSecurityStartAge',
+      'preMedicareCoverage', 'preMedicareAnnualPremium',
+    ]));
+    const claimAge = planDetailsInputRequest({ kind: 'retirement', lead: retirementLead() })
+      .fields.find((field) => field.id === 'partnerSocialSecurityStartAge');
+    expect(claimAge?.sentence).toBe('My partner claims Social Security at {value}.');
+  });
+
+  /*
    * One figure that may be Social Security, a pension, or both: asking for
    * either beside it would count the same dollars twice, so only its timing
    * is asked, with the amount named in the sentence.
