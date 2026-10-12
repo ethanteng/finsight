@@ -114,14 +114,18 @@ function accountsClause(resolution: RetirementTaxResolution): string {
     where = accounts.untypedOrigin === 'assumed'
       ? `by your linked accounts' types, counting the ${share(accounts.assumedPretaxShare)} whose account does not say as pre-tax`
       : accounts.untypedOrigin === 'stated'
-        ? 'by your linked accounts\' types, and as you described for the rest'
+        ? accounts.savedAt
+          ? `by your linked accounts' types, as you described and from Your numbers for the rest${savedNote(accounts.savedAt)}`
+          : 'by your linked accounts\' types, and as you described for the rest'
         : accounts.untypedOrigin === 'saved'
           ? `by your linked accounts' types, and as in Your numbers for the rest${savedNote(accounts.savedAt)}`
           : 'by your linked accounts\' types';
   } else if (accounts.origin === 'stated') {
     where = accounts.assumedPretaxShare > 0
       ? `as you described, counting the ${share(accounts.assumedPretaxShare)} you did not place as pre-tax`
-      : 'as you described';
+      : accounts.savedAt
+        ? `as you described, with the rest from Your numbers${savedNote(accounts.savedAt)}`
+        : 'as you described';
   } else {
     where = accounts.savedAt ? `from Your numbers (saved ${savedOn(accounts.savedAt)})` : 'from Your numbers';
   }

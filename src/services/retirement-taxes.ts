@@ -407,7 +407,17 @@ export function resolveRetirementTaxes(args: {
 
 /** The split as Your numbers keeps it, whole percents, when the user stated it in this decision. */
 export function savableAccountSplit(resolution: AccountMixResolution | undefined): { rothSavingsPercent: number; taxableSavingsPercent: number } | undefined {
-  if (!resolution || resolution.origin !== 'stated' || resolution.assumedPretaxShare > 0) return undefined;
+  // A partial dollar split filled from Your numbers keeps origin "stated" and
+  // zero assumedPretaxShare, but savedAt marks the hybrid — do not offer those
+  // blended percents as if the user placed the whole mix.
+  if (
+    !resolution ||
+    resolution.origin !== 'stated' ||
+    resolution.assumedPretaxShare > 0 ||
+    resolution.savedAt
+  ) {
+    return undefined;
+  }
   return {
     rothSavingsPercent: Math.round(resolution.shares.roth * 100),
     taxableSavingsPercent: Math.round(resolution.shares.taxable * 100),
