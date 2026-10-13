@@ -5,7 +5,7 @@ import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetSt
 import { TeaserVideo } from '@/components/marketing/TeaserVideo';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
 import { TRIAL_CTA_MICROCOPY } from '@/components/marketing/trial-copy';
-import CashFlowSampleCapture from '@/components/marketing/CashFlowSampleCapture';
+import CashFlowQuickCheck from '@/components/marketing/CashFlowQuickCheck';
 import { CASH_FLOW_SIGNUP_HREF } from '@/lib/cash-flow-signup';
 import { buildMarketingMetadata } from '@/lib/seo';
 
@@ -164,8 +164,8 @@ export default function CashFlowForecastPage() {
         </div>
       </section>
 
-      <section className="cash-flow-sample-section shell" aria-label="Get a sample forecast by email">
-        <CashFlowSampleCapture />
+      <section className="cash-flow-quick-check-section shell" aria-label="Try a quick cash flow check">
+        <CashFlowQuickCheck />
       </section>
 
       <section className="case-context dark-band">

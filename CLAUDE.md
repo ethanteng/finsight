@@ -139,7 +139,7 @@ The holdings-based projection also counts what goes in each year until withdrawa
 
 ### Marketing list membership
 
-Four paths put an address in MailerLite, and they are not interchangeable.
+Three paths put an address in MailerLite, and they are not interchangeable.
 `mailerlite-sync` re-posts the entire user table into `MAILER_LITE_GROUP_ID`
 nightly. The two calculator `email-results` endpoints subscribe a visitor who
 asked for results by email, into that calculator's group, with the run's
@@ -154,13 +154,12 @@ lead token names the calculator, and a click-through from the page declares it
 in `signupOrigin`, which the server allowlists and a resolved lead outranks.
 The cash-flow forecast page tags its buttons the same way
 (`source=cash-flow-forecast`, origin `cash_flow_forecast`) and has no run to
-hand over. Its "email me a sample forecast" form posts to
-`/api/cash-flow-forecast/sample-request`, which puts a visitor without an
-account into `MAILER_LITE_CASH_FLOW_GROUP_ID`; joining it starts that page's
-no-trial sequence, whose first email is the sample. Unlike the others it stores
-nothing of its own, so it waits for MailerLite and answers 503 when the address
-did not land. Paid checkouts are left to the nightly sync. Every other path
-runs after the response and cannot fail or delay the request it follows.
+hand over. It asks for no address before signup: a visitor not ready to connect
+an account is offered TryCoast's cash flow check (`https://trycoast.me/#cash`,
+a separate site, in a new tab) instead, so `MAILER_LITE_CASH_FLOW_GROUP_ID`
+holds only signups that continued from the page. Paid checkouts are left to the
+nightly sync. Every path runs after the response and cannot fail or delay the
+request it follows.
 
 Signup and calculator-lead attribution come from the visitor's landing, not the
 page the form is on: `frontend/src/lib/landing-attribution.ts` remembers the

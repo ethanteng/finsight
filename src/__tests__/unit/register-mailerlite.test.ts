@@ -131,11 +131,6 @@ describe('registration and the marketing list', () => {
     expect(subscribedGroups()).toEqual(['trial-group', 'coast-fire-group']);
   });
 
-  /*
-   * Joining the cash-flow group alongside the trial one is what moves someone
-   * who asked for the sample forecast out of its no-trial sequence and into
-   * the trial one.
-   */
   it('adds the cash-flow group for a signup continuing from the forecast page', async () => {
     await register({ signupOrigin: 'cash_flow_forecast' });
     await settle();

@@ -112,10 +112,9 @@ export function trialGroupIds(): string[] {
 }
 
 /**
- * The group a visitor joins when they ask the cash-flow forecast page for a
- * sample forecast by email. Like the calculator groups, it is for people who
- * have not registered: its no-trial sequence triggers on joining it, and
- * starting a trial moves them to the trial sequence instead.
+ * The cash-flow forecast page's group, joined beside the trial group by a
+ * signup that continued from that page. The page asks for no address before
+ * signup, so nobody joins it without an account.
  */
 export function cashFlowGroupIds(): string[] {
   return groupIdsFrom('MAILER_LITE_CASH_FLOW_GROUP_ID');
