@@ -196,6 +196,19 @@ describe('VisitorCohortPanel', () => {
     expect(await screen.findByText('Unable to build the visitor cohort report')).toBeInTheDocument();
   });
 
+  it('takes the old grid down when the report for new filters fails', async () => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => liveReport })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'Unable to build the visitor cohort report' }) }) as jest.Mock;
+    renderPanel();
+    await screen.findByRole('region', { name: 'What they did' });
+
+    fireEvent.change(screen.getByLabelText('Device'), { target: { value: 'mobile' } });
+
+    expect(await screen.findByText('Unable to build the visitor cohort report')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'What they did' })).not.toBeInTheDocument();
+  });
+
   it('shows a failed request', async () => {
     mockFetch({ error: 'Unable to build the visitor cohort report' }, false);
     renderPanel();

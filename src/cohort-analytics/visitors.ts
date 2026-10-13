@@ -208,6 +208,15 @@ function byActivity(a: Placed, b: Placed): number {
     || a.member.visitorId.localeCompare(b.member.visitorId);
 }
 
+/**
+ * The cohort starts, newest last. `now` is an exclusive cutoff (midnight after
+ * the last complete export day), so the newest cohort is the one holding the
+ * instant just before it, not the empty one that begins at it.
+ */
+export function visitorCohortStarts(now: Date, window: Pick<VisitorWindow, 'cohortGrain' | 'cohortCount'>): Date[] {
+  return cohortStarts(new Date(now.getTime() - 1), window.cohortGrain, window.cohortCount);
+}
+
 export interface VisitorReportInput {
   visitors: Ga4Visitor[];
   window: VisitorWindow;
@@ -224,7 +233,7 @@ export interface VisitorReportInput {
 export function buildVisitorReport(input: VisitorReportInput): VisitorReport {
   const { window, now } = input;
   const nowMs = now.getTime();
-  const starts = cohortStarts(now, window.cohortGrain, window.cohortCount);
+  const starts = visitorCohortStarts(now, window);
   const windowStartMs = starts[0].getTime();
   const excluded: VisitorExclusions = { operatorBrowsers: 0, automatedSessions: 0, seenBeforeWindow: 0 };
   const placed: Placed[] = [];

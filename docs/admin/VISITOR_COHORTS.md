@@ -99,7 +99,9 @@ The mark lives in the browser's local storage (`frontend/src/lib/internal-analyt
 it is per browser and device; a private window or cleared site data loses it until the next
 sign-in. The Visitors tab has a switch to count the browser again, to check tags from it with
 GTM's preview, and to leave it out again. Counting again does not bring it back into this
-report: GA4 already knows it as an operator's.
+report: GA4 already knows it as an operator's, and while it is counted the GTM loader sends
+`internal_browser_marked` on every page load, so a new GA cookie (Safari's expire after 7
+days) is known as an operator's too.
 
 GA4's own reports, and the hidden `/admin/marketing` pages, still include an operator's
 sessions from before the mark; the marketing pages leave out only sessions that opened

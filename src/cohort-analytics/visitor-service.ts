@@ -5,8 +5,7 @@ import {
   type Ga4VisitorLoad,
   type VisitorScan,
 } from '../marketing-analytics/adapters/ga4-visitors';
-import { windowStart } from './engine';
-import { buildVisitorReport, unavailableVisitorReport } from './visitors';
+import { buildVisitorReport, unavailableVisitorReport, visitorCohortStarts } from './visitors';
 import type { VisitorReport, VisitorWindow } from './types';
 
 /**
@@ -56,7 +55,7 @@ export async function getVisitorReport(
   const generatedAt = new Date();
   const reportEnd = visitorReportEnd();
   const now = visitorDataThrough(reportEnd);
-  const scan = { start: windowStart(window, now).toISOString().slice(0, 10), end: reportEnd };
+  const scan = { start: visitorCohortStarts(now, window)[0].toISOString().slice(0, 10), end: reportEnd };
   const load = await cachedLoad(scan, options.fresh ?? false);
   if (load.state !== 'live') return unavailableVisitorReport(window, load.state, load.detail, reportEnd, generatedAt);
   if (load.truncated) {

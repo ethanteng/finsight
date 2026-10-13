@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from 'crypto';
-import { buildVisitorReport, landingFor, VISITOR_MEMBER_LIMIT } from '../../cohort-analytics/visitors';
+import { buildVisitorReport, landingFor, visitorCohortStarts, VISITOR_MEMBER_LIMIT } from '../../cohort-analytics/visitors';
 import {
   buildVisitorQuery,
   loadGa4Visitors,
@@ -156,6 +156,20 @@ describe('visitor cohorts', () => {
     expect(first.size).toBe(VISITOR_MEMBER_LIMIT + 1);
     expect(first.members).toHaveLength(VISITOR_MEMBER_LIMIT);
     expect(first.members[0].visitorId).toBe('v7');
+  });
+
+  it('ends on the last complete day, not the empty one the cutoff begins', () => {
+    // Data through Oct 12: daily cohorts are Oct 10–12, and Oct 12's visitor is in the last one.
+    const daily = report(everyone, { ...weekly, cohortGrain: 'day', periodGrain: 'day', cohortCount: 3 });
+    expect(daily.cohorts.map(row => row.key)).toEqual(['2026-10-10', '2026-10-11', '2026-10-12']);
+    const late = visitor('late', [session('2026-10-12T23:30:00Z')]);
+    const withLate = report([late], { ...weekly, cohortGrain: 'day', periodGrain: 'day', cohortCount: 3 });
+    expect(withLate.cohorts.map(row => row.size)).toEqual([0, 0, 1]);
+    expect(visitorCohortStarts(now, { cohortGrain: 'week', cohortCount: 2 }).map(d => d.toISOString().slice(0, 10)))
+      .toEqual(['2026-10-05', '2026-10-12']);
+    // A cutoff on a Monday ends the weeks on the one just finished.
+    expect(visitorCohortStarts(at('2026-10-12T00:00:00Z'), { cohortGrain: 'week', cohortCount: 1 })[0].toISOString().slice(0, 10))
+      .toBe('2026-10-05');
   });
 
   it('groups landing pages the way the site labels them', () => {

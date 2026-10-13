@@ -353,6 +353,8 @@ export default function VisitorCohortPanel({
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
+        // The last report answered other filters; left up, it would read as this one's answer.
+        setReport(null);
         setError(caught instanceof Error ? caught.message : 'Failed to load the visitor report');
       })
       .finally(() => {
