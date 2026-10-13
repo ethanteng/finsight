@@ -215,7 +215,7 @@ describe('retirement landing page', () => {
     try {
       const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} />);
       fireEvent.submit(container.querySelector('form')!);
-      await screen.findByRole('button', { name: 'Unlock in Ask Linc' });
+      await screen.findByRole('button', { name: 'Unlock deeper analysis' });
 
       const cta = screen.getByRole('link', { name: 'Build my retirement plan' });
       expect(cta).toHaveAttribute('data-cs-override-id', 'cta-start-free-trial-quickplan');

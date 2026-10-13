@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * "Unlock in Ask Linc": the form on the lock beside the result.
+ * "Unlock deeper analysis": the form on the lock beside the result.
  *
  * The page shows the answer. What it locks is everything the formula leaves
  * out, which Ask Linc plans with: the visitor gives an address and the run
@@ -52,6 +52,8 @@ import {
   COAST_FIRE_SIGNUP_HREF,
   storeCoastFireSignupContext,
 } from "@/lib/coast-fire-signup-context";
+
+import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -214,7 +216,7 @@ export function CoastFireEmailCapture({
         <p className="section-kicker">UNLOCK YOUR PLAN</p>
         <h3>Unlock these in Ask Linc</h3>
         <p className="cf-email-lead">
-          New here? Just choose a password, with no code to enter and no credit card.
+          {TRIAL_CTA_MICROCOPY}
         </p>
       </div>
 
@@ -244,7 +246,7 @@ export function CoastFireEmailCapture({
             disabled={status === "sending"}
             data-cs-override-id="coast-fire-email-results"
           >
-            {status === "sending" ? "Saving…" : "Unlock in Ask Linc"}
+            {status === "sending" ? "Saving…" : "Unlock deeper analysis"}
           </button>
         </div>
 

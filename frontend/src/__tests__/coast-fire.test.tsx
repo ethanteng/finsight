@@ -200,8 +200,8 @@ describe("Coast FIRE calculator page", () => {
     expect(screen.getByText("If you add $0")).toBeInTheDocument();
     expect(pushCoastFireCalculated).toHaveBeenCalledWith("reached", 25);
     // Beside it, the locked plan and the way past the lock.
-    expect(screen.getByRole("heading", { name: "Make it your plan." })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Unlock in Ask Linc" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sanity-check your plan." })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unlock deeper analysis" })).toBeInTheDocument();
   });
 
   /*
@@ -241,7 +241,7 @@ describe("Coast FIRE calculator page", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("Enter your retirement savings today");
     expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
-    expect(screen.queryByText("Make it your plan.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sanity-check your plan.")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Could your savings take it from here/ })).toBeInTheDocument();
   });
@@ -259,7 +259,7 @@ describe("Coast FIRE calculator page", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("Annual spending must be $10,000,000 or less.");
     expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
-    expect(screen.queryByText("Make it your plan.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sanity-check your plan.")).not.toBeInTheDocument();
   });
 
   /* The kicker generalises with the list under it. */
@@ -489,7 +489,7 @@ describe("Coast FIRE calculator page", () => {
       fireEvent.submit(container.querySelector("form")!);
 
       expect(screen.getByLabelText("Email address")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Unlock in Ask Linc" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Unlock deeper analysis" })).toBeInTheDocument();
     });
 
     /*
@@ -541,7 +541,7 @@ describe("Coast FIRE calculator page", () => {
 
       expect(await screen.findByRole("alert")).toHaveTextContent(/could not save your result/i);
       expect(screen.getByText("$369,128")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Unlock in Ask Linc" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Unlock deeper analysis" })).toBeEnabled();
       expect(jest.mocked(leaveForSignup)).not.toHaveBeenCalled();
     });
 
@@ -621,7 +621,7 @@ describe("Coast FIRE calculator page", () => {
       fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
 
       expect(await screen.findByRole("alert")).toHaveTextContent("Enter a valid email address.");
-      expect(screen.getByRole("button", { name: "Unlock in Ask Linc" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Unlock deeper analysis" })).toBeEnabled();
       expect(pushCoastFireResultsEmailed).not.toHaveBeenCalled();
     });
 

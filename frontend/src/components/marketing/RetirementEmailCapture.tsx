@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * "Unlock in Ask Linc": the form on the lock beside the verdict.
+ * "Unlock deeper analysis": the form on the lock beside the verdict.
  *
  * The page shows the answer. What it locks is everything the six numbers
  * leave out, which Ask Linc plans with: the visitor gives an address and the
@@ -54,6 +54,8 @@ import {
   storeRetirementSignupContext,
   type RetirementSignupInputs,
 } from "@/lib/retirement-signup-context";
+
+import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -227,7 +229,7 @@ export function RetirementEmailCapture({
         <p className="section-kicker">UNLOCK YOUR PLAN</p>
         <h3>Unlock these in Ask Linc</h3>
         <p className="qp-email-lead">
-          New here? Just choose a password, with no code to enter and no credit card.
+          {TRIAL_CTA_MICROCOPY}
         </p>
       </div>
 
@@ -257,7 +259,7 @@ export function RetirementEmailCapture({
             disabled={status === "sending"}
             data-cs-override-id="quickplan-email-results"
           >
-            {status === "sending" ? "Saving…" : "Unlock in Ask Linc"}
+            {status === "sending" ? "Saving…" : "Unlock deeper analysis"}
           </button>
         </div>
 
