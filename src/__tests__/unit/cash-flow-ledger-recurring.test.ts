@@ -247,6 +247,24 @@ describe('detectRecurringStreams', () => {
     ]);
   });
 
+  it('lists beside two running subscriptions only the ended ones that ran alongside them', () => {
+    const months = ['06', '07', '08', '09'];
+    const running = months.flatMap(month => [
+      entry(`2026-${month}-03`, 9.99, 'apple'),
+      entry(`2026-${month}-18`, 2.99, 'apple'),
+    ]);
+    // Cancelled in July, having run beside them since June: a stopped item.
+    const cancelled = ['2026-05-25', '2026-06-25', '2026-07-25'].map(date => entry(date, 0.99, 'apple'));
+    // A weekly charge that ended in March, before either began: what they replaced.
+    const replaced = ['2026-02-02', '2026-02-09', '2026-02-16', '2026-02-23', '2026-03-02'].map(date => entry(date, 4.99, 'apple'));
+    const streams = detectRecurringStreams([...running, ...cancelled, ...replaced], '2026-09-30');
+    expect(streams.map(stream => [stream.id, stream.status])).toEqual([
+      ['spending:apple#999', 'active'],
+      ['spending:apple#299', 'active'],
+      ['spending:apple#99', 'lapsed'],
+    ]);
+  });
+
   it('keeps two subscriptions apart that round to the same dollar', () => {
     const months = ['06', '07', '08', '09'];
     const charges = months.flatMap(month => [

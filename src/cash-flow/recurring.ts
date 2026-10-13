@@ -261,6 +261,11 @@ function scheduledRuns(
   return kept.map(({ run, stream }) => ({ ...stream, id: idFor(run.slice(-3)) }));
 }
 
+/** Whether two streams' histories overlap: neither ended before the other began. */
+function overlaps(left: RecurringStream, right: RecurringStream): boolean {
+  return left.firstDate <= right.lastDate && right.firstDate <= left.lastDate;
+}
+
 /**
  * Whether two or more streams are running side by side: their date ranges
  * overlap (so one did not simply end before the next began), and none posts on
@@ -270,9 +275,7 @@ function runsOnDaysOfTheirOwn(runs: readonly RecurringStream[], entries: readonl
   if (runs.length < 2) return false;
   for (let index = 0; index < runs.length; index += 1) {
     for (let other = index + 1; other < runs.length; other += 1) {
-      if (runs[index].firstDate > runs[other].lastDate || runs[other].firstDate > runs[index].lastDate) {
-        return false;
-      }
+      if (!overlaps(runs[index], runs[other])) return false;
     }
   }
   const dateOf = new Map(entries.map(entry => [entry.id, entry.date]));
@@ -291,7 +294,7 @@ function runsOnDaysOfTheirOwn(runs: readonly RecurringStream[], entries: readonl
 function latestAmountRuns(runs: readonly RecurringStream[]): RecurringStream[] {
   if (runs.length <= 1) return [...runs];
   const latest = runs.reduce((best, run) => (run.lastDate >= best.lastDate ? run : best));
-  return runs.filter(run => run.firstDate <= latest.lastDate && latest.firstDate <= run.lastDate);
+  return runs.filter(run => overlaps(run, latest));
 }
 
 function evaluateGroup(
@@ -376,12 +379,16 @@ export function detectRecurringStreams(
       const id = streamId(group.flow, group.key, parts.length > 1 ? part[0].accountId : undefined);
       const whole = evaluateGroup(id, group.flow, group.key, part, dataThrough);
       const runs = scheduledRuns(id, group.flow, group.key, part, dataThrough);
-      const sideBySide = runsOnDaysOfTheirOwn(runs.filter(run => run.status === 'active'), part);
+      const active = runs.filter(run => run.status === 'active');
+      const sideBySide = runsOnDaysOfTheirOwn(active, part);
       // Side-by-side runs replace the whole payee; a raise (one run ended, another
       // began) or a same-day split keeps the whole stream when it still schedules.
       // When the whole payee does not, only the latest amount's run stands in —
-      // not also the ended one as a stopped item beside it.
-      if (sideBySide) streams.push(...runs);
+      // not also the ended one as a stopped item beside it. Beside running ones,
+      // an ended run is listed only if it ran alongside them, as a cancelled
+      // subscription did; one that ended before they began was what they replaced,
+      // and kept as a stopped item it would count twice.
+      if (sideBySide) streams.push(...runs.filter(run => run.status === 'active' || active.some(other => overlaps(run, other))));
       else if (whole) streams.push(whole);
       else streams.push(...latestAmountRuns(runs));
     }
