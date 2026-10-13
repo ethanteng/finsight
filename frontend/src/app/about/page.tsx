@@ -4,12 +4,12 @@ import Link from 'next/link';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
 
 export const metadata: Metadata = {
-  title: 'About Ask Linc | Why We Built a Financial Planning Assistant',
-  description: 'Ask Linc was built to help people answer financial questions using their own accounts and check the work behind each answer.',
+  title: 'About Ask Linc | Why I Built a Financial Planning Assistant',
+  description: 'Why Ethan Teng built Ask Linc, and its one rule: the AI never does the math. A calculation engine runs the numbers, and every answer shows its work.',
   alternates: { canonical: 'https://asklinc.com/about' },
   openGraph: {
-    title: 'About Ask Linc | Why We Built a Financial Planning Assistant',
-    description: 'Financial planning that starts with the decision you are trying to make.',
+    title: 'About Ask Linc | Why I Built a Financial Planning Assistant',
+    description: 'Ask Linc has one rule: the AI never does the math.',
     type: 'website',
     url: 'https://asklinc.com/about',
     siteName: 'Ask Linc',
@@ -17,8 +17,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'About Ask Linc | Why We Built a Financial Planning Assistant',
-    description: 'Financial planning that starts with the decision you are trying to make.',
+    title: 'About Ask Linc | Why I Built a Financial Planning Assistant',
+    description: 'Ask Linc has one rule: the AI never does the math.',
     images: ['https://asklinc.com/og-image.jpg'],
   },
   robots: { index: true, follow: true },
@@ -30,10 +30,10 @@ export default function AboutPage() {
       <SiteHeader />
       <section className="subhero shell about-hero">
         <div>
-          <p className="section-kicker">WHY ASK LINC EXISTS</p>
-          <h1>I needed to answer <em>one hard money question.</em></h1>
+          <p className="section-kicker">ABOUT ASK LINC</p>
+          <h1>Before you trust Ask&nbsp;Linc, <em>you should know who built it.</em></h1>
         </div>
-        <p className="about-lede">I wanted to understand what I could afford, how long my savings would last, and which assumptions the answer depended on.</p>
+        <p className="about-lede">I’m Ethan Teng. Here’s why I built it, and the one rule it follows.</p>
       </section>
 
       <section className="founder-origin shell">
@@ -45,38 +45,29 @@ export default function AboutPage() {
             <a className="founder-linkedin" href="https://www.linkedin.com/in/ethanteng/" target="_blank" rel="noopener noreferrer"><Image src="/logos/linkedin.png" alt="" width={16} height={16} /><span>Connect on LinkedIn</span></a>
           </div>
         </div>
-        <div className="origin-copy">
-          <p className="section-kicker">THE ORIGIN</p>
-          <h2>It started with a layoff—<em>and a bad idea.</em></h2>
+        <article className="origin-copy about-story">
+          <p className="section-kicker">THE STORY</p>
           <p className="origin-story-lead">After I got laid off, I pasted my bank statements into ChatGPT to figure out <strong>how long my savings would last without a job.</strong></p>
-          <div className="origin-story-beats">
-            <article className="origin-story-problem">
-              <small>WHERE IT BROKE</small>
-              <p>The answers sounded convincing. But facts, assumptions, and shaky math all blurred together.<sup>*</sup></p>
-              <small className="origin-story-footnote">* 35 of 100 ChatGPT Search finance answers were incomplete, misleading, or wrong. In another test, a CFP® professional found a retirement plan more than $500K short. <Link href="/blog/ai-financial-calculator">Read the analysis →</Link></small>
-            </article>
-            <article className="origin-story-need">
-              <small>WHAT I NEEDED</small>
-              <p>I needed an answer based on my accounts, with the numbers and assumptions I could check.</p>
-            </article>
-          </div>
-          <p className="origin-story-ending"><small>THE RESULT</small><strong>So I built Ask Linc.</strong></p>
-        </div>
-      </section>
+          <p>The answer sounded convincing. But my real numbers, its guesses and some shaky math were all blended together, and I couldn’t tell which was which.</p>
+          <p>I should have known better. I graduated from Stanford and spent a long career where software meets money, in banking and fintech. It taught me something I’ve never shaken: when money is involved, “mostly right” is the same as wrong.</p>
+          <p>And it wasn’t just me. AI chatbots have gotten very good at sounding smart about money. I watched people ask them serious retirement questions and get polished, confident answers. When I checked the math, it often didn’t hold up.<sup>*</sup></p>
+          <small className="origin-story-footnote">* 35 of 100 ChatGPT Search finance answers were incomplete, misleading, or wrong. In another test, a CFP® professional found a retirement plan more than $500K short. <Link href="/blog/ai-financial-calculator">Read the analysis →</Link></small>
+          <p>Spreadsheets get the math right, but every new “what if” means another tab.</p>
+          <p className="about-story-turn">Ask Linc is the tool I wanted: <strong>plain-English questions, math you can check.</strong></p>
 
-      <section className="page-section values-band">
-        <div className="shell">
-          <div className="editorial-heading">
-            <p className="section-kicker">HOW WE BUILD</p>
-            <h2>The product follows four simple rules.</h2>
-          </div>
-          <div className="belief-grid">
-            <article><span>01</span><h3>Start with the decision</h3><p>Let people ask their question in their own words.</p></article>
-            <article><span>02</span><h3>Keep the whole financial picture in view</h3><p>A house, a career break, a child, investments, and retirement share the same money.</p></article>
-            <article><span>03</span><h3>Show the tradeoffs</h3><p>A useful answer says what works, what feels tight, and what could change the result.</p></article>
-            <article><span>04</span><h3>Show the math</h3><p>You should be able to see the numbers, assumptions, calculations, checks, and sources behind the answer.</p><Link className="belief-link" href="/trust">See how answers are checked →</Link></article>
-          </div>
-        </div>
+          <section className="about-rule" aria-labelledby="about-rule-heading">
+            <small>SO ASK LINC HAS ONE RULE</small>
+            <h2 id="about-rule-heading">The AI never does the math.</h2>
+            <p>A calculation engine runs the numbers on your real accounts. The AI explains the result. Every answer shows its inputs and assumptions, so you can check the work yourself.</p>
+            <Link href="/trust">See how answers are checked →</Link>
+          </section>
+
+          <section className="about-signoff" aria-labelledby="about-signoff-heading">
+            <h2 id="about-signoff-heading">Ask Linc is small, <em>which means you get me.</em></h2>
+            <p>If something is confusing, wrong or missing, email me at <a href="mailto:ethan@asklinc.com">ethan@asklinc.com</a>. I read and answer every message myself.</p>
+            <p className="about-signature">— Ethan</p>
+          </section>
+        </article>
       </section>
 
       <PageCta title="What decision are you trying to make?" csOverrideId="cta-start-free-trial-mid" />

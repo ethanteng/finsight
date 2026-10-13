@@ -241,7 +241,7 @@
 /* Contrast corrections found in the full public-route accessibility audit. */
 @scope (.marketing-site) {
   .microcopy, .integration-map-top small, .price-argument > p, .price > span, .sub-price-card > p,
-  .founder-portrait small, .origin-story-problem > small, .belief-grid article > span,
+  .founder-portrait small, .belief-grid article > span,
   .faq-layout aside > span, .response-note small, .contact-form > small, .contact-links a > span,
   .compare-index-card > span, .versus-mark > b, .fit-section p, .use-case-metrics small,
   .prompt-index-card > span, .prompt-number-grid > div > span, .retirement-decision-card > span,
