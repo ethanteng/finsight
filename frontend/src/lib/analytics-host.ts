@@ -1,4 +1,5 @@
 import {
+  COUNTED_OPERATOR_BROWSER_KEY,
   INTERNAL_ANALYTICS_BROWSER_KEY,
   isInternalAnalyticsBrowser,
 } from './internal-analytics';
@@ -36,17 +37,22 @@ export function isAnalyticsHost(hostname: string): boolean {
  * will serve them, and the tag must still load in `<head>` before hydration to
  * capture the start of the session. The condition below is the inline
  * equivalent of isAnalyticsHost(), built from the same constant.
+ *
+ * An operator's browser that chose to be counted again (to check tags from
+ * it) still names itself on every page load, so a new GA cookie it is given
+ * later is left out of the admin Visitors tab too.
  */
 export function buildGoogleTagManagerSnippet(containerId: string): string {
   return `
-(function(w,d,s,l,i,h,k){
+(function(w,d,s,l,i,h,k,c){
 var n=w.location.hostname;if(n!==h&&!n.endsWith('.'+h))return;
 try{if(w.localStorage&&w.localStorage.getItem(k)==='1')return;}catch(e){}
 w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});
+try{if(w.localStorage&&w.localStorage.getItem(c)==='1')w[l].push({event:'internal_browser_marked'});}catch(e){}
 var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
 j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;
 f.parentNode.insertBefore(j,f);
-})(window,document,'script','dataLayer',${JSON.stringify(containerId)},${JSON.stringify(ANALYTICS_DOMAIN)},${JSON.stringify(INTERNAL_ANALYTICS_BROWSER_KEY)});
+})(window,document,'script','dataLayer',${JSON.stringify(containerId)},${JSON.stringify(ANALYTICS_DOMAIN)},${JSON.stringify(INTERNAL_ANALYTICS_BROWSER_KEY)},${JSON.stringify(COUNTED_OPERATOR_BROWSER_KEY)});
 `.trim();
 }
 

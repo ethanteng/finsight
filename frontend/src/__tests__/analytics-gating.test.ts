@@ -8,7 +8,7 @@ import {
   redactAnalyticsUrl,
   shouldRenderNoscriptFallback,
 } from "@/lib/analytics-host";
-import { INTERNAL_ANALYTICS_BROWSER_KEY } from "@/lib/internal-analytics";
+import { COUNTED_OPERATOR_BROWSER_KEY, INTERNAL_ANALYTICS_BROWSER_KEY } from "@/lib/internal-analytics";
 
 describe("isAnalyticsHost", () => {
   it.each(["asklinc.com", "www.asklinc.com", "blog.asklinc.com", "app.asklinc.com"])(
@@ -38,7 +38,7 @@ describe("isAnalyticsHost", () => {
  * the function parameters, so the assertions are about shipped behaviour
  * rather than a reimplementation of it.
  */
-function runSnippet(hostname: string, internal = false) {
+function runSnippet(hostname: string, internal = false, counted = false) {
   const inserted: Array<{ src?: string; async?: boolean }> = [];
   const firstScript = {
     parentNode: { insertBefore: (node: { src?: string }) => inserted.push(node) },
@@ -49,7 +49,9 @@ function runSnippet(hostname: string, internal = false) {
   };
   const win: { location: { hostname: string }; dataLayer?: unknown[]; localStorage: { getItem: (key: string) => string | null } } = {
     location: { hostname },
-    localStorage: { getItem: key => internal && key === INTERNAL_ANALYTICS_BROWSER_KEY ? '1' : null },
+    localStorage: {
+      getItem: key => (internal && key === INTERNAL_ANALYTICS_BROWSER_KEY) || (counted && key === COUNTED_OPERATOR_BROWSER_KEY) ? '1' : null,
+    },
   };
 
   new Function("window", "document", buildGoogleTagManagerSnippet("GTM-PL362L36"))(win, doc);
@@ -74,6 +76,15 @@ describe("Google Tag Manager snippet", () => {
     const { inserted, dataLayer } = runSnippet('asklinc.com', true);
     expect(inserted).toEqual([]);
     expect(dataLayer).toBeUndefined();
+  });
+
+  it("names an operator's browser counted again on every page load, so a new GA cookie is left out too", () => {
+    const { inserted, dataLayer } = runSnippet('asklinc.com', false, true);
+    expect(inserted).toHaveLength(1);
+    expect(dataLayer).toEqual([
+      expect.objectContaining({ event: 'gtm.js' }),
+      { event: 'internal_browser_marked' },
+    ]);
   });
 
   it.each(["localhost", "127.0.0.1", "finsight-abc123.vercel.app", "notasklinc.com"])(

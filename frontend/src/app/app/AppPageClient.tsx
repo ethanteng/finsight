@@ -13,6 +13,7 @@ import { syncStoredUserTimeZoneFromAuthUser } from '../../lib/browser-time-zone'
 import { groupTurnsIntoDecisions } from '../../lib/decision-threads';
 import { takePendingFirstDecision } from '../../lib/pending-first-decision';
 import { loginUrlForCurrentPage } from '../../lib/post-login-redirect';
+import { markInternalAnalyticsBrowser } from '../../lib/internal-analytics';
 import { relativeTurnTime } from '../../lib/relative-time';
 import UpgradeAccountButton, {
   parseUpgradeAction,
@@ -188,6 +189,8 @@ export default function AppPageClient() {
         const res = await fetch(`${API_URL}/auth/verify`, { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) return expireSession();
         const data = await res.json();
+        // An operator's browser leaves itself out of analytics.
+        if (data.operator === true) markInternalAnalyticsBrowser();
         setIsAuthenticated(true);
         setUserEmail(data.user.email);
         syncStoredUserTimeZoneFromAuthUser(data.user);

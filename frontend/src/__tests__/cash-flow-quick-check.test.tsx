@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import CashFlowQuickCheck from '@/components/marketing/CashFlowQuickCheck';
 
 describe('cash-flow quick check', () => {
@@ -21,5 +21,15 @@ describe('cash-flow quick check', () => {
     const rel = screen.getByRole('link', { name: /Open the cash flow check/ }).getAttribute('rel') ?? '';
     expect(rel.split(/\s+/)).toContain('noopener');
     expect(rel.split(/\s+/)).not.toContain('noreferrer');
+  });
+
+  it('reports the click for the admin Visitors tab', () => {
+    const analyticsWindow = window as Window & typeof globalThis & { dataLayer?: unknown[] };
+    analyticsWindow.dataLayer = [];
+    render(<CashFlowQuickCheck />);
+
+    fireEvent.click(screen.getByRole('link', { name: /Open the cash flow check/ }));
+
+    expect(analyticsWindow.dataLayer).toEqual([expect.objectContaining({ event: 'cash_flow_check_click' })]);
   });
 });

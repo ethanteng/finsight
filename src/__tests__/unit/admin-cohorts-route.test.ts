@@ -2,10 +2,14 @@ import express from 'express';
 import request from 'supertest';
 import adminCohortRoutes from '../../routes/admin-cohorts';
 import { getActivationReport, getEngagementReport } from '../../cohort-analytics/service';
+import { getVisitorReport } from '../../cohort-analytics/visitor-service';
 
 jest.mock('../../cohort-analytics/service', () => ({
   getEngagementReport: jest.fn().mockResolvedValue({ kind: 'engagement' }),
   getActivationReport: jest.fn().mockResolvedValue({ kind: 'activation' }),
+}));
+jest.mock('../../cohort-analytics/visitor-service', () => ({
+  getVisitorReport: jest.fn().mockResolvedValue({ kind: 'visitors' }),
 }));
 
 describe('admin cohort routes', () => {
@@ -32,6 +36,8 @@ describe('admin cohort routes', () => {
 
     expect((await request(app).get('/admin/cohorts/engagement')).status).toBe(401);
     expect((await request(app).get('/admin/cohorts/activation')).status).toBe(401);
+    expect((await request(app).get('/admin/cohorts/visitors')).status).toBe(401);
+    expect(getVisitorReport).not.toHaveBeenCalled();
   });
 
   it('defaults to weekly signup cohorts with a rule in the column grain', async () => {
@@ -80,6 +86,43 @@ describe('admin cohort routes', () => {
     expect(getActivationReport).toHaveBeenCalledWith(
       { segment: 'paid', cohortGrain: 'day', periodGrain: 'day', cohortCount: 30, periodCount: 14, source: 'all', channel: 'all', campaign: undefined },
     );
+  });
+
+  it('serves visitors with their own filters, defaulting to weekly cohorts of everyone', async () => {
+    const response = await request(adminApp()).get('/admin/cohorts/visitors');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ kind: 'visitors' });
+    expect(getVisitorReport).toHaveBeenCalledWith(
+      { landing: 'all', channel: 'all', campaign: undefined, device: 'all', cohortGrain: 'week', periodGrain: 'week', cohortCount: 12, periodCount: 12 },
+      { fresh: false, membersFor: null },
+    );
+  });
+
+  it('passes every visitor control through, and refresh re-reads the export', async () => {
+    const response = await request(adminApp())
+      .get('/admin/cohorts/visitors?landing=coast_fire_calculator&channel=paid&campaign=%20coast_fire%20&device=mobile&cohort=day&period=day&cohorts=14&periods=7&refresh=1&members=2026-10-05');
+
+    expect(response.status).toBe(200);
+    expect(getVisitorReport).toHaveBeenCalledWith(
+      { landing: 'coast_fire_calculator', channel: 'paid', campaign: 'coast_fire', device: 'mobile', cohortGrain: 'day', periodGrain: 'day', cohortCount: 14, periodCount: 7 },
+      { fresh: true, membersFor: '2026-10-05' },
+    );
+  });
+
+  it.each([
+    ['landing=blog', 'landing must be one of all, coast_fire_calculator, retirement_calculator, cash_flow_forecast, other'],
+    ['channel=google_ads', 'channel must be one of all, paid, organic_search, organic_social, direct, referral, other'],
+    ['device=watch', 'device must be one of all, desktop, mobile, tablet'],
+    ['cohorts=91', 'cohorts must be a whole number from 1 to 90'],
+    ['members=last-week', 'members must be a cohort key (YYYY-MM-DD)'],
+  ])('rejects visitors %s', async (query, error) => {
+    (getVisitorReport as jest.Mock).mockClear();
+    const response = await request(adminApp()).get(`/admin/cohorts/visitors?${query}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error });
+    expect(getVisitorReport).not.toHaveBeenCalled();
   });
 
   it('reports a failure without leaking it', async () => {

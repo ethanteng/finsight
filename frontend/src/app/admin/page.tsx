@@ -7,6 +7,8 @@ import AuthenticatedPageHeader from '../../components/authenticated/Authenticate
 import AnswerQualityPanel from '../../components/admin/AnswerQualityPanel';
 import ModelConfigPanel from '../../components/admin/ModelConfigPanel';
 import CohortReportPanel from '../../components/admin/CohortReportPanel';
+import VisitorCohortPanel from '../../components/admin/VisitorCohortPanel';
+import { markInternalAnalyticsBrowser } from '../../lib/internal-analytics';
 
 // The /admin/marketing and /admin/retirement-calculator pages still exist and
 // are reachable by URL; only their tabs here are hidden. Flip to re-show them.
@@ -100,7 +102,7 @@ type DataGapSecurityCategory =
   | 'us-listing-fallback';
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'production' | 'users' | 'engagement' | 'activation' | 'market-news' | 'ai-settings' | 'data-gaps'>('production');
+  const [activeTab, setActiveTab] = useState<'production' | 'users' | 'engagement' | 'activation' | 'visitors' | 'market-news' | 'ai-settings' | 'data-gaps'>('production');
 
   // Production data state
   const [productionUsers, setProductionUsers] = useState<ProductionUser[]>([]);
@@ -266,6 +268,8 @@ export default function AdminPage() {
         headers: getAuthHeaders()
       });
       if (usersRes.ok) {
+        // Admin access proven: this browser leaves itself out of analytics.
+        markInternalAnalyticsBrowser();
         const usersData = await usersRes.json();
         setProductionUsers(usersData.users);
       } else if (usersRes.status === 401 || usersRes.status === 403) {
@@ -2355,6 +2359,16 @@ export default function AdminPage() {
             Activation
           </button>
           <button
+            onClick={() => setActiveTab('visitors')}
+            className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${
+              activeTab === 'visitors'
+                ? 'bg-[#102319] text-white shadow-sm'
+                : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
+            }`}
+          >
+            Visitors
+          </button>
+          <button
             onClick={() => setActiveTab('market-news')}
             className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${
               activeTab === 'market-news'
@@ -2394,6 +2408,9 @@ export default function AdminPage() {
         )}
         {activeTab === 'activation' && (
           <CohortReportPanel kind="activation" apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
+        )}
+        {activeTab === 'visitors' && (
+          <VisitorCohortPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
         )}
         {activeTab === 'market-news' && renderMarketNewsTab()}
         {activeTab === 'ai-settings' && renderAiSettingsTab()}

@@ -168,6 +168,13 @@ localStorage for 90 days, so a visitor who clicks an ad, reads three pages and
 signs up is still attributed to the ad, and a later click on one of our emails
 does not replace it.
 
+An operator's browser leaves itself out of analytics: signing in with an
+`ADMIN_EMAILS` account (`/auth/login` and `/auth/verify` return `operator`), or
+loading admin data, marks it in local storage, which GTM, Contentsquare, Vercel
+Analytics and every dataLayer push check (`frontend/src/lib/internal-analytics.ts`).
+It sends `internal_browser_marked` once first, so the admin Visitors tab can drop
+that browser's earlier visits too. See `docs/admin/VISITOR_COHORTS.md`.
+
 Registration deliberately does not wait for the verification code. The address
 joins the list before anyone proves they own it — the same set of addresses the
 nightly sync has always sent, just sooner — and the verification mail's security

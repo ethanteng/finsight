@@ -14,6 +14,7 @@ import {
 import { storeCoastFireSignupContext } from '@/lib/coast-fire-signup-context';
 import { storeRetirementSignupContext } from '@/lib/retirement-signup-context';
 import { resetSignInHandoverCache } from '@/lib/calculator-handover';
+import { INTERNAL_ANALYTICS_BROWSER_KEY } from '@/lib/internal-analytics';
 
 const push = jest.fn();
 let searchParams = new URLSearchParams();
@@ -154,6 +155,34 @@ describe('LoginForm', () => {
     expect(checkoutUrl).toContain('/api/stripe/create-checkout-session');
     // Without this the backend cannot reuse their existing Stripe customer
     expect(checkoutInit.headers.Authorization).toBe('Bearer lapsed-token');
+  });
+
+  it('leaves an operator’s browser out of analytics once they sign in', async () => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'secure-token', operator: true }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'active', accessLevel: 'full' }) });
+
+    render(<LoginForm />);
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'admin@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-password' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sign in to your workspace/i }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
+    expect(localStorage.getItem(INTERNAL_ANALYTICS_BROWSER_KEY)).toBe('1');
+  });
+
+  it('leaves everyone else’s browser counted', async () => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'secure-token', operator: false }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'active', accessLevel: 'full' }) });
+
+    render(<LoginForm />);
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'member@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-password' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sign in to your workspace/i }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
+    expect(localStorage.getItem(INTERNAL_ANALYTICS_BROWSER_KEY)).toBeNull();
   });
 
   it('returns a deep link to where it was headed after signing in', async () => {

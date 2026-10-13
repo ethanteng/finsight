@@ -24,6 +24,7 @@ import {
   sanitizePostLoginRedirect,
 } from '@/lib/post-login-redirect';
 import { attachCalculatorLead } from '@/lib/calculator-lead-attach';
+import { markInternalAnalyticsBrowser } from '@/lib/internal-analytics';
 import {
   COAST_FIRE_REF_COOKIE,
   fetchCoastFireSignupContext,
@@ -283,7 +284,7 @@ function LoginFormContent() {
         return;
       }
 
-      let data: { token?: string; user?: { timeZone?: string }; error?: string };
+      let data: { token?: string; user?: { timeZone?: string }; error?: string; operator?: boolean };
       try {
         data = await res.json();
       } catch {
@@ -349,6 +350,9 @@ function LoginFormContent() {
           setError('Your session could not be saved. Please try again.');
           return;
         }
+        // An operator's sign-in, and everything after it in this browser,
+        // stays out of analytics.
+        if (data.operator === true) markInternalAnalyticsBrowser();
         if (isFreeTrialFlow) {
           pushTrialLoginSuccess();
           completeFreeTrialSignupFlow();

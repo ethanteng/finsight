@@ -168,3 +168,129 @@ export interface ActivationReport extends CohortReportBase {
   kind: 'activation';
   cohorts: ActivationCohortRow[];
 }
+
+/**
+ * What a signed-out visitor can do that the Visitors report counts, each from
+ * one GA4 event (see `src/marketing-analytics/adapters/ga4-visitors.ts`).
+ */
+export const VISITOR_ACTIONS = ['coast_fire_run', 'retirement_run', 'cash_flow_check', 'coffee_widget'] as const;
+export type VisitorAction = typeof VISITOR_ACTIONS[number];
+export type VisitorActionCounts = Record<VisitorAction, number>;
+
+/**
+ * What the period grid can show. `visited` is any session in the period;
+ * `signed_up` is cumulative, like activation, because it happens once.
+ */
+export const VISITOR_METRICS = ['any_action', ...VISITOR_ACTIONS, 'visited', 'signed_up'] as const;
+export type VisitorMetric = typeof VISITOR_METRICS[number];
+
+/** Where a visitor's first session landed. */
+export const VISITOR_LANDINGS = ['all', 'coast_fire_calculator', 'retirement_calculator', 'cash_flow_forecast', 'other'] as const;
+export type VisitorLanding = Exclude<typeof VISITOR_LANDINGS[number], 'all'>;
+
+/** GA4 channels, as the marketing adapter groups them, keyed for a query string. */
+export const VISITOR_CHANNELS = ['all', 'paid', 'organic_search', 'organic_social', 'direct', 'referral', 'other'] as const;
+export type VisitorChannel = Exclude<typeof VISITOR_CHANNELS[number], 'all'>;
+
+export const VISITOR_DEVICES = ['all', 'desktop', 'mobile', 'tablet'] as const;
+
+export interface VisitorWindow {
+  /** All filters read the visitor's first session. */
+  landing: typeof VISITOR_LANDINGS[number];
+  channel: typeof VISITOR_CHANNELS[number];
+  campaign?: string;
+  device: typeof VISITOR_DEVICES[number];
+  cohortGrain: CohortGrain;
+  periodGrain: CohortGrain;
+  cohortCount: number;
+  periodCount: number;
+}
+
+export interface VisitorSessionSummary {
+  sessionId: string;
+  startedAt: string;
+  landingPage: string;
+  channel: string;
+  campaign: string;
+  device: string;
+  pageViews: number;
+  engagementSeconds: number;
+  actions: VisitorActionCounts;
+}
+
+export type VisitorOutcome = 'signed_up' | 'signed_in';
+
+export interface VisitorMember {
+  /** GA4's `user_pseudo_id`: one browser's analytics cookie, not a person. */
+  visitorId: string;
+  firstSeenAt: string;
+  landingPage: string;
+  landing: VisitorLanding;
+  channel: string;
+  source: string;
+  medium: string;
+  campaign: string;
+  device: string;
+  country: string;
+  sessionCount: number;
+  /** Before signing up or in; afterwards the browser belongs to an account. */
+  actions: VisitorActionCounts;
+  /** `signed_in`: reached the app without signing up in this browser, so an existing account. */
+  outcome: VisitorOutcome | null;
+  outcomeAt: string | null;
+  sessions: VisitorSessionSummary[];
+}
+
+/** Everything a cohort did to date, before signing up or in. */
+export interface VisitorTotals {
+  actions: Record<VisitorAction, { visitors: number; count: number }>;
+  anyAction: number;
+  /** Visitors with two or more sessions. */
+  returned: number;
+  signedUp: number;
+  signedIn: number;
+}
+
+export interface VisitorCohortRow {
+  key: string;
+  label: string;
+  startsAt: string;
+  endsAt: string;
+  size: number;
+  totals: VisitorTotals;
+  cells: Record<VisitorMetric, CohortCell[]>;
+  /**
+   * The most active visitors, at most `memberLimit`, for the cohort the
+   * request named (`membersFor`); empty for every other. `size` counts them all.
+   */
+  members: VisitorMember[];
+}
+
+export interface VisitorExclusions {
+  /** Browsers that opened `/admin` or were marked as an operator's. */
+  operatorBrowsers: number;
+  /** Sessions classified as automation or off-host, as on the marketing pages. */
+  automatedSessions: number;
+  /** Browsers whose first session in this window was not their first ever. */
+  seenBeforeWindow: number;
+}
+
+export interface VisitorReport extends VisitorWindow {
+  kind: 'visitors';
+  /** `truncated`: more browsers than one report can hold; nothing is shown rather than an undercount. */
+  state: 'live' | 'needs_configuration' | 'error' | 'truncated';
+  detail: string;
+  /** The last complete GA4 export day, in the property's reporting time zone. */
+  reportEnd: string | null;
+  /** Periods ending after this are still in progress; it trails the export. */
+  dataThrough: string | null;
+  generatedAt: string;
+  timeZone: 'UTC';
+  memberLimit: number;
+  /** The cohort whose visitors are listed, if the request named one. */
+  membersFor: string | null;
+  cohorts: VisitorCohortRow[];
+  overall: { size: number; totals: VisitorTotals; cells: Record<VisitorMetric, CohortCell[]> };
+  excluded: VisitorExclusions;
+  notes: string[];
+}

@@ -2,7 +2,7 @@ import { createSign } from 'crypto';
 import type { AnalyticsSession, MarketingFilters } from '../types';
 import { assessTrafficQuality } from '../traffic-quality';
 
-interface ServiceAccountCredentials {
+export interface ServiceAccountCredentials {
   client_email: string;
   private_key: string;
   token_uri?: string;
@@ -75,7 +75,7 @@ const base64url = (value: string | Buffer) => Buffer.from(value)
   .replace(/\+/g, '-')
   .replace(/\//g, '_');
 
-function parseCredentials(): ServiceAccountCredentials | null {
+export function parseCredentials(): ServiceAccountCredentials | null {
   const raw = process.env.GA4_BIGQUERY_SERVICE_ACCOUNT_JSON
     || process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
   if (!raw) return null;
@@ -88,7 +88,7 @@ function parseCredentials(): ServiceAccountCredentials | null {
   }
 }
 
-async function getAccessToken(credentials: ServiceAccountCredentials): Promise<string> {
+export async function getAccessToken(credentials: ServiceAccountCredentials): Promise<string> {
   if (cachedAccessToken && cachedAccessToken.expiresAt > Date.now() + 60_000) return cachedAccessToken.value;
   const now = Math.floor(Date.now() / 1000);
   const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
@@ -121,7 +121,7 @@ function dateOnly(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function todayInReportingTimeZone(): string {
+export function todayInReportingTimeZone(): string {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
   }).formatToParts(new Date());
@@ -129,7 +129,7 @@ function todayInReportingTimeZone(): string {
   return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
-function subtractDays(value: string, days: number): string {
+export function subtractDays(value: string, days: number): string {
   const date = new Date(`${value}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() - days);
   return dateOnly(date);
@@ -156,7 +156,7 @@ export function parseFirstFullTrackingDate(
   return { date: value, error: null };
 }
 
-function reportingLagDays(): number {
+export function reportingLagDays(): number {
   const configuredLag = Number(process.env.GA4_REPORTING_LAG_DAYS || 1);
   return Number.isFinite(configuredLag) ? Math.max(0, Math.floor(configuredLag)) : 1;
 }
@@ -170,7 +170,7 @@ function reportDates(days: number) {
   return { start, end, previousStart, previousEnd };
 }
 
-function cleanPath(value: string): string {
+export function cleanPath(value: string): string {
   if (!value) return '(not set)';
   try {
     const url = new URL(value, 'https://asklinc.com');
@@ -180,7 +180,7 @@ function cleanPath(value: string): string {
   }
 }
 
-function channelFor(source: string, medium: string, hasAdId: boolean): string {
+export function channelFor(source: string, medium: string, hasAdId: boolean): string {
   const normalizedSource = source.toLowerCase();
   const normalizedMedium = medium.toLowerCase();
   if (hasAdId || /cpc|ppc|paid|display/.test(normalizedMedium)) return 'Paid';

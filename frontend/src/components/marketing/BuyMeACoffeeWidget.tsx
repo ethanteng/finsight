@@ -14,9 +14,14 @@
  *
  * It appends its nodes straight to body, so each showing removes exactly the
  * nodes it added.
+ *
+ * Opening the panel is reported for the admin Visitors tab. The button only
+ * ever opens it (the overlay closes it), so a click counts only when the
+ * panel was not already showing.
  */
 
 import { useEffect } from "react";
+import { pushBuyMeACoffeeOpened } from "@/lib/dataLayer";
 
 const SCRIPT_SRC = "https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js";
 
@@ -92,18 +97,28 @@ export function BuyMeACoffeeWidget({ visible }: { visible: boolean }) {
     if (!visible) return;
     let cancelled = false;
     let added: Element[] = [];
+    let button: HTMLElement | undefined;
+
+    // Capturing on the document runs before the widget's own click handler,
+    // while the panel still shows its state from before the click.
+    const reportOpening = (event: MouseEvent) => {
+      if (!button || !(event.target instanceof Node) || !button.contains(event.target)) return;
+      if (document.getElementById("bmc-iframe")?.style.opacity !== "1") pushBuyMeACoffeeOpened();
+    };
 
     loadWidget().then((build) => {
       if (cancelled || !build) return;
       const before = new Set(Array.from(document.body.children));
       build();
       added = Array.from(document.body.children).filter((node) => !before.has(node));
-      const button = added.find((node): node is HTMLElement => node.id === "bmc-wbtn");
+      button = added.find((node): node is HTMLElement => node.id === "bmc-wbtn");
       if (button) button.style.border = `1px solid ${CTA_EDGE}`;
+      document.addEventListener("click", reportOpening, true);
     });
 
     return () => {
       cancelled = true;
+      document.removeEventListener("click", reportOpening, true);
       for (const node of added) node.remove();
     };
   }, [visible]);

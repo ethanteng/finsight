@@ -1,4 +1,7 @@
+"use client";
+
 import "./cash-flow-quick-check.css";
+import { pushCashFlowCheckClick } from "@/lib/dataLayer";
 
 const TRYCOAST_CASH_FLOW_URL = "https://trycoast.me/#cash";
 
@@ -9,7 +12,8 @@ const TRYCOAST_CASH_FLOW_URL = "https://trycoast.me/#cash";
  * It opens TryCoast's cash flow check, a separate site, in a new tab rather
  * than building a second manual forecast here. The link keeps the referrer so
  * TryCoast's own reports can tell these visits from its ad traffic, and the
- * note under the button says the visitor is leaving Ask Linc.
+ * note under the button says the visitor is leaving Ask Linc. The click is
+ * reported so the admin Visitors tab can count who took the offer.
  */
 export default function CashFlowQuickCheck() {
   return (
@@ -30,6 +34,7 @@ export default function CashFlowQuickCheck() {
           target="_blank"
           rel="noopener"
           data-cs-override-id="cash-flow-trycoast"
+          onClick={() => pushCashFlowCheckClick()}
         >
           Open the cash flow check <span aria-hidden="true">↗</span>
         </a>

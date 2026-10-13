@@ -1,5 +1,7 @@
 import {
   pushBeginCheckout,
+  pushBuyMeACoffeeOpened,
+  pushCashFlowCheckClick,
   pushCalculatorResultsEmailCtaOpened,
   pushCoastFireCalculated,
   pushPurchase,
@@ -580,5 +582,46 @@ describe("example-view analytics", () => {
 
     expect(analyticsWindow.dataLayer).toEqual([{ event, source_page: "/" }]);
     expect(analyticsWindow.gtag).not.toHaveBeenCalled();
+  });
+});
+
+describe("visitor action analytics", () => {
+  const analyticsWindow = window as AnalyticsWindow;
+
+  beforeEach(() => {
+    analyticsWindow.dataLayer = [];
+    window.localStorage.removeItem(INTERNAL_ANALYTICS_BROWSER_KEY);
+  });
+
+  it("reports leaving for the cash flow check from the forecast page", () => {
+    window.history.replaceState({}, "", "/cash-flow-forecast");
+    pushCashFlowCheckClick();
+
+    expect(analyticsWindow.dataLayer).toEqual([{
+      event: "cash_flow_check_click",
+      source_page: "/cash-flow-forecast",
+      content_type: "cash_flow_forecast",
+      cta_location: "cash_flow_quick_check",
+    }]);
+  });
+
+  it("reports opening Buy Me a Coffee on the calculator it was opened from", () => {
+    window.history.replaceState({}, "", "/coast-fire-calculator");
+    pushBuyMeACoffeeOpened();
+
+    expect(analyticsWindow.dataLayer).toEqual([{
+      event: "bmc_widget_opened",
+      source_page: "/coast-fire-calculator",
+      content_type: "coast_fire_calculator",
+    }]);
+  });
+
+  it("sends neither from an operator's browser", () => {
+    window.localStorage.setItem(INTERNAL_ANALYTICS_BROWSER_KEY, "1");
+    pushCashFlowCheckClick();
+    pushBuyMeACoffeeOpened();
+
+    expect(analyticsWindow.dataLayer).toEqual([]);
+    window.localStorage.removeItem(INTERNAL_ANALYTICS_BROWSER_KEY);
   });
 });
