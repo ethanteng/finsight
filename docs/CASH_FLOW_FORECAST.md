@@ -30,6 +30,12 @@ A forecast has three disclosed parts:
      - A payee seen in several accounts at once is a stream in each, with its own amount. Examples: a paycheck split between two accounts, or a fee each account charges.
      - Two banks often describe one employer's deposit in ways that reduce to the same payee. Grouping by payee alone once merged such a split paycheck into one stream and put all of it in one account, leaving the other with no pay at all.
      - A payee that moved, its history in one account ending before it starts in the next, stays one stream, expected in the account it moved to.
+   - A payee can charge a fixed amount on a schedule beside its other amounts: an insurer's monthly premium beside a yearly one, a delivery app's subscription among orders, two subscriptions from one store.
+     - So each run of near-identical amounts (within 10% of each other) is also judged on its own, and needs the cadence's full count of repeats. Two same-price purchases a month apart at a store visited often are no schedule.
+     - The runs stand in for the payee when its transactions together keep no schedule. That is what kept a $326 monthly premium from being a regular bill while a $2,369 yearly one shared its payee.
+     - They also stand in when two are running side by side on days of their own, which together read as one charge at the wrong amount: $9.99 on the 3rd and $2.99 on the 18th as $2.99 twice a month.
+     - A run that ended as another began is a changed amount (a raise), and runs on the same days are one payment split, so in either case the payee stays one stream.
+     - What no run claims stays in the typical rate, where a spread payee's choice still applies to it. A spread never touches a regular item, so "once a year" on the insurer spreads only the yearly premium.
    - Every two weeks or twice a month: semimonthly pay returns to the same two days of the month, while biweekly pay drifts through it.
      - A few months of biweekly paydays drift so little that they pass for two days of the month: the 17th, 31st, 14th, 28th, 11th and 25th look like "the 14th and the 28th".
      - Read that way, they would be projected on the wrong days and two paydays short a year.

@@ -219,6 +219,129 @@ describe('detectRecurringStreams', () => {
     expect(stream.status).toBe('lapsed');
   });
 
+  it('finds a fixed monthly charge beside a payee’s yearly one, and leaves the yearly one out', () => {
+    const premiums = [
+      entry('2026-07-15', 325.88, 'state farm'),
+      entry('2026-08-14', 325.88, 'state farm'),
+      entry('2026-09-16', 325.88, 'state farm'),
+      entry('2026-10-08', 2369.47, 'state farm'),
+    ];
+    const streams = detectRecurringStreams(premiums, '2026-10-11');
+    expect(streams).toHaveLength(1);
+    expect(streams[0]).toMatchObject({
+      id: 'spending:state-farm#32588', counterpartyKey: 'state farm', cadence: 'monthly', amount: 325.88, occurrences: 3, status: 'active',
+    });
+    expect(streams[0].entryIds).not.toContain('state farm-2026-10-08');
+  });
+
+  it('finds each of two subscriptions one payee bills', () => {
+    const months = ['06', '07', '08', '09'];
+    const charges = months.flatMap(month => [
+      entry(`2026-${month}-03`, 9.99, 'apple'),
+      entry(`2026-${month}-18`, 2.99, 'apple'),
+    ]);
+    const streams = detectRecurringStreams(charges, '2026-09-30');
+    expect(streams.map(stream => [stream.id, stream.cadence, stream.amount, stream.anchorDays])).toEqual([
+      ['spending:apple#999', 'monthly', 9.99, [3]],
+      ['spending:apple#299', 'monthly', 2.99, [18]],
+    ]);
+  });
+
+  it('lists beside two running subscriptions only the ended ones that ran alongside them', () => {
+    const months = ['06', '07', '08', '09'];
+    const running = months.flatMap(month => [
+      entry(`2026-${month}-03`, 9.99, 'apple'),
+      entry(`2026-${month}-18`, 2.99, 'apple'),
+    ]);
+    // Cancelled in July, having run beside them since June: a stopped item.
+    const cancelled = ['2026-05-25', '2026-06-25', '2026-07-25'].map(date => entry(date, 0.99, 'apple'));
+    // A weekly charge that ended in March, before either began: what they replaced.
+    const replaced = ['2026-02-02', '2026-02-09', '2026-02-16', '2026-02-23', '2026-03-02'].map(date => entry(date, 4.99, 'apple'));
+    const streams = detectRecurringStreams([...running, ...cancelled, ...replaced], '2026-09-30');
+    expect(streams.map(stream => [stream.id, stream.status])).toEqual([
+      ['spending:apple#999', 'active'],
+      ['spending:apple#299', 'active'],
+      ['spending:apple#99', 'lapsed'],
+    ]);
+  });
+
+  it('keeps two subscriptions apart that round to the same dollar', () => {
+    const months = ['06', '07', '08', '09'];
+    const charges = months.flatMap(month => [
+      entry(`2026-${month}-03`, 2.99, 'app store'),
+      entry(`2026-${month}-18`, 3.49, 'app store'),
+    ]);
+    const ids = detectRecurringStreams(charges, '2026-09-30').map(stream => stream.id);
+    expect(ids).toEqual(['spending:app-store#349', 'spending:app-store#299']);
+  });
+
+  it('reads a price change beside a payee’s other charge as one stream at the new price', () => {
+    // $300 a month through June, $350 since, and a yearly premium in August.
+    const premiums = [
+      ...['2026-03-15', '2026-04-15', '2026-05-15', '2026-06-15'].map(date => entry(date, 300, 'state farm')),
+      ...['2026-07-15', '2026-08-14', '2026-09-15'].map(date => entry(date, 350, 'state farm')),
+      { ...entry('2026-08-20', 2400, 'state farm'), id: 'yearly' },
+    ];
+    const streams = detectRecurringStreams(premiums, '2026-09-30');
+    expect(streams.map(stream => [stream.id, stream.cadence, stream.amount, stream.occurrences, stream.status])).toEqual([
+      ['spending:state-farm#35000', 'monthly', 350, 7, 'active'],
+    ]);
+    expect(streams[0].entryIds).not.toContain('yearly');
+  });
+
+  it('keeps a paycheck that changed amount one stream, rather than one stopped and one new', () => {
+    const paydays = ['2026-05-01', '2026-05-15', '2026-05-29', '2026-06-12', '2026-06-26', '2026-07-10', '2026-07-24', '2026-08-07', '2026-08-21', '2026-09-04', '2026-09-18'];
+    const pay = paydays.map((date, index) => entry(date, index < 6 ? 2500 : 2750, 'acme payroll', 'income'));
+    const streams = detectRecurringStreams(pay, '2026-09-30');
+    expect(streams.map(stream => [stream.id, stream.cadence, stream.amount, stream.status])).toEqual([
+      ['income:acme-payroll', 'biweekly', 2750, 'active'],
+    ]);
+  });
+
+  it('does not keep projecting an amount that ended before another began, even when both still look active', () => {
+    // A monthly charge stops; a weekly one from the same payee starts. The old
+    // amount is still inside its monthly lapse window, but it ended — only the
+    // weekly run should schedule.
+    const charges = [
+      ...['2026-01-01', '2026-02-01', '2026-03-01'].map(date => entry(date, 50, 'vendor')),
+      ...['2026-03-08', '2026-03-15', '2026-03-22', '2026-03-29'].map(date => entry(date, 10, 'vendor')),
+    ];
+    const streams = detectRecurringStreams(charges, '2026-03-29');
+    expect(streams.map(stream => [stream.id, stream.cadence, stream.amount, stream.status])).toEqual([
+      ['spending:vendor#1000', 'weekly', 10, 'active'],
+    ]);
+  });
+
+  it('after a large raise that the whole series cannot schedule, keeps only the new amount', () => {
+    // Amounts jump past the variation cap, so neither the whole payee nor a
+    // same-cadence merge of the two runs can form one stream; the old amount
+    // must not linger as a stopped regular item beside the new one.
+    const paydays = ['2026-05-01', '2026-05-15', '2026-05-29', '2026-06-12', '2026-06-26', '2026-07-10', '2026-07-24', '2026-08-07', '2026-08-21', '2026-09-04', '2026-09-18'];
+    const pay = paydays.map((date, index) => entry(date, index < 6 ? 500 : 3000, 'acme payroll', 'income'));
+    const streams = detectRecurringStreams(pay, '2026-09-30');
+    expect(streams.map(stream => [stream.id, stream.cadence, stream.amount, stream.status])).toEqual([
+      ['income:acme-payroll#300000', 'biweekly', 3000, 'active'],
+    ]);
+  });
+
+  it('makes no schedule from a few same-price purchases among a payee’s others', () => {
+    // Two $12.99 purchases a month apart, among others: two is no schedule here.
+    const shopping = [
+      entry('2026-07-02', 12.99, 'corner store'), entry('2026-07-09', 48.2, 'corner store'), entry('2026-07-20', 7.5, 'corner store'),
+      entry('2026-08-02', 12.99, 'corner store'), entry('2026-08-19', 33.1, 'corner store'), entry('2026-09-11', 21.75, 'corner store'),
+    ];
+    expect(detectRecurringStreams(shopping, '2026-09-30')).toEqual([]);
+    // Three at the same price on no schedule are none either.
+    const irregular = [...shopping, { ...entry('2026-08-08', 12.99, 'corner store'), id: 'third' }];
+    expect(detectRecurringStreams(irregular, '2026-09-30')).toEqual([]);
+  });
+
+  it('keeps a payee whose amounts vary as one stream while together they keep a schedule', () => {
+    const water = [['2026-06-20', 80], ['2026-07-20', 95], ['2026-08-20', 110], ['2026-09-20', 70]] as const;
+    const streams = detectRecurringStreams(water.map(([date, amount]) => entry(date, amount, 'ebmud')), '2026-09-30');
+    expect(streams.map(stream => [stream.id, stream.cadence, stream.occurrences])).toEqual([['spending:ebmud', 'monthly', 4]]);
+  });
+
   it('merges a split deposit on one day into a single occurrence', () => {
     const dates = ['2026-07-03', '2026-07-17', '2026-07-31', '2026-08-14'];
     const entries = dates.flatMap(date => [

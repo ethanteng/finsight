@@ -22,6 +22,18 @@ import type { CashFlowDirection, CashFlowEntry } from './ledger';
  * paycheck split between two accounts, a fee each account charges -- is a
  * stream in each. A payee that moved, its history in one account ending before
  * it begins in the next, is one stream, expected in the account it moved to.
+ *
+ * A payee may charge a fixed amount on a schedule beside the rest: an insurer's
+ * monthly premium beside a yearly one, two subscriptions billed by one store.
+ * So each run of near-identical amounts is also judged on its own, and needs the
+ * cadence's full count of repeats, since two same-price purchases a month apart
+ * at a store visited often are no schedule. The runs stand in for the payee when
+ * its transactions together keep no schedule, or when two of them are running
+ * side by side on days of their own, which together read as one charge at the
+ * wrong amount (two monthly subscriptions as one twice a month). A run that ended
+ * as another began is a changed amount, a raise say, and runs on the same days
+ * are one payment split, so in either case the payee stays one stream. What no
+ * run claims is left to the typical rate.
  */
 export const RECURRING_CADENCES = ['weekly', 'biweekly', 'semimonthly', 'monthly', 'quarterly'] as const;
 export type RecurringCadence = (typeof RECURRING_CADENCES)[number];
@@ -164,6 +176,24 @@ function streamId(flow: CashFlowDirection, key: string, accountId?: string): str
 }
 
 /**
+ * A payee's entries in runs of near-identical amounts, each within
+ * CONSISTENT_AMOUNT_RATIO of its smallest, sorted by date. A run needs at least
+ * three, or it could not show a schedule however it is judged.
+ */
+function fixedAmountRuns(entries: readonly CashFlowEntry[]): CashFlowEntry[][] {
+  const byAmount = [...entries].sort((left, right) => left.amount - right.amount);
+  const runs: CashFlowEntry[][] = [];
+  for (const entry of byAmount) {
+    const run = runs[runs.length - 1];
+    if (run && entry.amount <= run[0].amount * CONSISTENT_AMOUNT_RATIO) run.push(entry);
+    else runs.push([entry]);
+  }
+  return runs
+    .filter(run => run.length >= 3)
+    .map(run => run.sort((left, right) => left.date.localeCompare(right.date) || left.id.localeCompare(right.id)));
+}
+
+/**
  * One payee's entries, sorted by date, divided into the streams they can
  * form: all of them when they are in one account, or when each account's run
  * ends before the next begins (the payee moved); otherwise one part per
@@ -185,12 +215,96 @@ function accountParts(entries: readonly CashFlowEntry[]): CashFlowEntry[][] {
   return moved ? [[...entries]] : parts;
 }
 
-function evaluateGroup(
+/**
+ * A payee's runs of one amount that keep a schedule. Runs that follow one
+ * another -- one ended before the next began -- are one charge whose amount
+ * changed, a premium that went up say, and are judged together, so the old
+ * amount is not listed as a charge that stopped beside the new one.
+ */
+function scheduledRuns(
   id: string,
   flow: CashFlowDirection,
   key: string,
   entries: readonly CashFlowEntry[],
   dataThrough: CalendarDate
+): RecurringStream[] {
+  // Named by the amount to the cent, so two charges from one payee keep apart
+  // however close in dollars; a repeat (two medians a hair apart) is numbered.
+  const used = new Set<string>();
+  const idFor = (run: readonly CashFlowEntry[]) => {
+    const base = `${id}#${Math.round(median(run.map(item => item.amount)) * 100)}`;
+    let candidate = base;
+    for (let suffix = 2; used.has(candidate); suffix += 1) candidate = `${base}-${suffix}`;
+    used.add(candidate);
+    return candidate;
+  };
+  const judged = fixedAmountRuns(entries)
+    .flatMap(run => {
+      const stream = evaluateGroup(`${id}#run`, flow, key, run, dataThrough, true);
+      return stream ? [{ run, stream }] : [];
+    })
+    .sort((left, right) => left.stream.firstDate.localeCompare(right.stream.firstDate));
+  const kept: Array<{ run: CashFlowEntry[]; stream: RecurringStream }> = [];
+  for (const next of judged) {
+    const previous = kept[kept.length - 1];
+    if (previous && previous.stream.cadence === next.stream.cadence && previous.stream.lastDate < next.stream.firstDate) {
+      const run = [...previous.run, ...next.run];
+      const together = evaluateGroup(`${id}#run`, flow, key, run, dataThrough, true);
+      if (together) {
+        kept[kept.length - 1] = { run, stream: together };
+        continue;
+      }
+    }
+    kept.push(next);
+  }
+  // A stream is named by its latest amount: what it charges now.
+  return kept.map(({ run, stream }) => ({ ...stream, id: idFor(run.slice(-3)) }));
+}
+
+/** Whether two streams' histories overlap: neither ended before the other began. */
+function overlaps(left: RecurringStream, right: RecurringStream): boolean {
+  return left.firstDate <= right.lastDate && right.firstDate <= left.lastDate;
+}
+
+/**
+ * Whether two or more streams are running side by side: their date ranges
+ * overlap (so one did not simply end before the next began), and none posts on
+ * another's days (a split deposit on one day is not two streams).
+ */
+function runsOnDaysOfTheirOwn(runs: readonly RecurringStream[], entries: readonly CashFlowEntry[]): boolean {
+  if (runs.length < 2) return false;
+  for (let index = 0; index < runs.length; index += 1) {
+    for (let other = index + 1; other < runs.length; other += 1) {
+      if (!overlaps(runs[index], runs[other])) return false;
+    }
+  }
+  const dateOf = new Map(entries.map(entry => [entry.id, entry.date]));
+  const seen = new Set<CalendarDate>();
+  for (const run of runs) {
+    const days = new Set(run.entryIds.flatMap(id => dateOf.get(id) ?? []));
+    for (const day of days) {
+      if (seen.has(day)) return false;
+    }
+    for (const day of days) seen.add(day);
+  }
+  return true;
+}
+
+/** Runs whose history overlaps the latest one — drops an amount that ended before another began. */
+function latestAmountRuns(runs: readonly RecurringStream[]): RecurringStream[] {
+  if (runs.length <= 1) return [...runs];
+  const latest = runs.reduce((best, run) => (run.lastDate >= best.lastDate ? run : best));
+  return runs.filter(run => overlaps(run, latest));
+}
+
+function evaluateGroup(
+  id: string,
+  flow: CashFlowDirection,
+  key: string,
+  entries: readonly CashFlowEntry[],
+  dataThrough: CalendarDate,
+  /** A run of one amount among a payee's others: it needs the cadence's full count, however consistent. */
+  amongOthers = false
 ): RecurringStream | null {
   // One payee can post twice on one day (a split direct deposit); that is one occurrence.
   const byDate = new Map<CalendarDate, Occurrence>();
@@ -217,7 +331,7 @@ function evaluateGroup(
   const amounts = occurrences.map(occurrence => occurrence.amount);
   if (coefficientOfVariation(amounts) > MAX_AMOUNT_VARIATION) return null;
   const consistentAmounts = Math.max(...amounts) <= Math.min(...amounts) * CONSISTENT_AMOUNT_RATIO;
-  if (occurrences.length < rule.minOccurrences && !(consistentAmounts && offSchedule === 0)) return null;
+  if (occurrences.length < rule.minOccurrences && (amongOthers || !(consistentAmounts && offSchedule === 0))) return null;
 
   const latest = occurrences[occurrences.length - 1];
   const lapsedAfter = Math.ceil(rule.nominalDays * 1.5) + rule.graceDays;
@@ -263,8 +377,20 @@ export function detectRecurringStreams(
     const parts = accountParts(group.entries);
     for (const part of parts) {
       const id = streamId(group.flow, group.key, parts.length > 1 ? part[0].accountId : undefined);
-      const stream = evaluateGroup(id, group.flow, group.key, part, dataThrough);
-      if (stream) streams.push(stream);
+      const whole = evaluateGroup(id, group.flow, group.key, part, dataThrough);
+      const runs = scheduledRuns(id, group.flow, group.key, part, dataThrough);
+      const active = runs.filter(run => run.status === 'active');
+      const sideBySide = runsOnDaysOfTheirOwn(active, part);
+      // Side-by-side runs replace the whole payee; a raise (one run ended, another
+      // began) or a same-day split keeps the whole stream when it still schedules.
+      // When the whole payee does not, only the latest amount's run stands in —
+      // not also the ended one as a stopped item beside it. Beside running ones,
+      // an ended run is listed only if it ran alongside them, as a cancelled
+      // subscription did; one that ended before they began was what they replaced,
+      // and kept as a stopped item it would count twice.
+      if (sideBySide) streams.push(...runs.filter(run => run.status === 'active' || active.some(other => overlaps(run, other))));
+      else if (whole) streams.push(whole);
+      else streams.push(...latestAmountRuns(runs));
     }
   }
   return streams.sort((left, right) => right.amount - left.amount || left.id.localeCompare(right.id));
