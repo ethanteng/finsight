@@ -256,6 +256,31 @@ describe('detectRecurringStreams', () => {
     ]);
   });
 
+  it('does not keep projecting an amount that ended before another began, even when both still look active', () => {
+    // A monthly charge stops; a weekly one from the same payee starts. The old
+    // amount is still inside its monthly lapse window, but it ended — only the
+    // weekly run should schedule.
+    const charges = [
+      ...['2026-01-01', '2026-02-01', '2026-03-01'].map(date => entry(date, 50, 'vendor')),
+      ...['2026-03-08', '2026-03-15', '2026-03-22', '2026-03-29'].map(date => entry(date, 10, 'vendor')),
+    ];
+    const streams = detectRecurringStreams(charges, '2026-03-29');
+    expect(streams.map(stream => [stream.id, stream.cadence, stream.amount, stream.status])).toEqual([
+      ['spending:vendor#10', 'weekly', 10, 'active'],
+    ]);
+  });
+
+  it('after a large raise that the whole series cannot schedule, keeps only the new amount', () => {
+    // Amounts jump past the variation cap, so the payee is not one stream; the
+    // old amount must not linger as a stopped regular item beside the new one.
+    const paydays = ['2026-05-01', '2026-05-15', '2026-05-29', '2026-06-12', '2026-06-26', '2026-07-10', '2026-07-24', '2026-08-07', '2026-08-21', '2026-09-04', '2026-09-18'];
+    const pay = paydays.map((date, index) => entry(date, index < 6 ? 500 : 3000, 'acme payroll', 'income'));
+    const streams = detectRecurringStreams(pay, '2026-09-30');
+    expect(streams.map(stream => [stream.id, stream.cadence, stream.amount, stream.status])).toEqual([
+      ['income:acme-payroll#3000', 'biweekly', 3000, 'active'],
+    ]);
+  });
+
   it('makes no schedule from a few same-price purchases among a payee’s others', () => {
     // Two $12.99 purchases a month apart, among others: two is no schedule here.
     const shopping = [

@@ -215,9 +215,20 @@ function accountParts(entries: readonly CashFlowEntry[]): CashFlowEntry[][] {
   return moved ? [[...entries]] : parts;
 }
 
-/** Whether two or more streams are running, none of them posting on another's days. */
+/**
+ * Whether two or more streams are running side by side: their date ranges
+ * overlap (so one did not simply end before the next began), and none posts on
+ * another's days (a split deposit on one day is not two streams).
+ */
 function runsOnDaysOfTheirOwn(runs: readonly RecurringStream[], entries: readonly CashFlowEntry[]): boolean {
   if (runs.length < 2) return false;
+  for (let index = 0; index < runs.length; index += 1) {
+    for (let other = index + 1; other < runs.length; other += 1) {
+      if (runs[index].firstDate > runs[other].lastDate || runs[other].firstDate > runs[index].lastDate) {
+        return false;
+      }
+    }
+  }
   const dateOf = new Map(entries.map(entry => [entry.id, entry.date]));
   const seen = new Set<CalendarDate>();
   for (const run of runs) {
@@ -228,6 +239,13 @@ function runsOnDaysOfTheirOwn(runs: readonly RecurringStream[], entries: readonl
     for (const day of days) seen.add(day);
   }
   return true;
+}
+
+/** Runs whose history overlaps the latest one — drops an amount that ended before another began. */
+function latestAmountRuns(runs: readonly RecurringStream[]): RecurringStream[] {
+  if (runs.length <= 1) return [...runs];
+  const latest = runs.reduce((best, run) => (run.lastDate >= best.lastDate ? run : best));
+  return runs.filter(run => run.firstDate <= latest.lastDate && latest.firstDate <= run.lastDate);
 }
 
 function evaluateGroup(
@@ -312,12 +330,20 @@ export function detectRecurringStreams(
       const id = streamId(group.flow, group.key, parts.length > 1 ? part[0].accountId : undefined);
       const whole = evaluateGroup(id, group.flow, group.key, part, dataThrough);
       // Each run is named by its amount, so two charges from one payee keep apart.
-      const runs = fixedAmountRuns(part).flatMap(run => evaluateGroup(
-        `${id}#${Math.round(median(run.map(item => item.amount)))}`, group.flow, group.key, run, dataThrough, true,
-      ) ?? []);
+      const runs = fixedAmountRuns(part).flatMap(run => {
+        const stream = evaluateGroup(
+          `${id}#${Math.round(median(run.map(item => item.amount)))}`, group.flow, group.key, run, dataThrough, true,
+        );
+        return stream ? [stream] : [];
+      });
       const sideBySide = runsOnDaysOfTheirOwn(runs.filter(run => run.status === 'active'), part);
-      if (whole && !sideBySide) streams.push(whole);
-      else streams.push(...runs);
+      // Side-by-side runs replace the whole payee; a raise (one run ended, another
+      // began) or a same-day split keeps the whole stream when it still schedules.
+      // When the whole payee does not, only the latest amount's run stands in —
+      // not also the ended one as a stopped item beside it.
+      if (sideBySide) streams.push(...runs);
+      else if (whole) streams.push(whole);
+      else streams.push(...latestAmountRuns(runs));
     }
   }
   return streams.sort((left, right) => right.amount - left.amount || left.id.localeCompare(right.id));
