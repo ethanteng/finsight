@@ -18,7 +18,6 @@ import aiPerformanceRoutes from './routes/ai-performance';
 import askRoutes from './routes/ask';
 import retirementQuickPlanRoutes from './routes/retirement-quickplan';
 import coastFireRoutes from './routes/coast-fire';
-import cashFlowForecastRoutes from './routes/cash-flow-forecast';
 import adminMarketingRoutes from './routes/admin-marketing';
 import adminCohortRoutes from './routes/admin-cohorts';
 import productMilestoneRoutes from './routes/product-milestones';
@@ -374,9 +373,6 @@ app.use('/api/retirement-quickplan', retirementQuickPlanRoutes);
 
 // Setup the public Coast FIRE results email and its signup handoff
 app.use('/api/coast-fire', coastFireRoutes);
-
-// The cash-flow forecast page's "email me a sample forecast" list signup.
-app.use('/api/cash-flow-forecast', cashFlowForecastRoutes);
 
 // Setup Stripe routes (webhook route already registered above)
 app.use('/api/stripe', stripeRoutes);
