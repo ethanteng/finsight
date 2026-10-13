@@ -155,7 +155,7 @@ it('asks for an address only once a plan has produced a verdict', async () => {
   await runTheModel();
 
   expect(await screen.findByLabelText('Email address')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Unlock deeper analysis' })).toBeInTheDocument();
 });
 
 /*
@@ -169,7 +169,7 @@ it('keeps saving next to the result in the combined view', async () => {
   await runTheModel();
   const field = await screen.findByLabelText('Email address');
   // On the locked plan, in the same block as the verdict.
-  expect(field.closest('.calculator-locked-plan')).toHaveTextContent('Make it your plan.');
+  expect(field.closest('.calculator-locked-plan')).toHaveTextContent('Sanity-check your plan.');
   expect(field.closest('.calculator-result-grid')).toHaveTextContent(VERDICT);
   expect(screen.queryByRole('link', { name: /see what this result means/i })).not.toBeInTheDocument();
 });
@@ -251,7 +251,7 @@ it('surfaces a refusal and leaves the form ready to retry', async () => {
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid email address.');
-  expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Unlock deeper analysis' })).toBeEnabled();
   expect(emailed).not.toHaveBeenCalled();
 });
 
@@ -317,7 +317,7 @@ it('asks for a retry, and stays on the verdict, when nothing was stored', async 
 
   expect(await screen.findByRole('alert')).toHaveTextContent(/could not save your result/i);
   expect(screen.getByRole('heading', { name: VERDICT })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Unlock deeper analysis' })).toBeEnabled();
   expect(leaveForSignup).not.toHaveBeenCalled();
 });
 

@@ -239,7 +239,7 @@ it('asks for no reading of a plan answer, which the page shows as the engine com
   expect(await screen.findByRole('heading', {
     name: 'Retiring at 60 worked in 736 of 800 retirements in market history.',
   })).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Make it your plan.' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Sanity-check your plan.' })).toBeInTheDocument();
   expect(screen.queryByText(/reading your result/i)).not.toBeInTheDocument();
   expect(urls.some((url) => url.includes('/interpretation'))).toBe(false);
 });

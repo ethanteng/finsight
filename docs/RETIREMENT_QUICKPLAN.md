@@ -364,7 +364,7 @@ without affecting any answer in the product.
 ## Saving a run to a new account
 
 The capture above the locked plan asks for an email, then takes the visitor
-straight to signup with the address prefilled ("Unlock in Ask Linc").
+straight to signup with the address prefilled ("Unlock deeper analysis").
 Submitting also sends a figure-free **"Your retirement plan is waiting in Ask
 Linc"** email whose link lands on the same signup page — what someone who leaves before
 choosing a password comes back to. The run becomes the first decision in the

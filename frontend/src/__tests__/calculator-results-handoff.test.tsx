@@ -143,8 +143,8 @@ describe('Coast FIRE calculator', () => {
 
     expect(screen.getByRole('heading', { name: 'You’ve reached Coast FIRE.' })).toBeInTheDocument();
     expect(screen.getByText(COAST_FIRE_NUMBER)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Make it your plan.' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sanity-check your plan.' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unlock deeper analysis' })).toBeInTheDocument();
     // The formula's own figures, so there is nothing for a model to read.
     expect(requested('/interpretation')).toBe(false);
   });
@@ -226,7 +226,7 @@ describe('Coast FIRE calculator', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not save your result/i);
     expect(screen.getByText(COAST_FIRE_NUMBER)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Unlock deeper analysis' })).toBeEnabled();
     expect(leaveForSignup).not.toHaveBeenCalled();
   });
 
@@ -260,7 +260,7 @@ describe('Coast FIRE calculator', () => {
     calculate();
 
     expect(screen.getByText(COAST_FIRE_NUMBER)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Unlock deeper analysis' })).toBeEnabled();
     expect(screen.queryByText('Taking you to Ask Linc…')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
     expect(window.sessionStorage.getItem(CALCULATOR_EMAIL_STORAGE_KEY)).toBe('reader@example.com');
@@ -339,8 +339,8 @@ describe('retirement calculator', () => {
     expect(screen.getByText('How much you could spend each year')).toBeInTheDocument();
     expect(screen.getByText('The two levers these numbers can pull')).toBeInTheDocument();
     expect(screen.getByText('HOW THE ENGINE READ THIS ASSET MIX')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Make it your plan.' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sanity-check your plan.' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unlock deeper analysis' })).toBeInTheDocument();
     // The engine's own figures: a plan answer asks no model for a reading.
     expect(requested('/interpretation')).toBe(false);
     // The page's own CTA does not carry the run into signup either.
@@ -351,7 +351,7 @@ describe('retirement calculator', () => {
     mockApi({ plan: PLAN });
     renderPage();
     await runTheModel();
-    await screen.findByRole('button', { name: 'Unlock in Ask Linc' });
+    await screen.findByRole('button', { name: 'Unlock deeper analysis' });
     giveEmail();
 
     expect(await destination()).toContain('/getstarted?source=retirement-calculator');
@@ -364,7 +364,7 @@ describe('retirement calculator', () => {
     mockApi({ plan: PLAN, send: { message: 'sent', ref: REF, existingAccount: true } });
     renderPage();
     await runTheModel();
-    await screen.findByRole('button', { name: 'Unlock in Ask Linc' });
+    await screen.findByRole('button', { name: 'Unlock deeper analysis' });
     giveEmail();
 
     expect(await destination()).toBe('/login?source=retirement-calculator');
@@ -377,7 +377,7 @@ describe('retirement calculator', () => {
     mockApi({ plan: PLAN, send: { message: 'sent', ref: REF, existingAccount: true }, signedInAs: 'reader@example.com' });
     renderPage();
     await runTheModel();
-    await screen.findByRole('button', { name: 'Unlock in Ask Linc' });
+    await screen.findByRole('button', { name: 'Unlock deeper analysis' });
     await waitFor(() => expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com'));
     fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
@@ -397,12 +397,12 @@ describe('retirement calculator', () => {
     });
     renderPage();
     await runTheModel();
-    await screen.findByRole('button', { name: 'Unlock in Ask Linc' });
+    await screen.findByRole('button', { name: 'Unlock deeper analysis' });
     giveEmail();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not save your result/i);
     expect(screen.getByRole('heading', { name: VERDICT })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Unlock in Ask Linc' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Unlock deeper analysis' })).toBeEnabled();
     expect(leaveForSignup).not.toHaveBeenCalled();
   });
 
@@ -410,7 +410,7 @@ describe('retirement calculator', () => {
     mockApi({ plan: PLAN, send: { message: 'sent', ref: null } });
     renderPage();
     await runTheModel();
-    await screen.findByRole('button', { name: 'Unlock in Ask Linc' });
+    await screen.findByRole('button', { name: 'Unlock deeper analysis' });
     giveEmail();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/check your email for a link to open this plan in ask linc/i);
@@ -428,7 +428,7 @@ describe('retirement calculator', () => {
     await runTheModel();
 
     expect(await screen.findByText(/what this mix sustained/i)).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Make it your plan.' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Sanity-check your plan.' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Email address')).not.toBeInTheDocument();
   });
 
@@ -438,7 +438,7 @@ describe('retirement calculator', () => {
     renderPage();
     await runTheModel();
 
-    expect(await screen.findByRole('button', { name: 'Unlock in Ask Linc' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Unlock deeper analysis' })).toBeInTheDocument();
     expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
   });
 });

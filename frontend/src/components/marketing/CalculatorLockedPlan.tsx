@@ -29,8 +29,8 @@ export function CalculatorLockedPlan({
     <aside className="calculator-locked-plan" aria-labelledby={titleId}>
       <div className="calculator-locked-plan-head">
         <p className="section-kicker">WHAT ASK LINC ADDS</p>
-        <h2 id={titleId}>Make it your plan.</h2>
-        <p>This result uses only the numbers you entered. Ask Linc also plans with the details below.</p>
+        <h2 id={titleId}>Sanity-check your plan.</h2>
+        <p>This result only uses the basic numbers you entered. Ask Linc sanity checks your plan with the additional numbers below.</p>
       </div>
       <div className="calculator-locked-unlock">{children}</div>
       <div className="calculator-locked-plan-stack">

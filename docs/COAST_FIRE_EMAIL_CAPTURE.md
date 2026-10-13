@@ -79,7 +79,7 @@ its own groups (your retirement plan, your partner, taxes and health coverage),
 four to a group (`lib/calculator-locked-plan.ts`). They are never filled in and
 cannot be focused. One small lock sits on the rule above them, and the email
 capture is a bar between the heading and the fields, its button reading "Unlock
-in Ask Linc". It sat on a card over the fields at first, which hid the very
+deeper analysis". It sat on a card over the fields at first, which hid the very
 thing it was offering.
 
 Unlocking is the hand-off below. The run becomes the account's first decision,
