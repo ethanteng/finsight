@@ -141,8 +141,9 @@ describe('adjusting what the forecast counts', () => {
     // An old counted flight, then enough later United charges that the payee is
     // a normal typical row after the flight ages out of the 90-day basis.
     const oldFlight = tx('card', '2026-09-10', 'expense', 2400, 'UNITED AIRLINES', { merchant_name: 'United Airlines' });
-    const recentUnited = ['2026-11-05', '2026-11-20', '2026-12-05', '2026-12-20', '2027-01-05']
-      .map(date => tx('card', date, 'expense', 80, 'UNITED AIRLINES', { merchant_name: 'United Airlines' }));
+    // Irregular, in date and amount, so they are typical spending rather than a schedule.
+    const recentUnited = ([['2026-11-03', 80], ['2026-11-21', 95], ['2026-12-02', 70], ['2026-12-19', 120], ['2027-01-08', 85]] as const)
+      .map(([date, amount]) => tx('card', date, 'expense', amount, 'UNITED AIRLINES', { merchant_name: 'United Airlines' }));
     const recent = householdTransactions('2026-10-20', '2027-01-14')
       .filter(item => String(item.name) !== 'UNITED AIRLINES');
     const built = model(
@@ -363,6 +364,21 @@ describe('spreading a payee over months of its own', () => {
     const quarterly = model([spread('irs', 3)], { transactions: [...history, estimate] });
     expect(quarterly.oneOffs.some(entry => entry.counterpartyKey === 'irs')).toBe(false);
     expect(quarterly.typical.dailySpending - base.typical.dailySpending).toBeCloseTo(6000 / (365 / 4), 6);
+  });
+
+  it('spreads only what no regular item claims: a yearly premium beside a monthly one', () => {
+    const stateFarm = [
+      ...['2026-07-15', '2026-08-14', '2026-09-16'].map(date => premium(date)).map(item => ({ ...item, amount: 325.88 })),
+      { ...premium('2026-09-25'), amount: 2369.47 },
+    ];
+    const without = model();
+    const yearly = model([spread('state farm', 12)], { transactions: [...history, ...stateFarm] });
+    // The monthly premium is a regular bill, projected on its dates.
+    const monthly = yearly.streams.find(stream => stream.counterpartyKey === 'state farm')!;
+    expect(monthly).toMatchObject({ cadence: 'monthly', amount: 325.88, status: 'active' });
+    expect(yearly.scheduled.filter(item => item.streamId === monthly.id).slice(0, 2).map(item => item.date)).toEqual(['2026-10-15', '2026-11-15']);
+    // The yearly one alone is spread over its year.
+    expect(yearly.typical.dailySpending - without.typical.dailySpending).toBeCloseTo(2369.47 / 365, 6);
   });
 
   it('never leaves a spread payee’s amount out as a one-off', () => {
