@@ -252,7 +252,7 @@ describe("marketing review fixes", () => {
     expect(screen.getByRole("link", { name: /read the analysis/i })).toHaveAttribute("href", "/blog/ai-financial-calculator");
     expect(screen.getByRole("heading", { name: "The AI never does the math." })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /see how answers are checked/i })).toHaveAttribute("href", "/trust");
-    expect(screen.getByRole("heading", { name: /ask linc is small, which means you get me/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /ask linc is a solo operation, which means you get me/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "ethan@asklinc.com" })).toHaveAttribute("href", "mailto:ethan@asklinc.com");
   });
 
