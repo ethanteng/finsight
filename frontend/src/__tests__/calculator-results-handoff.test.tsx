@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { CoastFireCalculator } from '@/components/marketing/CoastFireCalculator';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
 import { leaveForSignup } from '@/lib/calculator-handover';
@@ -145,6 +145,9 @@ describe('Coast FIRE calculator', () => {
     expect(screen.getByText(COAST_FIRE_NUMBER)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Sanity-check your plan.' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Unlock deeper analysis' })).toBeInTheDocument();
+    // An anonymous visitor is offered the trial, as every "Start free" offers it.
+    expect(within(document.querySelector<HTMLElement>('.calculator-locked-plan')!)
+      .getByText('Try free for 30 days. No credit card required.')).toBeInTheDocument();
     // The formula's own figures, so there is nothing for a model to read.
     expect(requested('/interpretation')).toBe(false);
   });
@@ -185,6 +188,10 @@ describe('Coast FIRE calculator', () => {
     calculate();
     // The session's own address, so the run attaches to that account.
     await waitFor(() => expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com'));
+    // Their own account takes the run and starts no trial, so none is offered.
+    expect(screen.getByText('Opens as a new decision in your Ask Linc account.')).toBeInTheDocument();
+    expect(within(document.querySelector<HTMLElement>('.calculator-locked-plan')!)
+      .queryByText('Try free for 30 days. No credit card required.')).not.toBeInTheDocument();
     fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
     expect(await destination()).toBe('/app');
@@ -379,6 +386,9 @@ describe('retirement calculator', () => {
     await runTheModel();
     await screen.findByRole('button', { name: 'Unlock deeper analysis' });
     await waitFor(() => expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com'));
+    expect(screen.getByText('Opens as a new decision in your Ask Linc account.')).toBeInTheDocument();
+    expect(within(document.querySelector<HTMLElement>('.calculator-locked-plan')!)
+      .queryByText('Try free for 30 days. No credit card required.')).not.toBeInTheDocument();
     fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
     expect(await destination()).toBe('/app');
