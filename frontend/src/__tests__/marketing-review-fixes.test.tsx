@@ -239,20 +239,21 @@ describe("marketing review fixes", () => {
     }
   });
 
-  it("uses the stylized founder portrait on the About page", () => {
+  it("tells the founder story on the About page, ending on the one rule and a way to reach Ethan", () => {
     render(<AboutPageRoute />);
 
     const portrait = screen.getByRole("img", { name: "Stylized portrait of Ethan Teng" });
     expect(portrait).toHaveAttribute("src", expect.stringContaining("ethan-teng-cartoon.webp"));
     expect(portrait).not.toHaveAttribute("src", expect.stringContaining("ethan-teng.jpg"));
-    expect(screen.getByRole("heading", { name: /it started with a layoff.*and a bad idea/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/before you trust ask\s+linc, you should know who built it/i);
     expect(screen.getByText(/after i got laid off, i pasted my bank statements into chatgpt to figure out/i)).toHaveTextContent("how long my savings would last without a job.");
-    expect(screen.getByText("WHERE IT BROKE")).toBeInTheDocument();
-    expect(screen.getByText("WHAT I NEEDED")).toBeInTheDocument();
+    expect(screen.getByText(/when money is involved, “mostly right” is the same as wrong/i)).toBeInTheDocument();
     expect(screen.getByText(/35 of 100 ChatGPT Search finance answers/i)).toHaveTextContent("more than $500K short");
     expect(screen.getByRole("link", { name: /read the analysis/i })).toHaveAttribute("href", "/blog/ai-financial-calculator");
-    expect(screen.getByText("THE RESULT")).toBeInTheDocument();
-    expect(screen.getByText("So I built Ask Linc.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "The AI never does the math." })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /see how answers are checked/i })).toHaveAttribute("href", "/trust");
+    expect(screen.getByRole("heading", { name: /ask linc is small, which means you get me/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "ethan@asklinc.com" })).toHaveAttribute("href", "mailto:ethan@asklinc.com");
   });
 
   it("shows the full product demo with working navigation and evidence tabs", async () => {
