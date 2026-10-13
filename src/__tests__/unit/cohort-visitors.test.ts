@@ -265,7 +265,8 @@ describe('loading visitors', () => {
   it('reads every page of the result rather than only the first', async () => {
     const urls = mockBigQuery([
       { jobComplete: true, jobReference: { jobId: 'job-1' }, schema: { fields }, rows: [row('a')], pageToken: 'next', totalRows: '2' },
-      { jobComplete: true, schema: { fields }, rows: [row('b')], totalRows: '2' },
+      // Later pages may omit schema; fields from the first complete page must still apply.
+      { jobComplete: true, rows: [row('b')], totalRows: '2' },
     ]);
     const load = await loadGa4Visitors({ start: '2026-09-28', end: '2026-10-12' });
     expect(load.state).toBe('live');

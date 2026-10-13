@@ -234,8 +234,10 @@ interface BigQueryResponse {
   error?: { message?: string };
 }
 
-function rowsToObjects(response: BigQueryResponse): Array<Record<string, string | null>> {
-  const fields = response.schema?.fields ?? [];
+function rowsToObjects(
+  response: BigQueryResponse,
+  fields: Array<{ name: string }>,
+): Array<Record<string, string | null>> {
   return (response.rows ?? []).map(row => Object.fromEntries(fields.map((field, index) => [field.name, row.f[index]?.v ?? null])));
 }
 
@@ -275,13 +277,23 @@ async function runPagedQuery(
     body = await poll.json() as BigQueryResponse;
     if (!poll.ok || body.error) throw failure(poll, body, 'BigQuery job failed');
   }
-  const rows = rowsToObjects(body);
+  // Later pages often omit schema; keep the first complete page's fields so
+  // rows are not parsed into empty objects and silently dropped.
+  let fields = body.schema?.fields ?? [];
+  if (fields.length === 0 && (body.rows?.length ?? 0) > 0) {
+    throw new Error('BigQuery result is missing a schema');
+  }
+  const rows = rowsToObjects(body, fields);
   while (body.pageToken && rows.length <= VISITOR_CAP) {
     if (!jobId) throw new Error('BigQuery did not return a job id');
     const page = await results(body.pageToken);
     body = await page.json() as BigQueryResponse;
     if (!page.ok || body.error) throw failure(page, body, 'BigQuery page failed');
-    rows.push(...rowsToObjects(body));
+    if (body.schema?.fields?.length) fields = body.schema.fields;
+    const pageRows = rowsToObjects(body, fields);
+    // An empty page with a lingering token would loop forever otherwise.
+    if (pageRows.length === 0) break;
+    rows.push(...pageRows);
   }
   const truncated = rows.length > VISITOR_CAP;
   return { rows: truncated ? rows.slice(0, VISITOR_CAP) : rows, truncated };
