@@ -30,6 +30,7 @@ import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { CalculatorSteps, CalculatorPreview, CalculatorNextQuestion, CalculatorRunAgain } from "./CalculatorStory";
 import { CalculatorLockedPlan } from "./CalculatorLockedPlan";
+import { BuyMeACoffeeWidget } from "./BuyMeACoffeeWidget";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 
 type FormState = Record<keyof CoastFireInputs, string>;
@@ -374,6 +375,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
   return (
     <main className={`marketing-site subpage coast-fire-page calculator-story${!showInputs ? " calculator-result-view" : ""}`}>
       <SiteHeader />
+      <BuyMeACoffeeWidget visible={showInputs} />
 
       <section className="shell cf-hero">
         <p className="section-kicker">FREE COAST FIRE CALCULATOR</p>

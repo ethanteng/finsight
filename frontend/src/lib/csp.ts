@@ -16,6 +16,16 @@ const CONTENTSQUARE = "https://*.contentsquare.net";
 // directive.
 const CONTENTSQUARE_APP = "https://*.contentsquare.com";
 
+// Buy Me a Coffee's floating button on the free calculators
+// (components/marketing/BuyMeACoffeeWidget): the script from cdnjs., the cup
+// icon and the bubble's font from cdn., and the support panel it opens as a
+// frame. The panel's www. address redirects to the bare domain, and frame-src
+// must allow both ends of that redirect. Each host is in only the directives
+// that use it.
+const BUY_ME_A_COFFEE_SCRIPT = "https://cdnjs.buymeacoffee.com";
+const BUY_ME_A_COFFEE_ASSETS = "https://cdn.buymeacoffee.com";
+const BUY_ME_A_COFFEE_FRAMES = "https://www.buymeacoffee.com https://buymeacoffee.com";
+
 /**
  * Where next.config.ts sends this policy: every path except the teaser video's
  * player page and captions, which set their own (see lib/teaser-video). This
@@ -87,7 +97,7 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
 
   return [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.googleadservices.com https://www.google.com https://pagead2.googlesyndication.com ${CONTENTSQUARE} ${CONTENTSQUARE_APP} https://googleads.g.doubleclick.net https://cdn.plaid.com https://www.redditstatic.com https://bat.bing.com https://bat.bing.net`,
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.googleadservices.com https://www.google.com https://pagead2.googlesyndication.com ${CONTENTSQUARE} ${CONTENTSQUARE_APP} https://googleads.g.doubleclick.net https://cdn.plaid.com https://www.redditstatic.com https://bat.bing.com https://bat.bing.net ${BUY_ME_A_COFFEE_SCRIPT}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.redditstatic.com",
     // No blanket `https:`. An answer is rendered as Markdown, so an
     // image URL that reached the model through a search snippet or a
@@ -97,8 +107,8 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     // Plaid merchant logos on transaction rows, institution logos,
     // and analytics pixels, and the directory badges on the homepage
     // (components/marketing/ListedOn), each pinned to its exact host.
-    `img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://*.google-analytics.com https://www.googletagmanager.com https://*.g.doubleclick.net https://google.com https://www.google.com https://*.google.com https://pagead2.googlesyndication.com https://www.googleadservices.com ${CONTENTSQUARE} https://alb.reddit.com https://bat.bing.com https://bat.bing.net ${DIRECTORY_BADGE_HOSTS.join(" ")}`,
-    "font-src 'self' data: https://fonts.gstatic.com",
+    `img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://*.google-analytics.com https://www.googletagmanager.com https://*.g.doubleclick.net https://google.com https://www.google.com https://*.google.com https://pagead2.googlesyndication.com https://www.googleadservices.com ${CONTENTSQUARE} https://alb.reddit.com https://bat.bing.com https://bat.bing.net ${BUY_ME_A_COFFEE_ASSETS} ${DIRECTORY_BADGE_HOSTS.join(" ")}`,
+    `font-src 'self' data: https://fonts.gstatic.com ${BUY_ME_A_COFFEE_ASSETS}`,
     // Videos uploaded to a blog post. Ghost(Pro) stores them on
     // storage.ghost.io; a self-hosted file sits under the blog's /content/.
     "media-src 'self' https://*.ghost.io https://blog.asklinc.com",
@@ -107,7 +117,7 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     // redirects to YouTube's privacy-enhanced host; frame-src must allow both
     // ends of that redirect. youtube.com itself stays out, so an embed can only
     // ever be the privacy-enhanced one.
-    `frame-src 'self' https://*.plaid.com https://cdn.plaid.com https://www.googletagmanager.com https://app.snaptrade.com https://*.snaptrade.com ${CONTENTSQUARE} https://www.youtube-nocookie.com`,
+    `frame-src 'self' https://*.plaid.com https://cdn.plaid.com https://www.googletagmanager.com https://app.snaptrade.com https://*.snaptrade.com ${CONTENTSQUARE} https://www.youtube-nocookie.com ${BUY_ME_A_COFFEE_FRAMES}`,
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
