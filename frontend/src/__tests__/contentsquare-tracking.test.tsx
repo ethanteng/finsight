@@ -145,6 +145,23 @@ describe("Contentsquare content security policy", () => {
       expect(directive(production, name)).not.toContain("reddit");
     }
   });
+
+  it("allows each Buy Me a Coffee host only where the calculator widget uses it", () => {
+    const allowed: Record<string, string[]> = {
+      "https://cdnjs.buymeacoffee.com": ["script-src"],
+      "https://cdn.buymeacoffee.com": ["img-src", "font-src"],
+      // The panel's www. address redirects here, so the frame needs both.
+      "https://www.buymeacoffee.com": ["frame-src"],
+      "https://buymeacoffee.com": ["frame-src"],
+    };
+    const directives = ["default-src", "script-src", "style-src", "img-src", "font-src", "connect-src", "frame-src", "form-action"];
+    for (const [host, names] of Object.entries(allowed)) {
+      for (const name of directives) {
+        expect(directive(production, name).split(" ").includes(host)).toBe(names.includes(name));
+      }
+    }
+    expect(production).not.toContain("https://*.buymeacoffee.com");
+  });
 });
 
 describe("Contentsquare element ids", () => {

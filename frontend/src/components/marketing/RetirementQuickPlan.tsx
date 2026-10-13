@@ -27,6 +27,7 @@ import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { CalculatorSteps, CalculatorPreview, CalculatorNextQuestion, CalculatorAnswer, CalculatorRunAgain } from "./CalculatorStory";
 import { CalculatorLockedPlan } from "./CalculatorLockedPlan";
+import { BuyMeACoffeeWidget } from "./BuyMeACoffeeWidget";
 import { pushRetirementInteraction, pushRetirementModelRun } from "@/lib/dataLayer";
 import { RETIREMENT_LOCKED_PLAN } from "@/lib/calculator-locked-plan";
 import { numericInput, withCommas } from "@/lib/number-input";
@@ -639,6 +640,7 @@ export function RetirementQuickPlan({
   return (
     <main className={`marketing-site subpage quickplan-page calculator-story${!showInputs ? " calculator-result-view" : ""}`}>
       <SiteHeader />
+      <BuyMeACoffeeWidget visible={showInputs} />
 
       <section className="shell qp-hero">
         <p className="section-kicker">FREE RETIREMENT CALCULATOR</p>
