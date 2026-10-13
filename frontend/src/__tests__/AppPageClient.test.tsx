@@ -262,3 +262,42 @@ describe('AppPageClient decision list', () => {
     expect(historyCalls).toHaveLength(1);
   }, 10000);
 });
+
+describe('AppPageClient analytics opt-out', () => {
+  function mockVerify(operator: boolean) {
+    global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/auth/verify')) {
+        return Promise.resolve({ ok: true, json: async () => ({ user: { email: 'user@example.com' }, operator }) });
+      }
+      if (url.includes('/api/stripe/subscription-status')) {
+        return Promise.resolve({ ok: true, json: async () => ({ status: 'active', tier: 'premium', accessLevel: 'full' }) });
+      }
+      if (url.includes('/conversations')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ conversations: [] }) });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
+    });
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('auth_token', 'token');
+    resetPendingFirstDecisionCache();
+  });
+
+  it('leaves an operator’s browser out of analytics when they open the app', async () => {
+    mockVerify(true);
+    render(<AppPageClient />);
+
+    await waitFor(() => expect(localStorage.getItem('asklinc_internal_analytics_browser')).toBe('1'));
+  });
+
+  it('leaves everyone else counted', async () => {
+    mockVerify(false);
+    render(<AppPageClient />);
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/conversations'), expect.anything()));
+    expect(localStorage.getItem('asklinc_internal_analytics_browser')).toBeNull();
+  });
+});

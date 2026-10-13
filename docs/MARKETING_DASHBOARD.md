@@ -290,8 +290,9 @@ export is enabled and the query is extended to include intraday tables.
 The scorecard uses the same default reporting population as the normalized
 marketing service: human and ambiguous sessions are included; confirmed bots,
 internal/debug traffic, admin sessions, preview hosts, and known automation are
-excluded. Loading the authenticated marketing dashboard marks that browser as
-internal for future analytics loads.
+excluded. An operator's browser is marked as internal for future analytics loads
+when it signs in with an `ADMIN_EMAILS` account or loads any admin data; see
+`admin/VISITOR_COHORTS.md`.
 
 Known gaps that affect the beachhead decision:
 

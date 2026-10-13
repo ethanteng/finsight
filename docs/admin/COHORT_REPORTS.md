@@ -7,6 +7,9 @@ each day, week or month after that start. Clicking a cohort lists its users.
 Served by `GET /admin/cohorts/engagement` and `GET /admin/cohorts/activation`
 (`src/routes/admin-cohorts.ts`), computed in `src/cohort-analytics/`.
 
+The **Visitors** tab does the same for people who have not signed up, from GA4; see
+[Visitor cohorts](VISITOR_COHORTS.md).
+
 ## Who is in a cohort
 
 The **Signups / Trials / Paid** toggle picks which start clocks a cohort. An account that goes

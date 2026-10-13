@@ -297,6 +297,44 @@ export function pushCalculatorResultsPageCtaOpened(
   });
 }
 
+/**
+ * "Open the cash flow check" on /cash-flow-forecast: the visitor left for
+ * TryCoast's check in a new tab. GTM needs a Custom Event trigger on
+ * `cash_flow_check_click` plus a GA4 Event tag forwarding `source_page`,
+ * `content_type`, and `cta_location`. Until it exists, the admin Visitors tab
+ * falls back to GA4's automatic outbound click, where enhanced measurement
+ * records one.
+ */
+export function pushCashFlowCheckClick(): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('cash_flow_check_click');
+  const sourcePage = window.location.pathname;
+  pushToDataLayer({
+    event: 'cash_flow_check_click',
+    source_page: sourcePage,
+    content_type: getContentType(sourcePage),
+    cta_location: 'cash_flow_quick_check',
+  });
+}
+
+/**
+ * The Buy Me a Coffee panel opened from its floating button on a calculator.
+ * Whether anyone then paid happens inside Buy Me a Coffee's own frame, which
+ * this page cannot see. GTM needs a Custom Event trigger on
+ * `bmc_widget_opened` plus a GA4 Event tag forwarding `source_page` and
+ * `content_type`.
+ */
+export function pushBuyMeACoffeeOpened(): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('bmc_widget_opened');
+  const sourcePage = window.location.pathname;
+  pushToDataLayer({
+    event: 'bmc_widget_opened',
+    source_page: sourcePage,
+    content_type: getContentType(sourcePage),
+  });
+}
+
 export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
   if (typeof window === 'undefined') return;
 

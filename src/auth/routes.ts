@@ -10,6 +10,7 @@ import {
   verifyToken
 } from './utils';
 import { authenticateUser, AuthenticatedRequest } from './middleware';
+import { isAdminOperatorEmail } from './admin-emails';
 import { 
   sendEmailVerificationCode, 
   sendPasswordResetEmail, 
@@ -117,7 +118,10 @@ router.get('/verify', async (req: Request, res: Response) => {
         tier: user.tier,
         timeZone: user.timeZone,
         createdAt: user.createdAt
-      }
+      },
+      // The browser leaves itself out of analytics when this is true; see
+      // frontend/src/lib/internal-analytics.ts.
+      operator: isAdminOperatorEmail(user.email)
     });
   } catch (error) {
     console.error('Token verification error:', error);
@@ -519,7 +523,8 @@ router.post('/login', async (req: Request, res: Response) => {
         timeZone: effectiveTimeZone,
         createdAt: user.createdAt
       },
-      token
+      token,
+      operator: isAdminOperatorEmail(user.email)
     });
   } catch (error) {
     console.error('Login error:', error);

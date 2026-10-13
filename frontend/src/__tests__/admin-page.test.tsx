@@ -117,6 +117,31 @@ describe('AdminPage', () => {
     });
   });
 
+  it('opens the visitor cohorts from their own tab', async () => {
+    render(<AdminPage />);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Visitors' }));
+    expect(await screen.findByText('Visitor cohorts')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/cohorts/visitors?'),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('leaves a browser that can open the admin API out of analytics', async () => {
+    render(<AdminPage />);
+
+    await waitFor(() => {
+      expect(localStorageMock.setItem).toHaveBeenCalledWith('asklinc_internal_analytics_browser', '1');
+    });
+  });
+
   it('should switch to Market News tab when clicked', async () => {
     render(<AdminPage />);
 

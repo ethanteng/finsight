@@ -1,13 +1,18 @@
 import { Router, type Request, type Response } from 'express';
 import { adminAuth } from '../auth/middleware';
 import { getActivationReport, getEngagementReport } from '../cohort-analytics/service';
+import { getVisitorReport } from '../cohort-analytics/visitor-service';
 import {
   COHORT_GRAINS,
   COHORT_SEGMENTS,
+  VISITOR_CHANNELS,
+  VISITOR_DEVICES,
+  VISITOR_LANDINGS,
   type CohortGrain,
   type CohortSegment,
   type CohortWindow,
   type EngagementRule,
+  type VisitorWindow,
 } from '../cohort-analytics/types';
 
 const router = Router();
@@ -74,5 +79,32 @@ router.get('/engagement', handle(query => {
 }, 'engagement'));
 
 router.get('/activation', handle(query => getActivationReport(parseWindow(query)), 'activation'));
+
+function parseVisitorWindow(query: Request['query']): VisitorWindow {
+  if (query.campaign !== undefined && (typeof query.campaign !== 'string' || query.campaign.length > 256)) {
+    throw new InvalidParameter('campaign must be at most 256 characters');
+  }
+  return {
+    landing: oneOf(query.landing, VISITOR_LANDINGS, 'all', 'landing'),
+    channel: oneOf(query.channel, VISITOR_CHANNELS, 'all', 'channel'),
+    campaign: typeof query.campaign === 'string' && query.campaign.trim() ? query.campaign.trim() : undefined,
+    device: oneOf(query.device, VISITOR_DEVICES, 'all', 'device'),
+    cohortGrain: oneOf<CohortGrain>(query.cohort, COHORT_GRAINS, 'week', 'cohort'),
+    periodGrain: oneOf<CohortGrain>(query.period, COHORT_GRAINS, 'week', 'period'),
+    cohortCount: wholeNumber(query.cohorts, 12, MAX_COHORTS, 'cohorts'),
+    periodCount: wholeNumber(query.periods, 12, MAX_PERIODS, 'periods'),
+  };
+}
+
+function parseCohortKey(value: unknown): string | null {
+  if (value === undefined || value === '') return null;
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  throw new InvalidParameter('members must be a cohort key (YYYY-MM-DD)');
+}
+
+router.get('/visitors', handle(query => {
+  const window = parseVisitorWindow(query);
+  return getVisitorReport(window, { fresh: query.refresh === '1', membersFor: parseCohortKey(query.members) });
+}, 'visitor'));
 
 export default router;

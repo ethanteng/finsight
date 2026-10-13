@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { BuyMeACoffeeWidget } from "@/components/marketing/BuyMeACoffeeWidget";
 
 /*
@@ -87,5 +87,35 @@ describe("BuyMeACoffeeWidget", () => {
     // Leaving the page takes it down too.
     unmount();
     expect(button()).toBeNull();
+  });
+
+  it("reports opening the panel, not clicks while it is already open", async () => {
+    const analyticsWindow = window as Window & typeof globalThis & { dataLayer?: unknown[] };
+    analyticsWindow.dataLayer = [];
+    const { unmount } = render(<BuyMeACoffeeWidget visible />);
+    await waitFor(() => expect(button()).not.toBeNull());
+
+    fireEvent.click(button() as HTMLElement);
+    expect(analyticsWindow.dataLayer).toEqual([expect.objectContaining({ event: "bmc_widget_opened" })]);
+
+    // The widget's frame shows while its panel is open; the button only ever opens it.
+    const frame = document.createElement("iframe");
+    frame.id = "bmc-iframe";
+    frame.style.opacity = "1";
+    document.body.appendChild(frame);
+    fireEvent.click(button() as HTMLElement);
+    expect(analyticsWindow.dataLayer).toHaveLength(1);
+
+    // Closed again, the next click opens it.
+    frame.style.opacity = "0";
+    fireEvent.click(button() as HTMLElement);
+    expect(analyticsWindow.dataLayer).toHaveLength(2);
+    frame.remove();
+
+    // Clicks elsewhere are not the widget's.
+    fireEvent.click(document.body);
+    unmount();
+    fireEvent.click(document.body);
+    expect(analyticsWindow.dataLayer).toHaveLength(2);
   });
 });
