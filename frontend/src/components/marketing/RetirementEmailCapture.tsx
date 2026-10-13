@@ -93,6 +93,13 @@ export function RetirementEmailCapture({
   const [email, setEmail] = useState(() => readRememberedEmail() ?? "");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
+  /*
+   * A session's account opens the run as a new decision and starts no
+   * trial, so it is not offered one. An anonymous visitor who already has an
+   * account cannot be told apart until the address is sent; they are offered
+   * the trial like every other "Start free" on the site.
+   */
+  const [signedIn, setSignedIn] = useState(false);
   const [destination, setDestination] = useState<CalculatorHandoff>("signup");
   /** One conversion event per visitor, however many times they resend. */
   const reported = useRef(false);
@@ -116,7 +123,9 @@ export function RetirementEmailCapture({
   useEffect(() => {
     let cancelled = false;
     void readSignedInEmail().then((address) => {
-      if (!cancelled && address) setEmail((current) => current || address);
+      if (cancelled || !address) return;
+      setSignedIn(true);
+      setEmail((current) => current || address);
     });
     return () => {
       cancelled = true;
@@ -229,7 +238,7 @@ export function RetirementEmailCapture({
         <p className="section-kicker">UNLOCK YOUR PLAN</p>
         <h3>Unlock these in Ask Linc</h3>
         <p className="qp-email-lead">
-          {TRIAL_CTA_MICROCOPY}
+          {signedIn ? "Opens as a new decision in your Ask Linc account." : TRIAL_CTA_MICROCOPY}
         </p>
       </div>
 
