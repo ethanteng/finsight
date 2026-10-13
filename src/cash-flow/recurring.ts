@@ -215,6 +215,52 @@ function accountParts(entries: readonly CashFlowEntry[]): CashFlowEntry[][] {
   return moved ? [[...entries]] : parts;
 }
 
+/**
+ * A payee's runs of one amount that keep a schedule. Runs that follow one
+ * another -- one ended before the next began -- are one charge whose amount
+ * changed, a premium that went up say, and are judged together, so the old
+ * amount is not listed as a charge that stopped beside the new one.
+ */
+function scheduledRuns(
+  id: string,
+  flow: CashFlowDirection,
+  key: string,
+  entries: readonly CashFlowEntry[],
+  dataThrough: CalendarDate
+): RecurringStream[] {
+  // Named by the amount to the cent, so two charges from one payee keep apart
+  // however close in dollars; a repeat (two medians a hair apart) is numbered.
+  const used = new Set<string>();
+  const idFor = (run: readonly CashFlowEntry[]) => {
+    const base = `${id}#${Math.round(median(run.map(item => item.amount)) * 100)}`;
+    let candidate = base;
+    for (let suffix = 2; used.has(candidate); suffix += 1) candidate = `${base}-${suffix}`;
+    used.add(candidate);
+    return candidate;
+  };
+  const judged = fixedAmountRuns(entries)
+    .flatMap(run => {
+      const stream = evaluateGroup(`${id}#run`, flow, key, run, dataThrough, true);
+      return stream ? [{ run, stream }] : [];
+    })
+    .sort((left, right) => left.stream.firstDate.localeCompare(right.stream.firstDate));
+  const kept: Array<{ run: CashFlowEntry[]; stream: RecurringStream }> = [];
+  for (const next of judged) {
+    const previous = kept[kept.length - 1];
+    if (previous && previous.stream.cadence === next.stream.cadence && previous.stream.lastDate < next.stream.firstDate) {
+      const run = [...previous.run, ...next.run];
+      const together = evaluateGroup(`${id}#run`, flow, key, run, dataThrough, true);
+      if (together) {
+        kept[kept.length - 1] = { run, stream: together };
+        continue;
+      }
+    }
+    kept.push(next);
+  }
+  // A stream is named by its latest amount: what it charges now.
+  return kept.map(({ run, stream }) => ({ ...stream, id: idFor(run.slice(-3)) }));
+}
+
 /** Whether two or more streams are running, none of them posting on another's days. */
 function runsOnDaysOfTheirOwn(runs: readonly RecurringStream[], entries: readonly CashFlowEntry[]): boolean {
   if (runs.length < 2) return false;
@@ -311,10 +357,7 @@ export function detectRecurringStreams(
     for (const part of parts) {
       const id = streamId(group.flow, group.key, parts.length > 1 ? part[0].accountId : undefined);
       const whole = evaluateGroup(id, group.flow, group.key, part, dataThrough);
-      // Each run is named by its amount, so two charges from one payee keep apart.
-      const runs = fixedAmountRuns(part).flatMap(run => evaluateGroup(
-        `${id}#${Math.round(median(run.map(item => item.amount)))}`, group.flow, group.key, run, dataThrough, true,
-      ) ?? []);
+      const runs = scheduledRuns(id, group.flow, group.key, part, dataThrough);
       const sideBySide = runsOnDaysOfTheirOwn(runs.filter(run => run.status === 'active'), part);
       if (whole && !sideBySide) streams.push(whole);
       else streams.push(...runs);
