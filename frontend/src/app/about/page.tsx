@@ -49,10 +49,9 @@ export default function AboutPage() {
           <p className="section-kicker">THE STORY</p>
           <p className="origin-story-lead">After I got laid off, I pasted my bank statements into ChatGPT to figure out <strong>how long my savings would last without a job.</strong></p>
           <p>The answer sounded convincing. But my real numbers, its guesses and some shaky math were all blended together, and I couldn’t tell which was which.</p>
-          <p>I should have known better. I graduated from Stanford and spent a long career where software meets money, in banking and fintech. It taught me something I’ve never shaken: when money is involved, “mostly right” is the same as wrong.</p>
-          <p>And it wasn’t just me. AI chatbots have gotten very good at sounding smart about money. I watched people ask them serious retirement questions and get polished, confident answers. When I checked the math, it often didn’t hold up.<sup>*</sup></p>
-          <small className="origin-story-footnote">* 35 of 100 ChatGPT Search finance answers were incomplete, misleading, or wrong. In another test, a CFP® professional found a retirement plan more than $500K short. <Link href="/blog/ai-financial-calculator">Read the analysis →</Link></small>
-          <p>Spreadsheets get the math right, but every new “what if” means another tab.</p>
+          <p>After a long career in banking and fintech, I learned something I’ve never shaken: when money is involved, “mostly right” is the same as wrong.</p>
+          <p>And it wasn’t just me. AI chatbots have gotten very good at sounding smart about money. I watched people ask them serious retirement questions and get polished, confident answers. When I checked the math, it often didn’t hold up.</p>
+          <p>In fact, one recent study found that 35 of 100 ChatGPT Search finance answers were incomplete, misleading, or wrong. In another test, a CFP® professional found a retirement plan more than $500K short. <Link href="/blog/ai-financial-calculator">Read the analysis&nbsp;→</Link></p>
           <p className="about-story-turn">Ask Linc is the tool I wanted: <strong>plain-English questions, math you can check.</strong></p>
 
           <section className="about-rule" aria-labelledby="about-rule-heading">
@@ -63,7 +62,7 @@ export default function AboutPage() {
           </section>
 
           <section className="about-signoff" aria-labelledby="about-signoff-heading">
-            <h2 id="about-signoff-heading">Ask Linc is small, <em>which means you get me.</em></h2>
+            <h2 id="about-signoff-heading">Ask Linc is a solo operation, <em>which means you get me.</em></h2>
             <p>If something is confusing, wrong or missing, email me at <a href="mailto:ethan@asklinc.com">ethan@asklinc.com</a>. I read and answer every message myself.</p>
             <p className="about-signature">— Ethan</p>
           </section>
