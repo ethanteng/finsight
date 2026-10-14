@@ -2339,6 +2339,16 @@ export default function AdminPage() {
             User Management
           </button>
           <button
+            onClick={() => setActiveTab('visitors')}
+            className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${
+              activeTab === 'visitors'
+                ? 'bg-[#102319] text-white shadow-sm'
+                : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
+            }`}
+          >
+            Visitors
+          </button>
+          <button
             onClick={() => setActiveTab('engagement')}
             className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${
               activeTab === 'engagement'
@@ -2357,16 +2367,6 @@ export default function AdminPage() {
             }`}
           >
             Activation
-          </button>
-          <button
-            onClick={() => setActiveTab('visitors')}
-            className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${
-              activeTab === 'visitors'
-                ? 'bg-[#102319] text-white shadow-sm'
-                : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
-            }`}
-          >
-            Visitors
           </button>
           <button
             onClick={() => setActiveTab('market-news')}
