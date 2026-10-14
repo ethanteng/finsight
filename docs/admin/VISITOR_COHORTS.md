@@ -12,6 +12,33 @@ dataset settings as `/admin/marketing`: `GA4_BIGQUERY_SERVICE_ACCOUNT_JSON`,
 `GA4_BIGQUERY_PROJECT_ID`, `GA4_BIGQUERY_DATASET_ID`, `GA4_BIGQUERY_LOCATION`, and
 `GA4_REPORTING_LAG_DAYS`.
 
+## How fresh it is
+
+GA4 cannot export on demand. It writes a daily table once a day, typically mid-afternoon in
+the property's time zone, and, with **streaming export** on, a same-day `events_intraday_`
+table within minutes of each event, which it deletes once that day's daily table lands.
+
+Each report first lists the export dataset's tables (metadata, nothing billed). It reads the
+daily tables through the newest one, and the streaming tables only for the days after it, so
+no day is read twice. With streaming tables present, the data ends at the newest streamed
+event, found with a query over their timestamp column alone, and **Refresh** brings in
+everything streamed since: the header reads "GA4 streaming export · as of" that time.
+Without them, the data ends at midnight UTC after the newest daily table, and the header
+reads "GA4 daily export · not live".
+
+Streamed days are provisional until the daily table replaces them. Late or failed events can
+be missing, and streaming leaves out traffic sources for new users and new sessions, so a new
+visitor's channel and campaign can read as Direct until then; UTM tags on the landing URL still
+come through.
+
+To turn streaming on: GA4 Admin → Product links → BigQuery links → the link → tick
+**Streaming** beside Daily. It needs billing on the Google Cloud project (the BigQuery
+sandbox gets no streaming tables) and costs $0.05 per GB, about 600,000 events.
+
+If the service account cannot list the dataset's tables, the report falls back to the daily
+export through today less `GA4_REPORTING_LAG_DAYS`, reads nothing streamed, and says so in its
+footer. BigQuery Data Viewer or Metadata Viewer on the dataset lets it list them.
+
 ## Who is a visitor
 
 GA4 is the only record of someone who has not signed up; the first-party tables keep no
@@ -52,8 +79,7 @@ Activity is dated by the session it happened in.
 - **When they came back:** the same grid as Engagement, for the action picked above it. A cell
   is the share of the cohort that did it in that period after their own first visit; *Signed
   up* is cumulative, like Activation; *Visited* is any session, so its first column is always
-  everyone. Only periods that have ended count. The data ends at midnight UTC after the last
-  complete export day, so the newest period trails the calendar by the reporting lag.
+  everyone. Only periods that have ended count, by where the data ends (above).
 - **A cohort's visitors:** click a cohort. Up to 1,000 per cohort, signups first and then the
   most active, loaded on their own request. Click a visitor for each session.
 - **Filters** read each visitor's first session: the page it landed on, its channel (as the
@@ -61,11 +87,13 @@ Activity is dated by the session it happened in.
 
 ## Limits
 
-- Daily export, not live; recent tables can still receive late events for up to 3 days.
+- Daily tables can still receive late events for up to 3 days, and streamed days are
+  provisional (above).
 - More than 100,000 browsers in one window shows nothing rather than an undercount: show fewer
   cohorts or a shorter grain.
-- A scan reads every event from the oldest cohort's start. It is kept for 10 minutes, so
-  changing filters or columns reuses it; **Refresh** reads again.
+- A scan reads every event from the oldest cohort's start. The table listing and each scan are
+  kept for 10 minutes, so changing filters or columns reuses them; **Refresh** reads both
+  again.
 
 ## GTM setup
 

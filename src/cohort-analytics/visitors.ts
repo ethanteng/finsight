@@ -220,10 +220,11 @@ export function visitorCohortStarts(now: Date, window: Pick<VisitorWindow, 'coho
 export interface VisitorReportInput {
   visitors: Ga4Visitor[];
   window: VisitorWindow;
-  /** Where the export's complete days end; periods after it are in progress. */
+  /** Where the export's data ends; periods after it are in progress. */
   now: Date;
   generatedAt: Date;
-  reportEnd: string;
+  reportEnd: string | null;
+  streamedThrough?: Date | null;
   detail: string;
   notes?: string[];
   /** The cohort (its `key`) whose visitors to list; the others list none. */
@@ -306,6 +307,7 @@ export function buildVisitorReport(input: VisitorReportInput): VisitorReport {
     state: 'live',
     detail: input.detail,
     reportEnd: input.reportEnd,
+    streamedThrough: input.streamedThrough?.toISOString() ?? null,
     dataThrough: now.toISOString(),
     ...window,
     generatedAt: input.generatedAt.toISOString(),
@@ -332,6 +334,7 @@ export function unavailableVisitorReport(
     state,
     detail,
     reportEnd,
+    streamedThrough: null,
     dataThrough: null,
     ...window,
     generatedAt: generatedAt.toISOString(),

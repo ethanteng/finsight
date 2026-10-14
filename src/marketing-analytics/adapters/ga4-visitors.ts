@@ -59,41 +59,93 @@ export interface Ga4Visitor {
 }
 
 export interface Ga4VisitorLoad {
-  state: 'live' | 'needs_configuration' | 'error';
+  state: 'live' | 'error';
   visitors: Ga4Visitor[];
-  /** The last complete export day, in the reporting time zone. */
-  reportEnd: string | null;
   truncated: boolean;
   detail: string;
+}
+
+/**
+ * Which export tables there are to read. GA4 writes a daily table once a
+ * day, and, with streaming export on, a same-day `events_intraday_` table
+ * within minutes of each event, deleted once that day's daily table lands.
+ */
+export interface ExportCoverage {
+  /** The newest day with a daily table (reporting time zone), or null when there is none. */
+  dailyEnd: string | null;
+  /** Days after `dailyEnd` with a streaming table, oldest first. */
+  streamingDays: string[];
+  /** The newest event in those streaming tables, when there is one. */
+  streamedThrough: Date | null;
+  /**
+   * `tables`: read from the dataset. `lag`: the dataset's tables could not be
+   * listed, so the configured lag stands in for the daily export and nothing
+   * streamed is read.
+   */
+  source: 'tables' | 'lag';
+  /** Why the tables could not be listed, when they could not. */
+  listingError?: string;
 }
 
 export interface VisitorScan {
   /** First day to read (YYYY-MM-DD). */
   start: string;
-  /** Last complete export day (YYYY-MM-DD). */
-  end: string;
+  /** Read daily tables through this day, or none when null. */
+  dailyEnd: string | null;
+  /** Read these days' streaming tables. */
+  streamingDays: string[];
 }
+
+export interface Ga4Connection {
+  projectId: string;
+  datasetId: string;
+  location: string;
+  token: string;
+}
+
+export type Ga4Connect =
+  | { state: 'connected'; connection: Ga4Connection }
+  | { state: 'needs_configuration' | 'error'; detail: string };
 
 /** The last complete export day, after the configured availability lag. */
 export function visitorReportEnd(): string {
   return subtractDays(todayInReportingTimeZone(), reportingLagDays());
 }
 
+const compact = (day: string) => day.replace(/-/g, '');
+const dashed = (day: string) => `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}`;
+
+/**
+ * The newest daily table, and the streaming tables after it. A day with both
+ * (GA4 deletes the streaming table soon after the daily one lands) reads the
+ * daily one, so no event is counted twice.
+ */
+export function coverageFromTables(tableIds: string[]): Pick<ExportCoverage, 'dailyEnd' | 'streamingDays'> {
+  const daily: string[] = [];
+  const streaming: string[] = [];
+  for (const id of tableIds) {
+    const dailyMatch = /^events_(\d{8})$/.exec(id);
+    if (dailyMatch) daily.push(dailyMatch[1]);
+    const streamingMatch = /^events_intraday_(\d{8})$/.exec(id);
+    if (streamingMatch) streaming.push(streamingMatch[1]);
+  }
+  daily.sort();
+  const newestDaily = daily.length > 0 ? daily[daily.length - 1] : null;
+  return {
+    dailyEnd: newestDaily ? dashed(newestDaily) : null,
+    streamingDays: streaming
+      .filter(day => newestDaily === null || day > newestDaily)
+      .sort()
+      .map(dashed),
+  };
+}
+
 /** A page URL whose path is `/${path}` or below it. */
 const onPath = (path: string) =>
   `REGEXP_CONTAINS(COALESCE(page_location, ''), r'^https?://[^/]+/${path}(?:[/?#]|$)')`;
 
-/**
- * One row per browser seen in the scan, with its sessions as a JSON array.
- *
- * The scan reads a day either side of the requested dates: GA4 names its daily
- * tables by the property's reporting day, and callers ask in UTC.
- */
-export function buildVisitorQuery(projectId: string, datasetId: string, scan: VisitorScan): string {
-  const before = 'event_timestamp < account_at';
-  return `
-WITH raw AS (
-  SELECT
+/** What each event contributes, the same from a daily or a streaming table. */
+const EVENT_COLUMNS = `
     event_timestamp,
     event_name,
     user_pseudo_id,
@@ -130,11 +182,40 @@ WITH raw AS (
       collected_traffic_source.manual_campaign_name
     ) AS campaign,
     COALESCE(collected_traffic_source.gclid, collected_traffic_source.dclid) AS ad_id
-  FROM \`${projectId}.${datasetId}.events_*\`
-  WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', DATE_SUB(DATE '${scan.start}', INTERVAL 1 DAY))
-    AND FORMAT_DATE('%Y%m%d', DATE_ADD(DATE '${scan.end}', INTERVAL 1 DAY))
+`;
+
+/** The tables a scan reads, as `UNION ALL` parts with constant suffix filters BigQuery can prune on. */
+export function scanParts(projectId: string, datasetId: string, scan: VisitorScan): string[] {
+  const parts: string[] = [];
+  const table = (name: string) => `\`${projectId}.${datasetId}.${name}_*\``;
+  const part = (name: string, from: string, through: string) => `
+  SELECT${EVENT_COLUMNS}  FROM ${table(name)}
+  WHERE _TABLE_SUFFIX BETWEEN '${from}' AND '${through}'
     AND platform = 'WEB'
-    AND user_pseudo_id IS NOT NULL
+    AND user_pseudo_id IS NOT NULL`;
+  // A day early: tables are named by the property's reporting day, cohorts by UTC.
+  const first = compact(subtractDays(scan.start, 1));
+  if (scan.dailyEnd && compact(scan.dailyEnd) >= first) {
+    parts.push(part('events', first, compact(scan.dailyEnd)));
+  }
+  const streaming = scan.streamingDays.map(compact).filter(day => day >= first);
+  if (streaming.length > 0) {
+    parts.push(part('events_intraday', streaming[0], streaming[streaming.length - 1]));
+  }
+  return parts;
+}
+
+/**
+ * One row per browser seen in the scan, with its sessions as a JSON array.
+ *
+ * The scan reads a day before the requested start: GA4 names its tables by
+ * the property's reporting day, and callers ask in UTC. Daily tables are read
+ * through `dailyEnd` and streaming tables only after it.
+ */
+export function buildVisitorQuery(projectId: string, datasetId: string, scan: VisitorScan): string {
+  const before = 'event_timestamp < account_at';
+  return `
+WITH raw AS (${scanParts(projectId, datasetId, scan).join('\n  UNION ALL')}
 ), marked AS (
   -- Window functions rather than a second CTE over raw: BigQuery runs a CTE
   -- once per reference, and every pass over raw is a full scan of the export.
@@ -379,29 +460,99 @@ export function toVisitor(row: Record<string, string | null>): Ga4Visitor | null
   };
 }
 
-export async function loadGa4Visitors(scan: VisitorScan): Promise<Ga4VisitorLoad> {
-  const base = { visitors: [] as Ga4Visitor[], reportEnd: scan.end, truncated: false };
+export async function connectGa4(): Promise<Ga4Connect> {
   const credentials = parseCredentials();
   if (!credentials) {
-    return { ...base, state: 'needs_configuration', detail: 'Add a read-only BigQuery service account to the backend environment.' };
+    return { state: 'needs_configuration', detail: 'Add a read-only BigQuery service account to the backend environment.' };
   }
   const projectId = process.env.GA4_BIGQUERY_PROJECT_ID?.trim() || credentials.project_id;
   if (!projectId) {
-    return { ...base, state: 'needs_configuration', detail: 'Set the BigQuery project ID in the backend environment or service-account JSON.' };
+    return { state: 'needs_configuration', detail: 'Set the BigQuery project ID in the backend environment or service-account JSON.' };
   }
-  const datasetId = process.env.GA4_BIGQUERY_DATASET_ID?.trim() || 'analytics_519498279';
-  const location = process.env.GA4_BIGQUERY_LOCATION?.trim() || 'US';
   try {
-    const token = await getAccessToken(credentials);
+    return {
+      state: 'connected',
+      connection: {
+        projectId,
+        datasetId: process.env.GA4_BIGQUERY_DATASET_ID?.trim() || 'analytics_519498279',
+        location: process.env.GA4_BIGQUERY_LOCATION?.trim() || 'US',
+        token: await getAccessToken(credentials),
+      },
+    };
+  } catch (error) {
+    return { state: 'error', detail: error instanceof Error ? error.message : 'Unable to sign in to BigQuery.' };
+  }
+}
+
+interface TableListResponse {
+  tables?: Array<{ tableReference?: { tableId?: string } }>;
+  nextPageToken?: string;
+  error?: { message?: string };
+}
+
+/** Every table in the export dataset, from metadata: no query, nothing billed. */
+async function listTables(connection: Ga4Connection): Promise<string[]> {
+  const { projectId, datasetId, token } = connection;
+  const endpoint = `https://bigquery.googleapis.com/bigquery/v2/projects/${encodeURIComponent(projectId)}/datasets/${encodeURIComponent(datasetId)}/tables`;
+  const ids: string[] = [];
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({ maxResults: '1000' });
+    if (pageToken) params.set('pageToken', pageToken);
+    const response = await fetch(`${endpoint}?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
+    const body = await response.json() as TableListResponse;
+    if (!response.ok || body.error) throw new Error(body.error?.message || `BigQuery table listing failed (${response.status})`);
+    for (const table of body.tables ?? []) {
+      if (table.tableReference?.tableId) ids.push(table.tableReference.tableId);
+    }
+    pageToken = body.nextPageToken;
+  } while (pageToken);
+  return ids;
+}
+
+/**
+ * Which tables to read, and how recent the newest streamed event is. A
+ * dataset that cannot be listed falls back to the configured lag and the
+ * daily export alone, as before streaming was read.
+ */
+export async function loadExportCoverage(connection: Ga4Connection): Promise<ExportCoverage> {
+  let tableIds: string[];
+  try {
+    tableIds = await listTables(connection);
+  } catch (error) {
+    return {
+      dailyEnd: visitorReportEnd(),
+      streamingDays: [],
+      streamedThrough: null,
+      source: 'lag',
+      listingError: error instanceof Error ? error.message : 'unknown error',
+    };
+  }
+  const { dailyEnd, streamingDays } = coverageFromTables(tableIds);
+  if (streamingDays.length === 0) return { dailyEnd, streamingDays, streamedThrough: null, source: 'tables' };
+  const { projectId, datasetId, location, token } = connection;
+  // Only the timestamp column of the streaming tables: a few kilobytes.
+  const result = await runPagedQuery(projectId, location, token, `
+SELECT MAX(event_timestamp) AS newest
+FROM \`${projectId}.${datasetId}.events_intraday_*\`
+WHERE _TABLE_SUFFIX BETWEEN '${compact(streamingDays[0])}' AND '${compact(streamingDays[streamingDays.length - 1])}'`);
+  return { dailyEnd, streamingDays, streamedThrough: micros(result.rows[0]?.newest), source: 'tables' };
+}
+
+export async function loadGa4Visitors(connection: Ga4Connection, scan: VisitorScan): Promise<Ga4VisitorLoad> {
+  const { projectId, datasetId, location, token } = connection;
+  if (scanParts(projectId, datasetId, scan).length === 0) {
+    return { state: 'live', visitors: [], truncated: false, detail: '' };
+  }
+  try {
     const result = await runPagedQuery(projectId, location, token, buildVisitorQuery(projectId, datasetId, scan));
     return {
-      ...base,
       state: 'live',
       visitors: result.rows.map(toVisitor).filter((visitor): visitor is Ga4Visitor => visitor !== null),
       truncated: result.truncated,
-      detail: `GA4 daily export through ${scan.end}; ${reportingLagDays()}-day availability lag applied. Recent daily tables can still receive late events for up to 3 days.`,
+      detail: '',
     };
   } catch (error) {
-    return { ...base, state: 'error', detail: error instanceof Error ? error.message : 'Unable to query the GA4 BigQuery export.' };
+    return { state: 'error', visitors: [], truncated: false, detail: error instanceof Error ? error.message : 'Unable to query the GA4 BigQuery export.' };
   }
 }

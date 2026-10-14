@@ -66,6 +66,8 @@ interface VisitorReport {
   state: 'live' | 'needs_configuration' | 'error' | 'truncated';
   detail: string;
   reportEnd: string | null;
+  /** Newest event from GA4's streaming export; null when only the daily export is read. */
+  streamedThrough?: string | null;
   periodGrain: Grain;
   periodCount: number;
   memberLimit: number;
@@ -179,6 +181,20 @@ function duration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   return `${minutes}m ${seconds % 60}s`;
+}
+
+const STREAMED_AT = new Intl.DateTimeFormat('en-US', {
+  month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+});
+
+/** Where the numbers come from, and how fresh they are. */
+function exportLabel(report: VisitorReport | null): string {
+  const daily = report?.reportEnd ? formatDate(`${report.reportEnd}T12:00:00Z`) : null;
+  if (report?.streamedThrough) {
+    return `GA4 streaming export · as of ${STREAMED_AT.format(new Date(report.streamedThrough))}`
+      + (daily ? ` · daily export through ${daily}, later days provisional` : '');
+  }
+  return `GA4 daily export · not live${daily ? ` · through ${daily}` : ''}`;
 }
 
 function acquisition(channel: string, campaign: string): string {
@@ -413,7 +429,7 @@ export default function VisitorCohortPanel({
               signing up or in. Cohorts use UTC dates. Click a cohort to see its visitors.
             </p>
             <p className="mt-2 text-xs font-medium uppercase tracking-wide text-[#486657]">
-              GA4 daily export · not live{report?.reportEnd ? ` · through ${formatDate(`${report.reportEnd}T12:00:00Z`)}` : ''}
+              {exportLabel(report)}
             </p>
           </div>
           <button
