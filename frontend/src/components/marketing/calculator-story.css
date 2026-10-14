@@ -162,6 +162,8 @@
 .calculator-run-again > span { text-decoration: underline; text-underline-offset: 4px; }
 .calculator-run-again > svg { flex: none; }
 .calculator-run-again:focus-visible { outline: 2px solid #397052; outline-offset: 2px; border-radius: 8px; }
+/* Hidden from both calculators' results for now; the button and its handler stay. Nothing stops a reload and another run. */
+.marketing-site.calculator-story .calculator-run-again { display: none; }
 .calculator-answer.is-compact { padding: 23px; }
 .calculator-answer.is-compact .calculator-answer-author { margin-bottom: 22px; }
 .calculator-answer.is-compact .calculator-conversation { gap: 20px; }
