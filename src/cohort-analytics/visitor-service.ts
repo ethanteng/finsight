@@ -70,11 +70,15 @@ function describeCoverage(coverage: ExportCoverage, streamedAsOf: Date | null): 
   return `GA4 daily export through ${coverage.dailyEnd}. ${late} No streaming tables are in the dataset, so later visits appear once the next daily export lands; turn on streaming export in GA4 to see them within minutes.`;
 }
 
+function hasCachedCoverage(connection: Ga4Connection): boolean {
+  return coverageCache !== null
+    && coverageCache.key === `${connection.projectId}.${connection.datasetId}`
+    && Date.now() - coverageCache.at < CACHE_MS;
+}
+
 function cachedCoverage(connection: Ga4Connection, fresh: boolean): Promise<ExportCoverage> {
   const key = `${connection.projectId}.${connection.datasetId}`;
-  if (coverageCache && !fresh && coverageCache.key === key && Date.now() - coverageCache.at < CACHE_MS) {
-    return coverageCache.value;
-  }
+  if (coverageCache && !fresh && hasCachedCoverage(connection)) return coverageCache.value;
   const entry: Cached<ExportCoverage> = { key, at: Date.now(), value: loadExportCoverage(connection) };
   coverageCache = entry;
   entry.value.catch(() => {
@@ -83,12 +87,23 @@ function cachedCoverage(connection: Ga4Connection, fresh: boolean): Promise<Expo
   return entry.value;
 }
 
-function cachedLoad(connection: Ga4Connection, scan: VisitorScan, through: Date, fresh: boolean): Promise<Ga4VisitorLoad> {
-  // The cutoff is in the key: a scan read before newer events streamed in
-  // must not be paired with a cutoff that counts them as read.
-  const key = [connection.projectId, connection.datasetId, scan.start, scan.dailyEnd, scan.streamingDays.join(','), through.toISOString()].join('|');
+/**
+ * The cutoff is in the key: a scan read before newer events streamed in
+ * must not be paired with a cutoff that counts them as read.
+ */
+function loadKey(connection: Ga4Connection, scan: VisitorScan, through: Date): string {
+  return [connection.projectId, connection.datasetId, scan.start, scan.dailyEnd, scan.streamingDays.join(','), through.toISOString()].join('|');
+}
+
+function hasCachedLoad(key: string): boolean {
   const hit = loads.get(key);
-  if (hit && !fresh && Date.now() - hit.at < CACHE_MS) return hit.value;
+  return hit !== undefined && Date.now() - hit.at < CACHE_MS;
+}
+
+function cachedLoad(connection: Ga4Connection, scan: VisitorScan, through: Date, fresh: boolean): Promise<Ga4VisitorLoad> {
+  const key = loadKey(connection, scan, through);
+  const hit = loads.get(key);
+  if (hit && !fresh && hasCachedLoad(key)) return hit.value;
   const value = loadGa4Visitors(connection, scan);
   loads.set(key, { key, at: Date.now(), value });
   // Keep only answers worth reusing; a failure is retried on the next request.
@@ -100,6 +115,21 @@ function cachedLoad(connection: Ga4Connection, scan: VisitorScan, through: Date,
   });
   while (loads.size > CACHE_ENTRIES) loads.delete(loads.keys().next().value as string);
   return value;
+}
+
+/** The scan a window needs over these tables, and where its data ends; null when there are none yet. */
+function planScan(coverage: ExportCoverage, window: VisitorWindow, requestedAt: Date): { now: Date; scan: VisitorScan } | null {
+  const now = visitorDataThrough(coverage, requestedAt);
+  if (!now) return null;
+  return {
+    now,
+    scan: {
+      start: visitorCohortStarts(now, window)[0].toISOString().slice(0, 10),
+      dailyEnd: coverage.dailyEnd,
+      // Streaming tables with no events in them yet have nothing to add.
+      streamingDays: coverage.streamedThrough ? coverage.streamingDays : [],
+    },
+  };
 }
 
 export function clearVisitorCache(): void {
@@ -117,14 +147,24 @@ export async function getVisitorReport(
   if (connect.state !== 'connected') return unavailableVisitorReport(window, connect.state, connect.detail, null, generatedAt);
 
   let coverage: ExportCoverage;
+  let plan: ReturnType<typeof planScan>;
   try {
+    const remembered = !fresh && hasCachedCoverage(connect.connection);
     coverage = await cachedCoverage(connect.connection, fresh);
+    plan = planScan(coverage, window, generatedAt);
+    // A remembered table listing is trusted only for a scan already read
+    // with it. GA4 swaps a day's streaming table for its daily one without
+    // notice, so a scan about to be read lists the tables again: otherwise it
+    // could look for a streaming table that is gone and miss that day.
+    if (remembered && plan && !hasCachedLoad(loadKey(connect.connection, plan.scan, plan.now))) {
+      coverage = await cachedCoverage(connect.connection, true);
+      plan = planScan(coverage, window, generatedAt);
+    }
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'Unable to read the GA4 streaming export.';
     return unavailableVisitorReport(window, 'error', detail, null, generatedAt);
   }
-  const now = visitorDataThrough(coverage, generatedAt);
-  if (!now) {
+  if (!plan) {
     return unavailableVisitorReport(
       window,
       'needs_configuration',
@@ -133,13 +173,7 @@ export async function getVisitorReport(
       generatedAt,
     );
   }
-  const scan: VisitorScan = {
-    start: visitorCohortStarts(now, window)[0].toISOString().slice(0, 10),
-    dailyEnd: coverage.dailyEnd,
-    // Streaming tables with no events in them yet have nothing to add.
-    streamingDays: coverage.streamedThrough ? coverage.streamingDays : [],
-  };
-
+  const { now, scan } = plan;
   const load = await cachedLoad(connect.connection, scan, now, fresh);
   if (load.state !== 'live') return unavailableVisitorReport(window, load.state, load.detail, coverage.dailyEnd, generatedAt);
   if (load.truncated) {
