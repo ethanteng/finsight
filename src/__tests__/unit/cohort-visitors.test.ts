@@ -2,9 +2,12 @@ import { generateKeyPairSync } from 'crypto';
 import { buildVisitorReport, landingFor, visitorCohortStarts, VISITOR_MEMBER_LIMIT } from '../../cohort-analytics/visitors';
 import {
   buildVisitorQuery,
+  coverageFromTables,
   loadGa4Visitors,
+  scanParts,
   toVisitor,
   VISITOR_CAP,
+  type Ga4Connection,
   type Ga4Visitor,
   type Ga4VisitorSession,
 } from '../../marketing-analytics/adapters/ga4-visitors';
@@ -183,9 +186,10 @@ describe('visitor cohorts', () => {
 });
 
 describe('GA4 visitor export', () => {
+  const dailyOnly = { start: '2026-09-28', dailyEnd: '2026-10-12', streamingDays: [] };
+
   it('counts each action before the account moment and flags operator browsers', () => {
-    const query = buildVisitorQuery('project', 'dataset', { start: '2026-09-28', end: '2026-10-12' });
-    expect(query).toContain("_TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', DATE_SUB(DATE '2026-09-28', INTERVAL 1 DAY))");
+    const query = buildVisitorQuery('project', 'dataset', dailyOnly);
     expect(query).toContain("event_name = 'coast_fire_calculated' AND calculation_trigger = 'submitted' AND event_timestamp < account_at");
     expect(query).toContain("event_name = 'retirement_model_run' AND event_timestamp < account_at");
     expect(query).toContain("event_name = 'cash_flow_check_click'");
@@ -198,6 +202,38 @@ describe('GA4 visitor export', () => {
     // One pass over the export: a CTE referenced twice is scanned twice.
     expect(query.match(/FROM raw\b/g)).toHaveLength(1);
     expect(query).toContain(`LIMIT ${VISITOR_CAP + 1}`);
+  });
+
+  it('reads daily tables through the newest one, from a day before the start', () => {
+    const query = buildVisitorQuery('project', 'dataset', dailyOnly);
+    expect(query).toContain('FROM `project.dataset.events_*`');
+    expect(query).toContain("_TABLE_SUFFIX BETWEEN '20260927' AND '20261012'");
+    expect(query).not.toContain('events_intraday_');
+  });
+
+  it('adds the streaming tables after the newest daily one', () => {
+    const query = buildVisitorQuery('project', 'dataset', { ...dailyOnly, streamingDays: ['2026-10-13', '2026-10-14'] });
+    expect(query).toContain("FROM `project.dataset.events_*`\n  WHERE _TABLE_SUFFIX BETWEEN '20260927' AND '20261012'");
+    expect(query).toContain("UNION ALL\n  SELECT");
+    expect(query).toContain("FROM `project.dataset.events_intraday_*`\n  WHERE _TABLE_SUFFIX BETWEEN '20261013' AND '20261014'");
+  });
+
+  it('reads only the tables a short window needs', () => {
+    // A window starting after the daily export reads only streaming, from a day before the start.
+    const today = scanParts('p', 'd', { start: '2026-10-14', dailyEnd: '2026-10-12', streamingDays: ['2026-10-13', '2026-10-14'] });
+    expect(today).toHaveLength(1);
+    expect(today[0]).toContain("events_intraday_*`\n  WHERE _TABLE_SUFFIX BETWEEN '20261013' AND '20261014'");
+    expect(scanParts('p', 'd', { start: '2026-10-14', dailyEnd: null, streamingDays: [] })).toEqual([]);
+  });
+
+  it('finds the newest daily table and the streaming tables after it', () => {
+    expect(coverageFromTables([
+      'events_20261011', 'events_20261012', 'pseudonymous_users_20261012',
+      // GA4 deletes a day's streaming table soon after its daily table lands.
+      'events_intraday_20261012', 'events_intraday_20261014', 'events_intraday_20261013',
+    ])).toEqual({ dailyEnd: '2026-10-12', streamingDays: ['2026-10-13', '2026-10-14'] });
+    expect(coverageFromTables(['events_intraday_20261014'])).toEqual({ dailyEnd: null, streamingDays: ['2026-10-14'] });
+    expect(coverageFromTables([])).toEqual({ dailyEnd: null, streamingDays: [] });
   });
 
   it('reads a browser row and classifies each session as the marketing pages do', () => {
@@ -232,22 +268,50 @@ describe('GA4 visitor export', () => {
   });
 });
 
+describe('where the data ends', () => {
+  const requestedAt = at('2026-10-14T18:00:00Z');
+
+  it('is the newest streamed event when there is one, never past the request', () => {
+    expect(visitorDataThrough({ dailyEnd: '2026-10-12', streamedThrough: at('2026-10-14T17:42:00Z') }, requestedAt)?.toISOString())
+      .toBe('2026-10-14T17:42:00.000Z');
+    // A browser clock ahead of the server's does not move the cutoff into the future.
+    expect(visitorDataThrough({ dailyEnd: '2026-10-12', streamedThrough: at('2026-10-14T19:00:00Z') }, requestedAt)?.toISOString())
+      .toBe('2026-10-14T18:00:00.000Z');
+  });
+
+  it('is midnight UTC after the newest daily table without streaming, and nothing without either', () => {
+    expect(visitorDataThrough({ dailyEnd: '2026-10-12', streamedThrough: null }, requestedAt)?.toISOString()).toBe('2026-10-13T00:00:00.000Z');
+    expect(visitorDataThrough({ dailyEnd: null, streamedThrough: null }, requestedAt)).toBeNull();
+  });
+});
+
 describe('loading visitors', () => {
   const originalCredentials = process.env.GA4_BIGQUERY_SERVICE_ACCOUNT_JSON;
   const originalLag = process.env.GA4_REPORTING_LAG_DAYS;
   const originalFetch = global.fetch;
+  const connection: Ga4Connection = { projectId: 'p', datasetId: 'd', location: 'US', token: 't' };
 
-  beforeAll(() => {
+  function useCredentials() {
     const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     process.env.GA4_BIGQUERY_SERVICE_ACCOUNT_JSON = JSON.stringify({
       client_email: 'analytics-reader@example.test',
       private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
       project_id: 'analytics-test',
     });
+  }
+
+  beforeAll(() => {
+    useCredentials();
     delete process.env.GA4_REPORTING_LAG_DAYS;
   });
 
+  beforeEach(() => {
+    // 11am in Los Angeles: the reporting day is Oct 14, so a one-day lag means Oct 13.
+    jest.useFakeTimers({ now: at('2026-10-14T18:00:00Z'), doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+  });
+
   afterEach(() => {
+    jest.useRealTimers();
     global.fetch = originalFetch;
     clearVisitorCache();
   });
@@ -260,68 +324,171 @@ describe('loading visitors', () => {
   });
 
   const fields = ['visitor_id', 'signed_up_at', 'signed_in_at', 'operator_browser', 'sessions'].map(name => ({ name }));
-  const row = (id: string) => ({ f: [
+  const row = (id: string, startedAt = at('2026-10-11T16:00:00Z')) => ({ f: [
     { v: id }, { v: null }, { v: null }, { v: '0' },
-    { v: JSON.stringify([{ id: '1', t: 1791700000000000, n: 1, lp: 'https://asklinc.com/', host: 'asklinc.com', dev: 'desktop', br: 'Chrome', os: 'Mac', pv: 2, eng: 9000 }]) },
+    { v: JSON.stringify([{ id: '1', t: startedAt.getTime() * 1000, n: 1, lp: 'https://asklinc.com/', host: 'asklinc.com', dev: 'desktop', br: 'Chrome', os: 'Mac', pv: 2, eng: 9000 }]) },
   ] });
+  const result = (rows: unknown[], extra: Record<string, unknown> = {}) =>
+    ({ jobComplete: true, jobReference: { jobId: 'job' }, schema: { fields }, rows, totalRows: String(rows.length), ...extra });
 
-  function mockBigQuery(pages: Array<Record<string, unknown>>) {
-    const urls: string[] = [];
-    global.fetch = jest.fn(async (url: string) => {
-      urls.push(String(url));
-      if (String(url).includes('oauth2')) return { ok: true, status: 200, json: async () => ({ access_token: 'token', expires_in: 3600 }) };
-      const page = pages.shift();
-      return { ok: true, status: 200, json: async () => page };
+  interface Export {
+    tables?: string[];
+    tablesError?: string;
+    newest?: string | null;
+    pages?: Array<Record<string, unknown>>;
+  }
+
+  /** Answers like BigQuery: table listing, the newest-event query, and the visitor query's pages. */
+  function mockBigQuery({ tables = [], tablesError, newest = null, pages = [] }: Export) {
+    const calls: Array<{ url: string; query?: string }> = [];
+    global.fetch = jest.fn(async (url: string, init?: { body?: string }) => {
+      const target = String(url);
+      let query: string | undefined;
+      try {
+        query = init?.body ? (JSON.parse(String(init.body)) as { query?: string }).query : undefined;
+      } catch {
+        query = undefined; // the OAuth token request is a form, not JSON
+      }
+      calls.push({ url: target, query });
+      const reply = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body });
+      if (target.includes('oauth2')) return reply({ access_token: 'token', expires_in: 3600 });
+      if (target.includes('/tables?')) {
+        return tablesError
+          ? reply({ error: { message: tablesError } }, 403)
+          : reply({ tables: tables.map(tableId => ({ tableReference: { tableId } })) });
+      }
+      if (query?.includes('MAX(event_timestamp)')) {
+        return reply({ jobComplete: true, jobReference: { jobId: 'newest' }, schema: { fields: [{ name: 'newest' }] }, rows: [{ f: [{ v: newest }] }] });
+      }
+      return reply(pages.shift());
     }) as unknown as typeof fetch;
-    return urls;
+    return {
+      calls,
+      visitorQueries: () => calls.filter(call => call.query && !call.query.includes('MAX(event_timestamp)')),
+      listings: () => calls.filter(call => call.url.includes('/tables?')),
+    };
   }
 
   it('reads every page of the result rather than only the first', async () => {
-    const urls = mockBigQuery([
-      { jobComplete: true, jobReference: { jobId: 'job-1' }, schema: { fields }, rows: [row('a')], pageToken: 'next', totalRows: '2' },
+    const { calls } = mockBigQuery({ pages: [
+      result([row('a')], { pageToken: 'next', totalRows: '2' }),
       // Later pages may omit schema; fields from the first complete page must still apply.
       { jobComplete: true, rows: [row('b')], totalRows: '2' },
-    ]);
-    const load = await loadGa4Visitors({ start: '2026-09-28', end: '2026-10-12' });
+    ] });
+    const load = await loadGa4Visitors(connection, { start: '2026-09-28', dailyEnd: '2026-10-12', streamingDays: [] });
     expect(load.state).toBe('live');
     expect(load.truncated).toBe(false);
     expect(load.visitors.map(v => v.visitorId)).toEqual(['a', 'b']);
-    expect(urls.some(url => url.includes('/queries/job-1?') && url.includes('pageToken=next'))).toBe(true);
+    expect(calls.some(call => call.url.includes('/queries/job?') && call.url.includes('pageToken=next'))).toBe(true);
+  });
+
+  it('reads the streaming export after the daily one, up to its newest event', async () => {
+    const { visitorQueries } = mockBigQuery({
+      tables: ['events_20261011', 'events_20261012', 'events_intraday_20261013', 'events_intraday_20261014'],
+      newest: String(at('2026-10-14T17:42:00Z').getTime() * 1000),
+      pages: [result([row('earlier'), row('today', at('2026-10-14T17:30:00Z'))])],
+    });
+    const report = await getVisitorReport({ ...weekly, cohortGrain: 'day', periodGrain: 'day', cohortCount: 3 });
+
+    expect(report).toMatchObject({
+      state: 'live',
+      reportEnd: '2026-10-12',
+      streamedThrough: '2026-10-14T17:42:00.000Z',
+      dataThrough: '2026-10-14T17:42:00.000Z',
+    });
+    // Today is its own daily cohort, from streamed events.
+    expect(report.cohorts.map(row => [row.key, row.size])).toEqual([['2026-10-12', 0], ['2026-10-13', 0], ['2026-10-14', 1]]);
+    expect(report.detail).toContain('streaming export through 2026-10-14T17:42:00.000Z');
+    expect(report.notes.some(note => note.includes('provisional'))).toBe(true);
+    const [query] = visitorQueries();
+    expect(query.query).toContain("events_intraday_*`\n  WHERE _TABLE_SUFFIX BETWEEN '20261013' AND '20261014'");
+  });
+
+  it('reads the daily export alone when nothing has streamed', async () => {
+    const { visitorQueries } = mockBigQuery({
+      tables: ['events_20261012', 'events_intraday_20261013'],
+      newest: null,
+      pages: [result([row('a')])],
+    });
+    const report = await getVisitorReport(weekly);
+
+    expect(report).toMatchObject({ state: 'live', reportEnd: '2026-10-12', streamedThrough: null, dataThrough: '2026-10-13T00:00:00.000Z' });
+    expect(visitorQueries()[0].query).not.toContain('events_intraday_');
+    expect(report.notes.some(note => note.includes('provisional'))).toBe(false);
+  });
+
+  it('says how to see same-day visits when the dataset has no streaming tables', async () => {
+    mockBigQuery({ tables: ['events_20261012'], pages: [result([row('a')])] });
+    const report = await getVisitorReport(weekly);
+
+    expect(report.state).toBe('live');
+    expect(report.detail).toContain('turn on streaming export in GA4');
+  });
+
+  it('falls back to the configured lag when the tables cannot be listed', async () => {
+    const { visitorQueries } = mockBigQuery({ tablesError: 'Access Denied: bigquery.tables.list', pages: [result([row('a')])] });
+    const report = await getVisitorReport(weekly);
+
+    // Oct 14 in Los Angeles less the one-day lag.
+    expect(report).toMatchObject({ state: 'live', reportEnd: '2026-10-13', streamedThrough: null, dataThrough: '2026-10-14T00:00:00.000Z' });
+    expect(report.detail).toContain('could not be listed (Access Denied: bigquery.tables.list)');
+    expect(visitorQueries()[0].query).not.toContain('events_intraday_');
+  });
+
+  it('says so when the export has no tables yet', async () => {
+    const { visitorQueries } = mockBigQuery({ tables: [] });
+    const report = await getVisitorReport(weekly);
+
+    expect(report).toMatchObject({ state: 'needs_configuration', cohorts: [] });
+    expect(report.detail).toContain('no export tables yet');
+    expect(visitorQueries()).toHaveLength(0);
   });
 
   it('says what is missing instead of reporting zero visitors', async () => {
     process.env.GA4_BIGQUERY_SERVICE_ACCOUNT_JSON = '';
     try {
-      const load = await loadGa4Visitors({ start: '2026-09-28', end: '2026-10-12' });
-      expect(load.state).toBe('needs_configuration');
       const result = await getVisitorReport(weekly);
       expect(result).toMatchObject({ kind: 'visitors', state: 'needs_configuration', cohorts: [] });
     } finally {
-      const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
-      process.env.GA4_BIGQUERY_SERVICE_ACCOUNT_JSON = JSON.stringify({
-        client_email: 'analytics-reader@example.test',
-        private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
-        project_id: 'analytics-test',
-      });
+      useCredentials();
     }
   });
 
-  it('reuses a scan across requests for the same window, and re-reads on refresh', async () => {
-    mockBigQuery([
-      { jobComplete: true, jobReference: { jobId: 'job-2' }, schema: { fields }, rows: [row('a')], totalRows: '1' },
-      { jobComplete: true, jobReference: { jobId: 'job-3' }, schema: { fields }, rows: [row('a')], totalRows: '1' },
-    ]);
+  it('lists the tables again before reading a new scan, so a day GA4 has just moved to its daily table is not lost', async () => {
+    const tables = ['events_20261012', 'events_intraday_20261013', 'events_intraday_20261014'];
+    const { visitorQueries, listings } = mockBigQuery({
+      tables,
+      newest: String(at('2026-10-14T17:42:00Z').getTime() * 1000),
+      pages: [result([row('a')]), result([row('a')])],
+    });
+    await getVisitorReport(weekly);
+    expect(listings()).toHaveLength(1);
+
+    // GA4 finishes Oct 13's daily table and deletes its streaming one.
+    tables.splice(0, tables.length, 'events_20261012', 'events_20261013', 'events_intraday_20261014');
+    const report = await getVisitorReport({ ...weekly, cohortCount: 6 });
+
+    expect(listings()).toHaveLength(2);
+    expect(report.reportEnd).toBe('2026-10-13');
+    const latest = visitorQueries()[1].query ?? '';
+    expect(latest).toContain("events_*`\n  WHERE _TABLE_SUFFIX BETWEEN '20260906' AND '20261013'");
+    expect(latest).toContain("events_intraday_*`\n  WHERE _TABLE_SUFFIX BETWEEN '20261014' AND '20261014'");
+  });
+
+  it('reuses what it read across requests for the same window, and reads again on refresh', async () => {
+    const { visitorQueries, listings } = mockBigQuery({
+      tables: ['events_20261012'],
+      pages: [result([row('a')]), result([row('a')])],
+    });
     const first = await getVisitorReport(weekly);
     const second = await getVisitorReport({ ...weekly, periodGrain: 'day' });
     expect(first.state).toBe('live');
     expect(second.state).toBe('live');
-    const queries = (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).endsWith('/queries'));
-    expect(queries).toHaveLength(1);
-    await getVisitorReport(weekly, { fresh: true });
-    expect((global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).endsWith('/queries'))).toHaveLength(2);
-  });
+    expect(listings()).toHaveLength(1);
+    expect(visitorQueries()).toHaveLength(1);
 
-  it('dates in-progress periods from the end of the last complete export day', () => {
-    expect(visitorDataThrough('2026-10-12').toISOString()).toBe('2026-10-13T00:00:00.000Z');
+    await getVisitorReport(weekly, { fresh: true });
+    expect(listings()).toHaveLength(2);
+    expect(visitorQueries()).toHaveLength(2);
   });
 });

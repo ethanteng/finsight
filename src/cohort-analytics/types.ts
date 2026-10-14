@@ -280,9 +280,14 @@ export interface VisitorReport extends VisitorWindow {
   /** `truncated`: more browsers than one report can hold; nothing is shown rather than an undercount. */
   state: 'live' | 'needs_configuration' | 'error' | 'truncated';
   detail: string;
-  /** The last complete GA4 export day, in the property's reporting time zone. */
+  /** The newest GA4 daily export table's day, in the property's reporting time zone. */
   reportEnd: string | null;
-  /** Periods ending after this are still in progress; it trails the export. */
+  /**
+   * The newest event in GA4's streaming export, read for the days after
+   * `reportEnd`; null when nothing streamed is read. Those days are provisional.
+   */
+  streamedThrough: string | null;
+  /** Periods ending after this are still in progress: the newest streamed event, else midnight after `reportEnd`. */
   dataThrough: string | null;
   generatedAt: string;
   timeZone: 'UTC';

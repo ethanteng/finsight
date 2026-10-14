@@ -114,6 +114,15 @@ describe('VisitorCohortPanel', () => {
     expect(screen.getByText(/GA4 daily export · not live · through Oct 12, 2026/)).toBeInTheDocument();
   });
 
+  it('says how fresh streamed numbers are, and that the days after the daily export are provisional', async () => {
+    mockFetch({ ...liveReport, streamedThrough: '2026-10-14T17:42:00.000Z' });
+    renderPanel();
+
+    const label = await screen.findByText(/GA4 streaming export · as of/);
+    expect(label).toHaveTextContent('Oct 14');
+    expect(label).toHaveTextContent('daily export through Oct 12, 2026, later days provisional');
+  });
+
   it('switches the period grid between what it counts', async () => {
     mockFetch(liveReport);
     renderPanel();
