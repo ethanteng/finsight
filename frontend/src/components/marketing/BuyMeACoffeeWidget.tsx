@@ -40,7 +40,7 @@ const SETTINGS: Record<string, string> = {
   "data-cfasync": "false",
   "data-id": "ethanteng",
   "data-description": "Support me on Buy me a coffee!",
-  "data-message": "Found this calculator useful? Buy me a coffee and help keep it free for everyone! ☕",
+  "data-message": "Found this calculator useful? Consider donating $5 to help cover my costs & keep it free for everyone! ☕",
   "data-color": CTA_LIME,
   "data-position": "Right",
   "data-x_margin": "18",
