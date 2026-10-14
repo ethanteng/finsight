@@ -119,7 +119,11 @@ describe('VisitorCohortPanel', () => {
     renderPanel();
 
     const label = await screen.findByText(/GA4 streaming export · as of/);
-    expect(label).toHaveTextContent('Oct 14');
+    // The header uses the browser's zone; assert that zone rather than a fixed day.
+    const asOf = new Intl.DateTimeFormat('en-US', {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    }).format(new Date('2026-10-14T17:42:00.000Z'));
+    expect(label).toHaveTextContent(`GA4 streaming export · as of ${asOf}`);
     expect(label).toHaveTextContent('daily export through Oct 12, 2026, later days provisional');
   });
 
