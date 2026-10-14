@@ -283,8 +283,8 @@ export interface VisitorReport extends VisitorWindow {
   /** The newest GA4 daily export table's day, in the property's reporting time zone. */
   reportEnd: string | null;
   /**
-   * The newest event in GA4's streaming export, read for the days after
-   * `reportEnd`; null when nothing streamed is read. Those days are provisional.
+   * The newest streamed web event, never later than `generatedAt`; null when
+   * nothing streamed is read. Days after `reportEnd` are provisional.
    */
   streamedThrough: string | null;
   /** Periods ending after this are still in progress: the newest streamed event, else midnight after `reportEnd`. */

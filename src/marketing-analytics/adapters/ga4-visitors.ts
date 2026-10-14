@@ -495,16 +495,24 @@ async function listTables(connection: Ga4Connection): Promise<string[]> {
   const { projectId, datasetId, token } = connection;
   const endpoint = `https://bigquery.googleapis.com/bigquery/v2/projects/${encodeURIComponent(projectId)}/datasets/${encodeURIComponent(datasetId)}/tables`;
   const ids: string[] = [];
+  const seenTokens = new Set<string>();
   let pageToken: string | undefined;
   do {
+    if (pageToken) {
+      if (seenTokens.has(pageToken)) break;
+      seenTokens.add(pageToken);
+    }
     const params = new URLSearchParams({ maxResults: '1000' });
     if (pageToken) params.set('pageToken', pageToken);
     const response = await fetch(`${endpoint}?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
     const body = await response.json() as TableListResponse;
     if (!response.ok || body.error) throw new Error(body.error?.message || `BigQuery table listing failed (${response.status})`);
-    for (const table of body.tables ?? []) {
+    const tables = body.tables ?? [];
+    for (const table of tables) {
       if (table.tableReference?.tableId) ids.push(table.tableReference.tableId);
     }
+    // An empty page, or the same token again, would otherwise loop forever.
+    if (tables.length === 0 || !body.nextPageToken) break;
     pageToken = body.nextPageToken;
   } while (pageToken);
   return ids;
@@ -531,11 +539,13 @@ export async function loadExportCoverage(connection: Ga4Connection): Promise<Exp
   const { dailyEnd, streamingDays } = coverageFromTables(tableIds);
   if (streamingDays.length === 0) return { dailyEnd, streamingDays, streamedThrough: null, source: 'tables' };
   const { projectId, datasetId, location, token } = connection;
-  // Only the timestamp column of the streaming tables: a few kilobytes.
+  // Only the timestamp column of the streaming tables the report can use.
   const result = await runPagedQuery(projectId, location, token, `
 SELECT MAX(event_timestamp) AS newest
 FROM \`${projectId}.${datasetId}.events_intraday_*\`
-WHERE _TABLE_SUFFIX BETWEEN '${compact(streamingDays[0])}' AND '${compact(streamingDays[streamingDays.length - 1])}'`);
+WHERE _TABLE_SUFFIX BETWEEN '${compact(streamingDays[0])}' AND '${compact(streamingDays[streamingDays.length - 1])}'
+  AND platform = 'WEB'
+  AND user_pseudo_id IS NOT NULL`);
   return { dailyEnd, streamingDays, streamedThrough: micros(result.rows[0]?.newest), source: 'tables' };
 }
 

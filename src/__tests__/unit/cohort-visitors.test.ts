@@ -383,7 +383,7 @@ describe('loading visitors', () => {
   });
 
   it('reads the streaming export after the daily one, up to its newest event', async () => {
-    const { visitorQueries } = mockBigQuery({
+    const { calls, visitorQueries } = mockBigQuery({
       tables: ['events_20261011', 'events_20261012', 'events_intraday_20261013', 'events_intraday_20261014'],
       newest: String(at('2026-10-14T17:42:00Z').getTime() * 1000),
       pages: [result([row('earlier'), row('today', at('2026-10-14T17:30:00Z'))])],
@@ -402,6 +402,9 @@ describe('loading visitors', () => {
     expect(report.notes.some(note => note.includes('provisional'))).toBe(true);
     const [query] = visitorQueries();
     expect(query.query).toContain("events_intraday_*`\n  WHERE _TABLE_SUFFIX BETWEEN '20261013' AND '20261014'");
+    const newest = calls.find(call => call.query?.includes('MAX(event_timestamp)'));
+    expect(newest?.query).toContain("platform = 'WEB'");
+    expect(newest?.query).toContain('user_pseudo_id IS NOT NULL');
   });
 
   it('reads the daily export alone when nothing has streamed', async () => {
@@ -415,6 +418,60 @@ describe('loading visitors', () => {
     expect(report).toMatchObject({ state: 'live', reportEnd: '2026-10-12', streamedThrough: null, dataThrough: '2026-10-13T00:00:00.000Z' });
     expect(visitorQueries()[0].query).not.toContain('events_intraday_');
     expect(report.notes.some(note => note.includes('provisional'))).toBe(false);
+    expect(report.detail).toContain('have no events yet');
+    expect(report.detail).not.toContain('turn on streaming export');
+  });
+
+  it('does not report a streamed event later than the request', async () => {
+    mockBigQuery({
+      tables: ['events_20261012', 'events_intraday_20261014'],
+      newest: String(at('2026-10-14T19:00:00Z').getTime() * 1000),
+      pages: [result([row('a')])],
+    });
+    const report = await getVisitorReport(weekly);
+
+    expect(report).toMatchObject({
+      state: 'live',
+      streamedThrough: '2026-10-14T18:00:00.000Z',
+      dataThrough: '2026-10-14T18:00:00.000Z',
+    });
+    expect(report.detail).toContain('streaming export through 2026-10-14T18:00:00.000Z');
+  });
+
+  it('stops listing tables when BigQuery repeats a page token', async () => {
+    let listings = 0;
+    global.fetch = jest.fn(async (url: string, init?: { body?: string }) => {
+      const target = String(url);
+      const reply = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body });
+      if (target.includes('oauth2')) return reply({ access_token: 'token', expires_in: 3600 });
+      if (target.includes('/tables?')) {
+        listings += 1;
+        if (!target.includes('pageToken=')) {
+          return reply({
+            tables: [{ tableReference: { tableId: 'pseudonymous_users_20261012' } }],
+            nextPageToken: 'again',
+          });
+        }
+        return reply({
+          tables: [{ tableReference: { tableId: 'events_20261012' } }],
+          nextPageToken: 'again',
+        });
+      }
+      let query: string | undefined;
+      try {
+        query = init?.body ? (JSON.parse(String(init.body)) as { query?: string }).query : undefined;
+      } catch {
+        query = undefined;
+      }
+      if (query?.includes('MAX(event_timestamp)')) {
+        return reply({ jobComplete: true, schema: { fields: [{ name: 'newest' }] }, rows: [{ f: [{ v: null }] }] });
+      }
+      return reply(result([row('a')]));
+    }) as unknown as typeof fetch;
+
+    const report = await getVisitorReport(weekly);
+    expect(listings).toBe(2);
+    expect(report).toMatchObject({ state: 'live', reportEnd: '2026-10-12', streamedThrough: null });
   });
 
   it('says how to see same-day visits when the dataset has no streaming tables', async () => {

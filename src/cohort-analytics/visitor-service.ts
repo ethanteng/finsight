@@ -55,13 +55,17 @@ export function visitorDataThrough(
   return date;
 }
 
-function describeCoverage(coverage: ExportCoverage): string {
+function describeCoverage(coverage: ExportCoverage, streamedAsOf: Date | null): string {
   const late = 'Daily tables can still receive late events for up to 3 days.';
   if (coverage.source === 'lag') {
     return `GA4 daily export through ${coverage.dailyEnd}; ${reportingLagDays()}-day availability lag applied. ${late} The export’s tables could not be listed (${coverage.listingError}), so nothing streamed is read: the service account needs BigQuery Data Viewer or Metadata Viewer on the dataset.`;
   }
-  if (coverage.streamedThrough) {
-    return `GA4 daily export through ${coverage.dailyEnd ?? 'no day yet'}, and streaming export through ${coverage.streamedThrough.toISOString()}. ${late}`;
+  if (coverage.streamedThrough && streamedAsOf) {
+    return `GA4 daily export through ${coverage.dailyEnd ?? 'no day yet'}, and streaming export through ${streamedAsOf.toISOString()}. ${late}`;
+  }
+  // Tables can exist before the first event lands. That is not "streaming is off".
+  if (coverage.streamingDays.length > 0) {
+    return `GA4 daily export through ${coverage.dailyEnd}. ${late} Streaming tables are in the dataset but have no events yet, so same-day visits appear once events stream in.`;
   }
   return `GA4 daily export through ${coverage.dailyEnd}. ${late} No streaming tables are in the dataset, so later visits appear once the next daily export lands; turn on streaming export in GA4 to see them within minutes.`;
 }
@@ -90,7 +94,10 @@ function cachedLoad(connection: Ga4Connection, scan: VisitorScan, through: Date,
   // Keep only answers worth reusing; a failure is retried on the next request.
   value.then(result => {
     if (result.state !== 'live' && loads.get(key)?.value === value) loads.delete(key);
-  }, () => loads.delete(key));
+  }, () => {
+    // A newer scan may already own this key; only drop the one that failed.
+    if (loads.get(key)?.value === value) loads.delete(key);
+  });
   while (loads.size > CACHE_ENTRIES) loads.delete(loads.keys().next().value as string);
   return value;
 }
@@ -144,14 +151,17 @@ export async function getVisitorReport(
       generatedAt,
     );
   }
+  // `now` is the streamed event capped at the request. The header quotes it,
+  // so a client clock ahead of the server cannot advertise a future "as of".
+  const streamedAsOf = coverage.streamedThrough ? now : null;
   return buildVisitorReport({
     visitors: load.visitors,
     window,
     now,
     generatedAt,
     reportEnd: coverage.dailyEnd,
-    streamedThrough: coverage.streamedThrough,
-    detail: describeCoverage(coverage),
+    streamedThrough: streamedAsOf,
+    detail: describeCoverage(coverage, streamedAsOf),
     notes: coverage.streamedThrough ? [...NOTES, STREAMING_NOTE] : NOTES,
     membersFor: options.membersFor ?? null,
   });

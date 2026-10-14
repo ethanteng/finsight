@@ -20,11 +20,12 @@ table within minutes of each event, which it deletes once that day's daily table
 
 Each report first lists the export dataset's tables (metadata, nothing billed). It reads the
 daily tables through the newest one, and the streaming tables only for the days after it, so
-no day is read twice. With streaming tables present, the data ends at the newest streamed
-event, found with a query over their timestamp column alone, and **Refresh** brings in
-everything streamed since: the header reads "GA4 streaming export · as of" that time.
-Without them, the data ends at midnight UTC after the newest daily table, and the header
-reads "GA4 daily export · not live".
+no day is read twice. When those streaming tables have web events, the data ends at the
+newest of them, never later than the request, found with a query over their timestamp
+column alone, and **Refresh** brings in everything streamed since: the header reads
+"GA4 streaming export · as of" that time. Streaming tables that exist but have no events
+yet leave the cutoff at midnight UTC after the newest daily table. Without streaming
+tables, the data ends there as well, and the header reads "GA4 daily export · not live".
 
 Streamed days are provisional until the daily table replaces them. Late or failed events can
 be missing, and streaming leaves out traffic sources for new users and new sessions, so a new
