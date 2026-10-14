@@ -91,9 +91,10 @@ Activity is dated by the session it happened in.
   provisional (above).
 - More than 100,000 browsers in one window shows nothing rather than an undercount: show fewer
   cohorts or a shorter grain.
-- A scan reads every event from the oldest cohort's start. The table listing and each scan are
-  kept for 10 minutes, so changing filters or columns reuses them; **Refresh** reads both
-  again.
+- A scan reads every event from the oldest cohort's start. Each scan is kept for 10 minutes, so
+  changing filters reuses it; **Refresh** reads again. A scan not read yet (another cohort
+  grain or count) lists the tables again first, because GA4 swaps a day's streaming table for
+  its daily one without notice.
 
 ## GTM setup
 

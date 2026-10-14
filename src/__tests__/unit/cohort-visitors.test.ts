@@ -454,6 +454,27 @@ describe('loading visitors', () => {
     }
   });
 
+  it('lists the tables again before reading a new scan, so a day GA4 has just moved to its daily table is not lost', async () => {
+    const tables = ['events_20261012', 'events_intraday_20261013', 'events_intraday_20261014'];
+    const { visitorQueries, listings } = mockBigQuery({
+      tables,
+      newest: String(at('2026-10-14T17:42:00Z').getTime() * 1000),
+      pages: [result([row('a')]), result([row('a')])],
+    });
+    await getVisitorReport(weekly);
+    expect(listings()).toHaveLength(1);
+
+    // GA4 finishes Oct 13's daily table and deletes its streaming one.
+    tables.splice(0, tables.length, 'events_20261012', 'events_20261013', 'events_intraday_20261014');
+    const report = await getVisitorReport({ ...weekly, cohortCount: 6 });
+
+    expect(listings()).toHaveLength(2);
+    expect(report.reportEnd).toBe('2026-10-13');
+    const latest = visitorQueries()[1].query ?? '';
+    expect(latest).toContain("events_*`\n  WHERE _TABLE_SUFFIX BETWEEN '20260906' AND '20261013'");
+    expect(latest).toContain("events_intraday_*`\n  WHERE _TABLE_SUFFIX BETWEEN '20261014' AND '20261014'");
+  });
+
   it('reuses what it read across requests for the same window, and reads again on refresh', async () => {
     const { visitorQueries, listings } = mockBigQuery({
       tables: ['events_20261012'],
