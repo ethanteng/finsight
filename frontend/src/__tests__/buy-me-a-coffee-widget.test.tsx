@@ -7,8 +7,12 @@ import { BuyMeACoffeeWidget } from "@/components/marketing/BuyMeACoffeeWidget";
  *
  * jsdom never fetches the script, so each test plays the vendor's part: while
  * the script "executes" it registers the DOMContentLoaded listener that builds
- * the button, then fires load.
+ * the button, then fires load. Like the vendor's, the listener reads the
+ * message off the tag each time it builds.
  */
+
+const CALCULATOR_MESSAGE = "Found this calculator helpful? Chip in $5 to help keep it free for everyone. ❤️";
+const BLOG_MESSAGE = "Found this helpful? Buy me a coffee to help keep the posts coming. ☕❤️";
 
 const nativeAddEventListener = window.addEventListener;
 
@@ -26,6 +30,7 @@ function execute(script: HTMLScriptElement, outcome: "load" | "error" = "load") 
     window.addEventListener("DOMContentLoaded", () => {
       const node = document.createElement("div");
       node.id = "bmc-wbtn";
+      node.textContent = script.dataset.message ?? "";
       document.body.appendChild(node);
     });
     delete (document as { currentScript?: unknown }).currentScript;
@@ -35,7 +40,7 @@ function execute(script: HTMLScriptElement, outcome: "load" | "error" = "load") 
 
 describe("BuyMeACoffeeWidget", () => {
   it("loads the script with the widget's settings, and tries again after a failed load", async () => {
-    const { rerender } = render(<BuyMeACoffeeWidget visible />);
+    const { rerender } = render(<BuyMeACoffeeWidget placement="calculator" visible />);
 
     const [first] = vendorScripts();
     expect(first.src).toBe("https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js");
@@ -43,14 +48,19 @@ describe("BuyMeACoffeeWidget", () => {
     expect(first.dataset.color).toBe("#d9ff6f");
     expect(first.getAttribute("data-x_margin")).toBe("18");
     expect(first.getAttribute("data-y_margin")).toBe("18");
+    // Written per placement, at each build.
+    expect(first.hasAttribute("data-message")).toBe(false);
 
     execute(first, "error");
     await waitFor(() => expect(window.addEventListener).toBe(nativeAddEventListener));
     expect(button()).toBeNull();
 
-    rerender(<BuyMeACoffeeWidget visible={false} />);
-    rerender(<BuyMeACoffeeWidget visible />);
-    expect(vendorScripts()).toHaveLength(2);
+    rerender(<BuyMeACoffeeWidget placement="calculator" visible={false} />);
+    rerender(<BuyMeACoffeeWidget placement="calculator" visible />);
+    // A new tag, and the dead one gone: the script reads the first tag with its name.
+    const [second] = vendorScripts();
+    expect(vendorScripts()).toHaveLength(1);
+    expect(second).not.toBe(first);
 
     // Anything else registering on window while the script loads is registered as usual.
     const other = jest.fn();
@@ -59,8 +69,9 @@ describe("BuyMeACoffeeWidget", () => {
     expect(other).toHaveBeenCalledTimes(1);
     window.removeEventListener("DOMContentLoaded", other);
 
-    execute(vendorScripts()[1]);
+    execute(second);
     await waitFor(() => expect(button()).not.toBeNull());
+    expect(button()?.textContent).toBe(CALCULATOR_MESSAGE);
     expect(window.addEventListener).toBe(nativeAddEventListener);
     // The primary CTA's edge, which the script has no setting for.
     expect(button()?.style.border).toBe("1px solid rgb(161, 188, 96)"); // #a1bc60
@@ -73,18 +84,32 @@ describe("BuyMeACoffeeWidget", () => {
   it("comes down with the form and goes back up without loading the script again", async () => {
     // The previous test's button went with its unmount.
     expect(button()).toBeNull();
-    const { rerender, unmount } = render(<BuyMeACoffeeWidget visible />);
+    const { rerender, unmount } = render(<BuyMeACoffeeWidget placement="calculator" visible />);
     await waitFor(() => expect(button()).not.toBeNull());
 
-    rerender(<BuyMeACoffeeWidget visible={false} />);
+    rerender(<BuyMeACoffeeWidget placement="calculator" visible={false} />);
     expect(button()).toBeNull();
 
-    rerender(<BuyMeACoffeeWidget visible />);
+    rerender(<BuyMeACoffeeWidget placement="calculator" visible />);
     await waitFor(() => expect(button()).not.toBeNull());
     expect(document.querySelectorAll("#bmc-wbtn")).toHaveLength(1);
-    expect(vendorScripts()).toHaveLength(2);
+    expect(vendorScripts()).toHaveLength(1);
 
     // Leaving the page takes it down too.
+    unmount();
+    expect(button()).toBeNull();
+  });
+
+  it("builds each placement with its own message", async () => {
+    const { rerender, unmount } = render(<BuyMeACoffeeWidget placement="blog" />);
+    await waitFor(() => expect(button()?.textContent).toBe(BLOG_MESSAGE));
+
+    // Moving from the blog to a calculator rebuilds the button with its message.
+    rerender(<BuyMeACoffeeWidget placement="calculator" />);
+    await waitFor(() => expect(button()?.textContent).toBe(CALCULATOR_MESSAGE));
+    expect(document.querySelectorAll("#bmc-wbtn")).toHaveLength(1);
+    expect(vendorScripts()).toHaveLength(1);
+
     unmount();
     expect(button()).toBeNull();
   });
@@ -92,7 +117,7 @@ describe("BuyMeACoffeeWidget", () => {
   it("reports opening the panel, not clicks while it is already open", async () => {
     const analyticsWindow = window as Window & typeof globalThis & { dataLayer?: unknown[] };
     analyticsWindow.dataLayer = [];
-    const { unmount } = render(<BuyMeACoffeeWidget visible />);
+    const { unmount } = render(<BuyMeACoffeeWidget placement="calculator" visible />);
     await waitFor(() => expect(button()).not.toBeNull());
 
     fireEvent.click(button() as HTMLElement);

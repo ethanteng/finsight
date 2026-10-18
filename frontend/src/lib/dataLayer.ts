@@ -318,7 +318,8 @@ export function pushCashFlowCheckClick(): void {
 }
 
 /**
- * The Buy Me a Coffee panel opened from its floating button on a calculator.
+ * The Buy Me a Coffee panel opened from its floating button on a calculator
+ * or a /blog page; `source_page` tells them apart.
  * Whether anyone then paid happens inside Buy Me a Coffee's own frame, which
  * this page cannot see. GTM needs a Custom Event trigger on
  * `bmc_widget_opened` plus a GA4 Event tag forwarding `source_page` and

@@ -375,7 +375,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
   return (
     <main className={`marketing-site subpage coast-fire-page calculator-story${!showInputs ? " calculator-result-view" : ""}`}>
       <SiteHeader />
-      <BuyMeACoffeeWidget visible={showInputs} />
+      <BuyMeACoffeeWidget placement="calculator" visible={showInputs} />
 
       <section className="shell cf-hero">
         <p className="section-kicker">FREE COAST FIRE CALCULATOR</p>
