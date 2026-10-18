@@ -11,6 +11,7 @@ This document provides comprehensive documentation for the testing implementatio
 - **Configuration**: `jest.config.js`
 - **Coverage**: 80% threshold for branches, functions, lines, statements
 - **Execution**: `npm run test:unit`
+- **Parallelism**: files run on 4 Jest workers. Each worker has its own Postgres schema (`unit_w1`…`unit_w4`) in the database `DATABASE_URL` names, or the one `.env` names when it is unset. Global setup migrates the schemas (`src/__tests__/setup/unit-worker-database.ts`), so the table wipe before every test never reaches another worker's rows, or the `public` schema.
 - **Status**: ✅ **All 302 tests passing**
 
 ### Integration Tests

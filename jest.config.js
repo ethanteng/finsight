@@ -13,10 +13,14 @@ module.exports = {
     '/auth/',
     '/setup.ts'
   ],
+  globalSetup: '<rootDir>/src/__tests__/setup/unit-worker-database.ts',
+  setupFiles: ['<rootDir>/src/__tests__/setup/unit-worker-env.ts'],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/unit/setup.ts'],
   testTimeout: 30000,
-  // Run tests sequentially to avoid database race conditions
-  maxWorkers: 1,
+  // Files run in parallel: each worker has its own database schema (see
+  // unit-worker-database.ts), so one file's table wipe never reaches another's
+  // rows. 4 is the hosted CI runner's vCPU count.
+  maxWorkers: 4,
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',

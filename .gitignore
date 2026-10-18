@@ -39,6 +39,9 @@ jspm_packages/
 # Optional eslint cache
 .eslintcache
 
+# Jest cache CI keeps between runs (see ci-cd.yml)
+.jest-cache/
+
 # Microbundle cache
 .rpt2_cache/
 .rts2_cache_cjs/
