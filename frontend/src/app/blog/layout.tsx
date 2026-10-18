@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { BuyMeACoffeeWidget } from '@/components/marketing/BuyMeACoffeeWidget';
 
 export const metadata: Metadata = {
   title: 'Financial Insights & Market Analysis | Ask Linc Blog',
@@ -21,6 +22,13 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+// The layout holds the widget rather than each page, so it covers the index,
+// every topic and every post, and stays put while a reader moves between them.
 export default function BlogLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return (
+    <>
+      {children}
+      <BuyMeACoffeeWidget placement="blog" />
+    </>
+  );
 }

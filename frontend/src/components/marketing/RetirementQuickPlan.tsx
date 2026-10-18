@@ -640,7 +640,7 @@ export function RetirementQuickPlan({
   return (
     <main className={`marketing-site subpage quickplan-page calculator-story${!showInputs ? " calculator-result-view" : ""}`}>
       <SiteHeader />
-      <BuyMeACoffeeWidget visible={showInputs} />
+      <BuyMeACoffeeWidget placement="calculator" visible={showInputs} />
 
       <section className="shell qp-hero">
         <p className="section-kicker">FREE RETIREMENT CALCULATOR</p>

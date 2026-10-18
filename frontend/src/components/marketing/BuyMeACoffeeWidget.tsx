@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Buy Me a Coffee's floating button, on the two free calculators while their
- * form is showing. A run's result replaces the form on the same page, so the
- * button comes down with the form and goes back up with "Edit inputs".
+ * Buy Me a Coffee's floating button: on the two free calculators while their
+ * form is showing, and on every /blog page. A calculator run's result replaces
+ * the form on the same page, so there the button comes down with the form.
  *
  * The vendor's script is written to sit in a page's HTML: it builds the button
  * in a `DOMContentLoaded` listener on window, and in a client-rendered page
@@ -22,6 +22,7 @@
 
 import { useEffect } from "react";
 import { pushBuyMeACoffeeOpened } from "@/lib/dataLayer";
+import "./buy-me-a-coffee.css";
 
 const SCRIPT_SRC = "https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js";
 
@@ -34,20 +35,31 @@ const SCRIPT_SRC = "https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js";
 const CTA_LIME = "#d9ff6f";
 const CTA_EDGE = "#a1bc60";
 
-/** The script reads its settings from its own tag's data attributes. */
+/** The bubble beside the button, which the widget shows at most once a day. */
+const MESSAGES = {
+  calculator: "Found this calculator helpful? Chip in $5 to help keep it free for everyone. ❤️",
+  blog: "Found this helpful? Buy me a coffee to help keep the posts coming. ☕❤️",
+};
+
+export type BuyMeACoffeePlacement = keyof typeof MESSAGES;
+
+/**
+ * The script reads its settings from its own tag's data attributes. The
+ * message is not among them: it is read again at every build, so each
+ * placement writes its own onto the tag first.
+ */
 const SETTINGS: Record<string, string> = {
   "data-name": "BMC-Widget",
   "data-cfasync": "false",
   "data-id": "ethanteng",
   "data-description": "Support me on Buy me a coffee!",
-  "data-message": "Found this calculator useful? Consider donating $5 to help cover my costs & keep it free for everyone! ☕",
   "data-color": CTA_LIME,
   "data-position": "Right",
   "data-x_margin": "18",
   "data-y_margin": "18",
 };
 
-type BuildWidget = () => void;
+type BuildWidget = (message: string) => void;
 
 let loading: Promise<BuildWidget | null> | null = null;
 
@@ -64,7 +76,10 @@ function loadWidget(): Promise<BuildWidget | null> {
     window.addEventListener = function (this: Window, ...args: Parameters<Window["addEventListener"]>) {
       const [type, listener] = args;
       if (type === "DOMContentLoaded" && document.currentScript === script && typeof listener === "function") {
-        build = () => listener.call(window, new Event("DOMContentLoaded"));
+        build = (message) => {
+          script.setAttribute("data-message", message);
+          listener.call(window, new Event("DOMContentLoaded"));
+        };
         return;
       }
       return addEventListener.apply(this, args);
@@ -80,7 +95,9 @@ function loadWidget(): Promise<BuildWidget | null> {
     };
     script.onerror = () => {
       restore();
-      // A failed load is retried the next time the form shows.
+      // A failed load is retried the next time the button should show. The
+      // dead tag goes, since the script reads the first tag with its name.
+      script.remove();
       loading = null;
       resolve(null);
     };
@@ -92,7 +109,13 @@ function loadWidget(): Promise<BuildWidget | null> {
   return loading;
 }
 
-export function BuyMeACoffeeWidget({ visible }: { visible: boolean }) {
+export function BuyMeACoffeeWidget({
+  placement,
+  visible = true,
+}: {
+  placement: BuyMeACoffeePlacement;
+  visible?: boolean;
+}) {
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
@@ -109,7 +132,7 @@ export function BuyMeACoffeeWidget({ visible }: { visible: boolean }) {
     loadWidget().then((build) => {
       if (cancelled || !build) return;
       const before = new Set(Array.from(document.body.children));
-      build();
+      build(MESSAGES[placement]);
       added = Array.from(document.body.children).filter((node) => !before.has(node));
       button = added.find((node): node is HTMLElement => node.id === "bmc-wbtn");
       if (button) button.style.border = `1px solid ${CTA_EDGE}`;
@@ -121,7 +144,7 @@ export function BuyMeACoffeeWidget({ visible }: { visible: boolean }) {
       document.removeEventListener("click", reportOpening, true);
       for (const node of added) node.remove();
     };
-  }, [visible]);
+  }, [placement, visible]);
 
   return null;
 }

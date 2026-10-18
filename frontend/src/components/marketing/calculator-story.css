@@ -186,11 +186,3 @@
   .marketing-site.calculator-story .calculator-locked-unlock :is(.qp-email-row, .cf-email-row) { grid-template-columns: minmax(0, 1fr); }
   .marketing-site.calculator-story .calculator-locked-unlock .button-primary { width: 100%; }
 }
-
-/*
- * Buy Me a Coffee's button (BuyMeACoffeeWidget) is the primary CTA's lime, and
- * its script draws the open-state chevron in white, which all but disappears
- * on lime. The button sits on body, outside .marketing-site and its tokens, so
- * this is --ink's value. Any rule outranks the SVG's own fill attribute.
- */
-#bmc-wbtn svg path { fill: #102319; }
