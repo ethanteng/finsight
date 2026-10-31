@@ -207,14 +207,36 @@ describe('the report’s cards and cash position', () => {
     const { position } = report;
     expect(position).toMatchObject({ available: true, startingCash: 5200, startingCardDebt: 4000 });
     expect(position.periods.map(period => period.key)).toEqual(report.periods.map(period => period.key));
-    const past = position.periods.find(period => period.key === '2026-09')!;
-    expect(past).toEqual({ key: '2026-09', cash: null, cardDebt: null, cardPayments: null, moneyIn: null, moneyOut: null });
+    const past = position.periods.find(period => period.key === '2026-08')!;
+    expect(past).toEqual({ key: '2026-08', cash: null, cardDebt: null, cardPayments: null, moneyIn: null, moneyOut: null });
+    // The data runs to the end of September: it ends at the reported balances, with nothing left to forecast.
+    const september = position.periods.find(period => period.key === '2026-09')!;
+    expect(september).toEqual({ key: '2026-09', cash: 5200, cardDebt: 4000, cardPayments: null, moneyIn: null, moneyOut: null });
     const october = position.periods.find(period => period.key === '2026-10')!;
     expect(october.cash).toBe(position.milestones[0].cash);
     expect(position.lowPoint).not.toBeNull();
     expect(position.milestones.map(point => point.key)).toEqual([
       'end_of_this_month', 'end_of_next_month', 'in_3_months', 'in_6_months', 'in_12_months',
     ]);
+  });
+
+  it('starts the cash line at this month’s end on its last day, when there is nothing left of it to forecast', () => {
+    // Today is Sep 30 and the snapshot is current through it.
+    const lastDay = model({ today: THROUGH });
+    expect(lastDay.forecastStart).toBe('2026-10-01');
+    const report = buildCashFlowReport(lastDay, { granularity: 'month', horizonMonths: 3 });
+    // Three months after September, as on any other day of it.
+    expect(report.range.toExclusive).toBe('2027-01-01');
+    const september = report.position.periods.find(period => period.key === '2026-09')!;
+    expect(september.cash).toBe(report.position.startingCash);
+    expect(september.cash).toBe(report.position.milestones.find(point => point.key === 'end_of_this_month')!.cash);
+    expect(september.cardDebt).toBe(report.position.startingCardDebt);
+
+    const thisMonth = buildCashFlowHighlights(lastDay).find(highlight => highlight.key === 'this_month')!;
+    expect([thisMonth.start, thisMonth.endExclusive]).toEqual(['2026-09-01', '2026-10-01']);
+    expect(thisMonth.remaining).toBeNull();
+    expect(thisMonth.actualCoverage).toBe('full');
+    expect(thisMonth.actualToDate).not.toBeNull();
   });
 
   it('says when each pace next pays a card, and what it pays over the next 12 months', () => {

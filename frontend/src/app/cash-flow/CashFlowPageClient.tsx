@@ -413,7 +413,8 @@ export default function CashFlowPageClient() {
                   </div>
                   {report.position.lowPoint && (
                     <p className={`mt-3 text-sm ${report.position.lowPoint.cash < 0 ? 'font-bold text-[#9b4137]' : 'text-[#5e6b63]'}`}>
-                      Lowest point: {formatMoney(report.position.lowPoint.cash)} on {formatCalendarDate(report.position.lowPoint.date)}
+                      {/* Over the forecast only: the chart's first point can be the reported balance, which is not ahead. */}
+                      Lowest point ahead: {formatMoney(report.position.lowPoint.cash)} on {formatCalendarDate(report.position.lowPoint.date)}
                       {report.position.lowPoint.cash < 0 ? ' — your cash is projected to run short.' : '.'}
                     </p>
                   )}

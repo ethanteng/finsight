@@ -28,7 +28,7 @@ export interface CashPositionRow {
   cardDebt: number | null;
 }
 
-/** One row per period from the forecast on: the balances at each period's end. */
+/** Balances at each period's end. Periods that ended before the forecast are left out; one that ends where it starts is the reported balance. */
 export function buildPositionRows(report: Pick<CashFlowReport, 'periods' | 'position' | 'granularity'>): CashPositionRow[] {
   return report.periods.flatMap((period, index) => {
     const point = report.position.periods[index];
@@ -77,8 +77,9 @@ export default function CashPositionChart({ report }: { report: CashFlowReport }
   const rows = buildPositionRows(report);
   const hasCards = projectsCardDebt(report);
   const lowPoint = report.position.lowPoint;
-  const summary = `Projected cash${hasCards ? ' and credit card balances' : ''} at the end of each ${report.granularity}`
-    + (lowPoint ? `, lowest ${formatMoney(lowPoint.cash)} on ${formatCalendarDate(lowPoint.date)}.` : '.');
+  // A period that ends where the forecast starts is plotted at the reported balance, so not every point is projected.
+  const summary = `Cash${hasCards ? ' and credit card balances' : ''} at the end of each ${report.granularity}, projected from the reported balances`
+    + (lowPoint ? `, lowest ahead ${formatMoney(lowPoint.cash)} on ${formatCalendarDate(lowPoint.date)}.` : '.');
 
   return (
     <div role="img" aria-label={summary} className="h-[340px] w-full">

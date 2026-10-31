@@ -1674,8 +1674,9 @@ export interface CashFlowPositionSummary {
   startingCardDebt: number | null;
   /**
    * In step with `periods`: balances at each period's end, and what arrives,
-   * leaves and is paid to cards in the period's forecast part. Null for a
-   * period over before the forecast.
+   * leaves and is paid to cards in the period's forecast part. A period that
+   * ends before the forecast has no figures. One that ends where the forecast
+   * starts has the reported balances and null flows.
    */
   periods: Array<{
     key: string;
@@ -1876,8 +1877,21 @@ function positionSummary(
     startingCash: position.startingCash,
     startingCardDebt: position.startingCardDebt,
     periods: periods.map(period => {
-      if (period.endExclusive <= model.forecastStart) {
+      if (period.endExclusive < model.forecastStart) {
         return { key: period.key, cash: null, cardDebt: null, cardPayments: null, moneyIn: null, moneyOut: null };
+      }
+      // A period the data runs to the end of has nothing left to forecast, but
+      // its end is the reported balance: the cash line starts there, not a
+      // whole period later on the last day of a month.
+      if (period.endExclusive === model.forecastStart) {
+        return {
+          key: period.key,
+          cash: position.startingCash,
+          cardDebt: position.startingCardDebt,
+          cardPayments: null,
+          moneyIn: null,
+          moneyOut: null,
+        };
       }
       const from = maxDate(period.start, model.forecastStart);
       return {
@@ -1920,8 +1934,11 @@ export function defaultReportRange(
 ): { from: CalendarDate; toExclusive: CalendarDate } {
   const lookbackStart = addMonths(model.today, -DEFAULT_LOOKBACK_MONTHS[granularity]);
   const historyStart = model.coverageStart ? maxDate(model.coverageStart, lookbackStart) : model.forecastStart;
+  // Months after the calendar's current one. Counted from the forecast's first
+  // month, a snapshot current through the last of the month would reach a
+  // month further than on any other day.
   const horizonEnd = minDate(
-    addMonths(startOfMonth(model.forecastStart), horizonMonths + 1, 1),
+    addMonths(startOfMonth(model.today), horizonMonths + 1, 1),
     model.forecastEndLimit
   );
   // Finish the period the horizon lands in, so the last bar is never a stub.

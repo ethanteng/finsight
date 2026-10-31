@@ -288,6 +288,64 @@ describe('CashFlowPageClient', () => {
     ]);
   });
 
+  it('shows what happened in a window the data runs to the end of, such as this month on its last day', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?') ? {
+      status: 200,
+      body: report({
+        today: '2026-10-31',
+        dataThrough: '2026-10-31',
+        forecastStart: '2026-11-01',
+        highlights: [
+          // Nothing of October is left to forecast.
+          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(10000.4, 14641.6), actualCoverage: 'full', remaining: null, projected: null, planned: totals(0, 0), projectedWithoutPlanned: null },
+          // History starts inside the quarter, which is over too: there is no total to show.
+          { key: 'this_quarter', start: '2026-07-01', endExclusive: '2026-10-01', actualToDate: totals(500, 0), actualCoverage: 'partial', remaining: null, projected: null, planned: totals(0, 0), projectedWithoutPlanned: null },
+          { key: 'next_12_months', start: '2026-11-01', endExclusive: '2027-11-01', actualToDate: null, actualCoverage: null, remaining: { ...totals(65000, 46000), components }, projected: totals(65000, 46000), planned: totals(0, 0), projectedWithoutPlanned: totals(65000, 46000) },
+        ],
+      }),
+    } : undefined));
+    render(<CashFlowPageClient />);
+
+    const month = (await screen.findByRole('heading', { name: 'This month' })).closest('article')!;
+    expect(within(month).queryByText('No forecast yet.')).not.toBeInTheDocument();
+    // −$4,641.20 rounds to −$4,641; spending takes the remainder so the lines add up to it.
+    expect(breakdown(month)).toEqual([
+      ['Income', 'Actual · Oct 1–31', '+$10,000'],
+      ['Spending', 'Actual · Oct 1–31', '−$14,641'],
+      ['Shortfall', null, '−$4,641'],
+    ]);
+
+    const quarter = screen.getByRole('heading', { name: 'This quarter' }).closest('article')!;
+    expect(within(quarter).queryByText('No forecast yet.')).not.toBeInTheDocument();
+    // The quarter is already over, so the missing days are not coming later.
+    expect(within(quarter).getByText(/full period can’t be added up\. Since then: \+\$500\./)).toBeInTheDocument();
+  });
+
+  it('rounds a finished window’s shortfall the same way the headline shows it', async () => {
+    // −$10.50 is shown as −$11. Math.round(−10.5) is −10, a dollar away from that.
+    mockFetch(url => (url.includes('/api/cash-flow?') ? {
+      status: 200,
+      body: report({
+        today: '2026-10-31',
+        dataThrough: '2026-10-31',
+        forecastStart: '2026-11-01',
+        highlights: [
+          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(10.5, 21), actualCoverage: 'full', remaining: null, projected: null, planned: totals(0, 0), projectedWithoutPlanned: null },
+          { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: null, actualCoverage: 'full', remaining: { ...totals(1, 1), components }, projected: totals(1, 1), planned: totals(0, 0), projectedWithoutPlanned: totals(1, 1) },
+          { key: 'next_12_months', start: '2026-11-01', endExclusive: '2027-11-01', actualToDate: null, actualCoverage: null, remaining: { ...totals(1, 1), components }, projected: totals(1, 1), planned: totals(0, 0), projectedWithoutPlanned: totals(1, 1) },
+        ],
+      }),
+    } : undefined));
+    render(<CashFlowPageClient />);
+
+    const month = (await screen.findByRole('heading', { name: 'This month' })).closest('article')!;
+    expect(breakdown(month)).toEqual([
+      ['Income', 'Actual · Oct 1–31', '+$11'],
+      ['Spending', 'Actual · Oct 1–31', '−$22'],
+      ['Shortfall', null, '−$11'],
+    ]);
+  });
+
   it('says what the planned net is made of when moving money changes little or nothing', async () => {
     // Paying off a card saves $5 of interest this month; the $3,000 transfer starts in November.
     const payoff = {
@@ -1133,7 +1191,7 @@ describe('CashFlowPageClient', () => {
     expect(screen.getByTestId('cash-flow-chart')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
     expect(screen.getByTestId('cash-position-chart')).toBeInTheDocument();
-    expect(screen.getByText(/Lowest point: \$1,890 on Oct 22, 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Lowest point ahead: \$1,890 on Oct 22, 2026/)).toBeInTheDocument();
   });
 
   it('says why there is no cash position', async () => {
@@ -1458,6 +1516,7 @@ describe('CashFlowPageClient', () => {
     expect(cells('Nov 2026')).toEqual(['$5,417', '$3,152', '$1,521', '$4,410', '$2,495']);
     // A month already over has nothing projected.
     expect(cells('Sep 2026')).toEqual(['—', '—', '—', '—', '—']);
+    expect(screen.getByText(/A period the data already runs to the end of shows the balance it ended at/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Savings' }));
     expect(headers()).toEqual(['Period', 'Cash in', 'Cash out', 'Net', 'Based on']);

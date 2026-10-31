@@ -93,7 +93,8 @@ export function CashPositionPeriodTable({ report }: { report: CashFlowReport }) 
         </thead>
         <tbody className="divide-y divide-[#102319]/10">
           {report.periods.map((period, index) => {
-            // In step with the periods; a period over before the forecast has no figures.
+            // In step with the periods. One that ended before the forecast has no
+            // figures; one that ends where the forecast starts has the reported balances only.
             const point = report.position.periods[index];
             return (
               <tr key={period.key} className={period.phase === 'future' ? 'text-[#5e6b63]' : 'text-[#102319]'}>
@@ -111,8 +112,9 @@ export function CashPositionPeriodTable({ report }: { report: CashFlowReport }) 
         </tbody>
       </table>
       <p className="mt-3 text-xs leading-5 text-[#66736b]">
-        For the part of each period still ahead. Cash at end is the cash before, plus money in, less money out and what’s
-        paid to cards.{several ? ' Money in and out include moves between your own accounts.' : ''}
+        Money in, out and what’s paid to cards are only the part of each period still ahead. Cash at end is the cash
+        before, plus those. A period the data already runs to the end of shows the balance it ended at.
+        {several ? ' Money in and out include moves between your own accounts.' : ''}
       </p>
       {hasCards && paidElsewhere.length > 0 && (
         <p className="mt-2 text-xs leading-5 text-[#76510f]">
