@@ -288,6 +288,38 @@ describe('CashFlowPageClient', () => {
     ]);
   });
 
+  it('shows what happened in a window the data runs to the end of, such as this month on its last day', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?') ? {
+      status: 200,
+      body: report({
+        today: '2026-10-31',
+        dataThrough: '2026-10-31',
+        forecastStart: '2026-11-01',
+        highlights: [
+          // Nothing of October is left to forecast.
+          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(10000.4, 14641.6), actualCoverage: 'full', remaining: null, projected: null, planned: totals(0, 0), projectedWithoutPlanned: null },
+          // History starts inside the quarter, which is over too: there is no total to show.
+          { key: 'this_quarter', start: '2026-07-01', endExclusive: '2026-10-01', actualToDate: totals(500, 0), actualCoverage: 'partial', remaining: null, projected: null, planned: totals(0, 0), projectedWithoutPlanned: null },
+          { key: 'next_12_months', start: '2026-11-01', endExclusive: '2027-11-01', actualToDate: null, actualCoverage: null, remaining: { ...totals(65000, 46000), components }, projected: totals(65000, 46000), planned: totals(0, 0), projectedWithoutPlanned: totals(65000, 46000) },
+        ],
+      }),
+    } : undefined));
+    render(<CashFlowPageClient />);
+
+    const month = (await screen.findByRole('heading', { name: 'This month' })).closest('article')!;
+    expect(within(month).queryByText('No forecast yet.')).not.toBeInTheDocument();
+    // −$4,641.20 rounds to −$4,641; spending takes the remainder so the lines add up to it.
+    expect(breakdown(month)).toEqual([
+      ['Income', 'Actual · Oct 1–31', '+$10,000'],
+      ['Spending', 'Actual · Oct 1–31', '−$14,641'],
+      ['Shortfall', null, '−$4,641'],
+    ]);
+
+    const quarter = screen.getByRole('heading', { name: 'This quarter' }).closest('article')!;
+    expect(within(quarter).queryByText('No forecast yet.')).not.toBeInTheDocument();
+    expect(within(quarter).getByText(/full period can’t be added up yet\. Since then: \+\$500\./)).toBeInTheDocument();
+  });
+
   it('says what the planned net is made of when moving money changes little or nothing', async () => {
     // Paying off a card saves $5 of interest this month; the $3,000 transfer starts in November.
     const payoff = {

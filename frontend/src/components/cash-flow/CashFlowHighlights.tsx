@@ -5,6 +5,7 @@ import type {
   CashFlowHighlightKey,
   CashFlowPlannedEventSummary,
   CashFlowReport,
+  CashFlowTotals,
 } from '../../types/cash-flow';
 import {
   HIGHLIGHT_LABELS,
@@ -112,6 +113,20 @@ function breakdownLines(
   return parts.map(({ label, detail, value }) => ({ label, detail, value }));
 }
 
+/**
+ * A window the data runs to the end of, such as this month on its last day:
+ * nothing is left to forecast, so it is what happened. Spending takes the
+ * rounding remainder, so the lines shown sum to the net shown.
+ */
+function observedLines(observed: CashFlowTotals, highlight: CashFlowHighlight): BreakdownLine[] {
+  const detail = `Actual · ${formatShortRange(highlight.start, lastIncludedDay(highlight.endExclusive))}`;
+  const income = Math.round(observed.income);
+  return [
+    { label: 'Income', detail, value: income },
+    { label: 'Spending', detail, value: Math.round(observed.net) - income },
+  ];
+}
+
 function Line({ label, detail, value }: BreakdownLine) {
   return (
     <div className="flex items-baseline justify-between gap-4 text-sm">
@@ -136,12 +151,23 @@ function HighlightCard({
   coverageStart: string | null;
   events: readonly CashFlowPlannedEventSummary[];
 }) {
-  const headline = highlight.projected ?? highlight.remaining;
-  const headlineLabel = highlight.projected
-    ? (highlight.projected.net < 0 ? 'Expected shortfall' : 'Expected to save')
-    : 'Expected for the rest of it';
+  const over = highlight.endExclusive <= forecastStart;
+  const observed = over && highlight.actualCoverage === 'full' ? highlight.actualToDate : null;
+  const forecasted = highlight.projected ?? highlight.remaining;
+  const headline = forecasted ?? observed;
+  const headlineLabel = !forecasted
+    ? (headline && headline.net < 0 ? 'Shortfall' : 'Saved')
+    : highlight.projected
+      ? (highlight.projected.net < 0 ? 'Expected shortfall' : 'Expected to save')
+      : 'Expected for the rest of it';
   const headlineColor = headline && headline.net < 0 ? 'text-[#9b4137]' : 'text-[#102319]';
-  const lines = breakdownLines(highlight, forecastStart, events);
+  const lines = forecasted || !observed ? breakdownLines(highlight, forecastStart, events) : observedLines(observed, highlight);
+  const partialNote = highlight.actualCoverage === 'partial' && coverageStart && (
+    <p className="mt-3 text-xs leading-5 text-[#76510f]">
+      Your history starts {formatCalendarDate(coverageStart)}, so the full period can’t be added up yet.
+      {highlight.actualToDate && ` Since then: ${formatSignedMoney(highlight.actualToDate.net)}.`}
+    </p>
+  );
 
   return (
     <article className="rounded-[1.6rem] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-sm sm:p-6">
@@ -168,15 +194,14 @@ function HighlightCard({
               </div>
             </dl>
           )}
-          {highlight.actualCoverage === 'partial' && coverageStart && (
-            <p className="mt-3 text-xs leading-5 text-[#76510f]">
-              Your history starts {formatCalendarDate(coverageStart)}, so the full period can’t be added up yet.
-              {highlight.actualToDate && ` Since then: ${formatSignedMoney(highlight.actualToDate.net)}.`}
-            </p>
-          )}
+          {partialNote}
         </>
       ) : (
-        <p className="mt-4 text-sm leading-6 text-[#5e6b63]">No forecast yet.</p>
+        <>
+          {/* Over, with history for only part of it: the note says why there is no total. */}
+          {!(over && partialNote) && <p className="mt-4 text-sm leading-6 text-[#5e6b63]">No forecast yet.</p>}
+          {partialNote}
+        </>
       )}
     </article>
   );
