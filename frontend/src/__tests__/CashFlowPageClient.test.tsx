@@ -1516,6 +1516,7 @@ describe('CashFlowPageClient', () => {
     expect(cells('Nov 2026')).toEqual(['$5,417', '$3,152', '$1,521', '$4,410', '$2,495']);
     // A month already over has nothing projected.
     expect(cells('Sep 2026')).toEqual(['—', '—', '—', '—', '—']);
+    expect(screen.getByText(/A period the data already runs to the end of shows the balance it ended at/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Savings' }));
     expect(headers()).toEqual(['Period', 'Cash in', 'Cash out', 'Net', 'Based on']);

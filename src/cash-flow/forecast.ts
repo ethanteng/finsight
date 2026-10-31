@@ -1674,8 +1674,9 @@ export interface CashFlowPositionSummary {
   startingCardDebt: number | null;
   /**
    * In step with `periods`: balances at each period's end, and what arrives,
-   * leaves and is paid to cards in the period's forecast part. Null for a
-   * period over before the forecast.
+   * leaves and is paid to cards in the period's forecast part. A period that
+   * ends before the forecast has no figures. One that ends where the forecast
+   * starts has the reported balances and null flows.
    */
   periods: Array<{
     key: string;

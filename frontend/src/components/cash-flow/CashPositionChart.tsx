@@ -28,7 +28,7 @@ export interface CashPositionRow {
   cardDebt: number | null;
 }
 
-/** One row per period from the forecast on: the balances at each period's end. */
+/** Balances at each period's end. Periods that ended before the forecast are left out; one that ends where it starts is the reported balance. */
 export function buildPositionRows(report: Pick<CashFlowReport, 'periods' | 'position' | 'granularity'>): CashPositionRow[] {
   return report.periods.flatMap((period, index) => {
     const point = report.position.periods[index];
