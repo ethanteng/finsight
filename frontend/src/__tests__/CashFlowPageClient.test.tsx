@@ -317,7 +317,8 @@ describe('CashFlowPageClient', () => {
 
     const quarter = screen.getByRole('heading', { name: 'This quarter' }).closest('article')!;
     expect(within(quarter).queryByText('No forecast yet.')).not.toBeInTheDocument();
-    expect(within(quarter).getByText(/full period can’t be added up yet\. Since then: \+\$500\./)).toBeInTheDocument();
+    // The quarter is already over, so the missing days are not coming later.
+    expect(within(quarter).getByText(/full period can’t be added up\. Since then: \+\$500\./)).toBeInTheDocument();
   });
 
   it('rounds a finished window’s shortfall the same way the headline shows it', async () => {

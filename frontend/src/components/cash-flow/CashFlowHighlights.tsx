@@ -176,7 +176,7 @@ function HighlightCard({
   const lines = forecasted || !observed ? breakdownLines(highlight, forecastStart, events) : observedLines(observed, highlight);
   const partialNote = highlight.actualCoverage === 'partial' && coverageStart && (
     <p className="mt-3 text-xs leading-5 text-[#76510f]">
-      Your history starts {formatCalendarDate(coverageStart)}, so the full period can’t be added up yet.
+      Your history starts {formatCalendarDate(coverageStart)}, so the full period can’t be added up{over ? '' : ' yet'}.
       {highlight.actualToDate && ` Since then: ${formatSignedMoney(highlight.actualToDate.net)}.`}
     </p>
   );
