@@ -114,16 +114,28 @@ function breakdownLines(
 }
 
 /**
+ * Whole dollars as `formatSignedMoney` prints them. `Math.round` sends a
+ * negative half-dollar the other way (−10.5 to −10, while the headline shows
+ * −$11), so a line built from it would miss the net by a dollar.
+ */
+function displayedDollars(value: number): number {
+  const rounded = Math.round(value);
+  if (rounded === 0) return 0;
+  const magnitude = Math.round(Math.abs(value));
+  return rounded < 0 ? -magnitude : magnitude;
+}
+
+/**
  * A window the data runs to the end of, such as this month on its last day:
  * nothing is left to forecast, so it is what happened. Spending takes the
  * rounding remainder, so the lines shown sum to the net shown.
  */
 function observedLines(observed: CashFlowTotals, highlight: CashFlowHighlight): BreakdownLine[] {
   const detail = `Actual · ${formatShortRange(highlight.start, lastIncludedDay(highlight.endExclusive))}`;
-  const income = Math.round(observed.income);
+  const income = displayedDollars(observed.income);
   return [
     { label: 'Income', detail, value: income },
-    { label: 'Spending', detail, value: Math.round(observed.net) - income },
+    { label: 'Spending', detail, value: displayedDollars(observed.net) - income },
   ];
 }
 

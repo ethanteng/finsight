@@ -320,6 +320,31 @@ describe('CashFlowPageClient', () => {
     expect(within(quarter).getByText(/full period can’t be added up yet\. Since then: \+\$500\./)).toBeInTheDocument();
   });
 
+  it('rounds a finished window’s shortfall the same way the headline shows it', async () => {
+    // −$10.50 is shown as −$11. Math.round(−10.5) is −10, a dollar away from that.
+    mockFetch(url => (url.includes('/api/cash-flow?') ? {
+      status: 200,
+      body: report({
+        today: '2026-10-31',
+        dataThrough: '2026-10-31',
+        forecastStart: '2026-11-01',
+        highlights: [
+          { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(10.5, 21), actualCoverage: 'full', remaining: null, projected: null, planned: totals(0, 0), projectedWithoutPlanned: null },
+          { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: null, actualCoverage: 'full', remaining: { ...totals(1, 1), components }, projected: totals(1, 1), planned: totals(0, 0), projectedWithoutPlanned: totals(1, 1) },
+          { key: 'next_12_months', start: '2026-11-01', endExclusive: '2027-11-01', actualToDate: null, actualCoverage: null, remaining: { ...totals(1, 1), components }, projected: totals(1, 1), planned: totals(0, 0), projectedWithoutPlanned: totals(1, 1) },
+        ],
+      }),
+    } : undefined));
+    render(<CashFlowPageClient />);
+
+    const month = (await screen.findByRole('heading', { name: 'This month' })).closest('article')!;
+    expect(breakdown(month)).toEqual([
+      ['Income', 'Actual · Oct 1–31', '+$11'],
+      ['Spending', 'Actual · Oct 1–31', '−$22'],
+      ['Shortfall', null, '−$11'],
+    ]);
+  });
+
   it('says what the planned net is made of when moving money changes little or nothing', async () => {
     // Paying off a card saves $5 of interest this month; the $3,000 transfer starts in November.
     const payoff = {
