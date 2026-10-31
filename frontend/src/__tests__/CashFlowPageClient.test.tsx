@@ -1191,7 +1191,7 @@ describe('CashFlowPageClient', () => {
     expect(screen.getByTestId('cash-flow-chart')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
     expect(screen.getByTestId('cash-position-chart')).toBeInTheDocument();
-    expect(screen.getByText(/Lowest point: \$1,890 on Oct 22, 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Lowest point ahead: \$1,890 on Oct 22, 2026/)).toBeInTheDocument();
   });
 
   it('says why there is no cash position', async () => {
