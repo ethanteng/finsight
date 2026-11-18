@@ -1,10 +1,11 @@
 import type {
   CashFlowForecastAdjustment as CashFlowForecastAdjustmentRow,
+  CashFlowHappenedMark as CashFlowHappenedMarkRow,
   PlannedCashFlowEvent as PlannedCashFlowEventRow,
 } from '@prisma/client';
 import { getPrismaClient } from '../prisma-client';
 import { calendarDateInTimeZone } from '../domain/time-zone';
-import { calendarDateFrom, minDate } from '../cash-flow/calendar';
+import { calendarDateFrom, minDate, type CalendarDate } from '../cash-flow/calendar';
 import { cashFlowAccounts } from '../cash-flow/ledger';
 import {
   buildCashFlowModel,
@@ -21,6 +22,7 @@ import type {
   ForecastAdjustmentInput,
   ForecastAdjustmentKind,
 } from '../cash-flow/adjustments';
+import { happenedMarkCutoff, type HappenedMark, type HappenedSource, type OccurrenceRef } from '../cash-flow/happened';
 import type {
   CardPaymentMode,
   PlannedCashFlowEvent,
@@ -39,6 +41,7 @@ export interface CashFlowSnapshotMeta {
 export interface LoadedCashFlowModel {
   model: CashFlowModel;
   snapshot: CashFlowSnapshotMeta;
+  timeZone: string;
 }
 
 /**
@@ -216,14 +219,70 @@ export async function deleteForecastAdjustment(userId: string, id: string): Prom
   return result.count > 0;
 }
 
+/** A calendar date as Prisma writes a PostgreSQL DATE: UTC midnight. */
+function dateValue(date: CalendarDate): Date {
+  return new Date(`${date}T00:00:00.000Z`);
+}
+
+/** A mark as the engine reads it; the day it was made is the user's own. */
+function toHappenedMark(row: CashFlowHappenedMarkRow, timeZone: string): HappenedMark {
+  return {
+    id: row.id,
+    source: row.source as HappenedSource,
+    sourceId: row.sourceId,
+    date: dateOnly(row.date),
+    label: row.label,
+    amount: row.amount,
+    markedOn: calendarDateInTimeZone(row.createdAt, timeZone),
+  };
+}
+
+/**
+ * Mark an item as already happened, under the label and amount the user's own
+ * data gives it, unless the user already has `limit` marks; null when they do. Marking the same item twice returns the mark already
+ * saved. Marks for days long past name nothing the forecast still expects, so
+ * they are removed first and never count toward the cap. The cleanup, lookup,
+ * count and write run under a per-user advisory lock (namespace 872014274,
+ * beside the adjustment lock's 872014273), so simultaneous saves cannot pass
+ * the cap or race the unique key.
+ */
+export async function saveHappenedMarkWithinLimit(
+  userId: string,
+  ref: OccurrenceRef,
+  target: { label: string; amount: number },
+  limit: number,
+  options: { today: CalendarDate; timeZone: string }
+): Promise<{ mark: HappenedMark; created: boolean } | null> {
+  return getPrismaClient().$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(872014274, hashtext(${userId}))`;
+    await tx.cashFlowHappenedMark.deleteMany({ where: { userId, date: { lt: dateValue(happenedMarkCutoff(options.today)) } } });
+    const where = { userId, source: ref.source, sourceId: ref.sourceId, date: dateValue(ref.date) };
+    const existing = await tx.cashFlowHappenedMark.findFirst({ where });
+    if (existing) return { mark: toHappenedMark(existing, options.timeZone), created: false };
+    if (await tx.cashFlowHappenedMark.count({ where: { userId } }) >= limit) return null;
+    const row = await tx.cashFlowHappenedMark.create({
+      data: { ...where, label: target.label.slice(0, ADJUSTMENT_LABEL_MAX_LENGTH), amount: target.amount },
+    });
+    return { mark: toHappenedMark(row, options.timeZone), created: true };
+  });
+}
+
+export async function deleteHappenedMark(userId: string, id: string): Promise<boolean> {
+  const result = await getPrismaClient().cashFlowHappenedMark.deleteMany({ where: { id, userId } });
+  return result.count > 0;
+}
+
 interface LoadedCashFlowInput {
   input: CashFlowModelInput;
   snapshot: CashFlowSnapshotMeta;
+  /** The user's zone, which decides the calendar day a mark was made on. */
+  timeZone: string;
 }
 
 /**
  * Everything the user's cash-flow model is built from: their latest snapshot,
- * overrides, planned events and adjustments. Null when they have no snapshot yet.
+ * overrides, planned events, adjustments and the items they marked as already
+ * happened. Null when they have no snapshot yet.
  *
  * "Today" is the user's own calendar date. The data runs through the date the
  * snapshot was computed, never later than today; whatever lies between is
@@ -231,7 +290,7 @@ interface LoadedCashFlowInput {
  */
 async function loadCashFlowInput(userId: string, now: Date): Promise<LoadedCashFlowInput | null> {
   const prisma = getPrismaClient();
-  const [snapshot, user, plannedEvents, adjustments] = await Promise.all([
+  const [snapshot, user, plannedEvents, adjustments, markRows] = await Promise.all([
     prisma.financialSummarySnapshot.findUnique({
       where: { userId },
       select: { computedAt: true, asOf: true, status: true, accounts: true, transactions: true },
@@ -242,6 +301,7 @@ async function loadCashFlowInput(userId: string, now: Date): Promise<LoadedCashF
     }),
     listPlannedEvents(userId),
     listForecastAdjustments(userId),
+    prisma.cashFlowHappenedMark.findMany({ where: { userId }, orderBy: [{ date: 'asc' }, { createdAt: 'asc' }] }),
   ]);
   if (!snapshot || !user) return null;
 
@@ -259,7 +319,9 @@ async function loadCashFlowInput(userId: string, now: Date): Promise<LoadedCashF
         monthlyExpense: user.monthlyExpenseOverride,
       },
       adjustments,
+      happened: markRows.map(row => toHappenedMark(row, user.timeZone)),
     },
+    timeZone: user.timeZone,
     snapshot: {
       computedAt: snapshot.computedAt.toISOString(),
       asOf: snapshot.asOf ? snapshot.asOf.toISOString() : null,
@@ -271,7 +333,7 @@ async function loadCashFlowInput(userId: string, now: Date): Promise<LoadedCashF
 /** Build the user's cash-flow model. Null when they have no snapshot yet. */
 export async function loadCashFlowModel(userId: string, now = new Date()): Promise<LoadedCashFlowModel | null> {
   const loaded = await loadCashFlowInput(userId, now);
-  return loaded ? { model: buildCashFlowModel(loaded.input), snapshot: loaded.snapshot } : null;
+  return loaded ? { model: buildCashFlowModel(loaded.input), snapshot: loaded.snapshot, timeZone: loaded.timeZone } : null;
 }
 
 export interface ExpectedMonthlySummary extends ExpectedMonthly {

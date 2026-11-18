@@ -362,6 +362,33 @@ export interface CashPositionItem {
   balanceAfter: number;
   /** For a planned transfer: the accounts it moves money between, and how much. */
   transfer?: { fromAccountId: string | null; toAccountId: string | null; amount: number };
+  /** How a mark that it has already happened names it. An older report leaves it out. */
+  ref?: CashPositionItemRef;
+}
+
+/** An upcoming item as a mark names it: what produces it and the day it was expected. */
+export interface CashPositionItemRef {
+  source: 'stream' | 'transfer' | 'card' | 'planned';
+  sourceId: string;
+  date: string;
+}
+
+/** An item the user marked as already happened, as the cash position counts it. */
+export interface CashPositionHappenedItem {
+  markId: string;
+  /** The item, and the day it was expected. */
+  ref: CashPositionItemRef;
+  label: string;
+  kind: CashPositionItem['kind'];
+  /** Signed, as the coming-up list would show it: zero for a planned transfer between two accounts in view. */
+  amount: number;
+  /** Signed: what it moves the cash by on the first forecast day; nothing once the data shows it posted. */
+  counted: number;
+  /** The data shows it posted, so the reported balance already counts it. */
+  inBalance: boolean;
+  transfer?: CashPositionItem['transfer'];
+  /** A card payment the accounts in view no longer pay: it moves what the card owes, and no cash. */
+  paidFromElsewhere?: true;
 }
 
 export interface CashFlowPositionAccount {
@@ -402,6 +429,8 @@ export interface CashFlowPositionSummary {
   }>;
   /** Every dated amount in the month from the forecast start, with the balance after each day. */
   upcoming: CashPositionItem[];
+  /** What the user marked as already happened, never in `upcoming`. An older report leaves it out. */
+  happened?: CashPositionHappenedItem[];
   /** What arrives and leaves every day without being listed in `upcoming`. Null when unavailable; an older report leaves it out. */
   spreadPerDay?: { in: number; out: number } | null;
   lowPoint: { date: string; cash: number } | null;

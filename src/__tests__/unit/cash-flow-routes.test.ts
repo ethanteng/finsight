@@ -29,6 +29,13 @@ const prisma: Record<string, any> = {
     update: jest.fn(),
     deleteMany: jest.fn(),
   },
+  cashFlowHappenedMark: {
+    findMany: jest.fn(),
+    findFirst: jest.fn(),
+    count: jest.fn(),
+    create: jest.fn(),
+    deleteMany: jest.fn(),
+  },
 };
 
 jest.mock('../../prisma-client', () => ({ getPrismaClient: () => prisma }));
@@ -88,6 +95,9 @@ describe('cash flow routes', () => {
     prisma.plannedCashFlowEvent.findMany.mockResolvedValue([]);
     prisma.cashFlowForecastAdjustment.findMany.mockResolvedValue([]);
     prisma.cashFlowForecastAdjustment.findFirst.mockResolvedValue(null);
+    prisma.cashFlowHappenedMark.findMany.mockResolvedValue([]);
+    prisma.cashFlowHappenedMark.findFirst.mockResolvedValue(null);
+    prisma.cashFlowHappenedMark.deleteMany.mockResolvedValue({ count: 0 });
   });
 
   describe('GET /api/cash-flow', () => {
@@ -517,6 +527,109 @@ describe('cash flow routes', () => {
 
       prisma.cashFlowForecastAdjustment.deleteMany.mockResolvedValue({ count: 1 });
       expect((await request(app).delete('/api/cash-flow/adjustments/adjustment-1')).status).toBe(204);
+    });
+  });
+  describe('items marked as already happened', () => {
+    const paycheck = { source: 'stream', sourceId: 'income:gusto-payroll-smith', date: '2026-10-09' };
+    const markRow = (overrides: Record<string, unknown> = {}) => ({
+      id: 'mark-1',
+      userId: 'user-1',
+      source: 'stream',
+      sourceId: 'income:gusto-payroll-smith',
+      date: new Date('2026-10-09T00:00:00.000Z'),
+      label: 'GUSTO PAYROLL SMITH',
+      amount: 2500,
+      // Late on Oct 1 in Los Angeles is already Oct 2 in UTC.
+      createdAt: new Date('2026-10-02T05:00:00.000Z'),
+      ...overrides,
+    });
+
+    it('marks an item the forecast lists, labelled and sized from the user’s own data under a per-user lock', async () => {
+      prisma.cashFlowHappenedMark.count.mockResolvedValue(0);
+      prisma.cashFlowHappenedMark.create.mockResolvedValue(markRow());
+
+      const response = await request(app).post('/api/cash-flow/happened').send({ ...paycheck, label: 'Anything the client says', amount: 1 });
+
+      expect(response.status).toBe(201);
+      expect(response.body.mark).toEqual({
+        id: 'mark-1',
+        source: 'stream',
+        sourceId: 'income:gusto-payroll-smith',
+        date: '2026-10-09',
+        label: 'GUSTO PAYROLL SMITH',
+        amount: 2500,
+        markedOn: '2026-10-01',
+      });
+      expect(prisma.cashFlowHappenedMark.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'user-1',
+          source: 'stream',
+          sourceId: 'income:gusto-payroll-smith',
+          date: new Date('2026-10-09T00:00:00.000Z'),
+          label: 'GUSTO PAYROLL SMITH',
+          amount: 2500,
+        },
+      });
+      const lock = prisma.$executeRaw.mock.calls[0];
+      expect(lock[0].join('?')).toContain('pg_advisory_xact_lock(872014274, hashtext(?))');
+      expect(lock[1]).toBe('user-1');
+      // Marks for days long past name nothing any more, and go first.
+      expect(prisma.cashFlowHappenedMark.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', date: { lt: new Date('2026-08-17T00:00:00.000Z') } },
+      });
+    });
+
+    it('returns the mark already saved instead of saving it twice', async () => {
+      prisma.cashFlowHappenedMark.findMany.mockResolvedValue([markRow()]);
+      prisma.cashFlowHappenedMark.findFirst.mockResolvedValue(markRow());
+      const response = await request(app).post('/api/cash-flow/happened').send(paycheck);
+      expect(response.status).toBe(200);
+      expect(response.body.mark.id).toBe('mark-1');
+      expect(prisma.cashFlowHappenedMark.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses an item the forecast does not list', async () => {
+      const response = await request(app).post('/api/cash-flow/happened').send({ ...paycheck, date: '2026-10-10' });
+      expect(response.status).toBe(404);
+      expect(prisma.cashFlowHappenedMark.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid item before loading anything', async () => {
+      const response = await request(app).post('/api/cash-flow/happened').send({ source: 'payee', sourceId: 'x', date: '2026-10-09' });
+      expect(response.status).toBe(400);
+      expect(prisma.financialSummarySnapshot.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('caps how many items one user can mark', async () => {
+      prisma.cashFlowHappenedMark.count.mockResolvedValue(100);
+      const response = await request(app).post('/api/cash-flow/happened').send(paycheck);
+      expect(response.status).toBe(409);
+      expect(prisma.cashFlowHappenedMark.create).not.toHaveBeenCalled();
+    });
+
+    it('counts a marked item on the first forecast day and lists it as happened', async () => {
+      prisma.cashFlowHappenedMark.findMany.mockResolvedValue([markRow()]);
+      const response = await request(app).get('/api/cash-flow?granularity=month&horizonMonths=3');
+      expect(response.status).toBe(200);
+      expect(response.body.position.happened).toEqual([{
+        markId: 'mark-1',
+        ref: paycheck,
+        label: 'GUSTO PAYROLL SMITH',
+        kind: 'income',
+        amount: 2500,
+        counted: 2500,
+        inBalance: false,
+      }]);
+      expect(response.body.position.upcoming.some((item: any) => item.ref.date === '2026-10-09' && item.kind === 'income')).toBe(false);
+      expect(prisma.cashFlowHappenedMark.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 'user-1' } }));
+    });
+
+    it('only undoes a mark the user made', async () => {
+      expect((await request(app).delete('/api/cash-flow/happened/someone-elses')).status).toBe(404);
+      expect(prisma.cashFlowHappenedMark.deleteMany).toHaveBeenCalledWith({ where: { id: 'someone-elses', userId: 'user-1' } });
+
+      prisma.cashFlowHappenedMark.deleteMany.mockResolvedValue({ count: 1 });
+      expect((await request(app).delete('/api/cash-flow/happened/mark-1')).status).toBe(204);
     });
   });
 });

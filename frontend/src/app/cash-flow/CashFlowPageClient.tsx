@@ -11,7 +11,7 @@ import CashFlowHighlights from '../../components/cash-flow/CashFlowHighlights';
 import UsualSpendingBreakdown from '../../components/cash-flow/UsualSpendingBreakdown';
 import CashFlowPeriodTable, { CashPositionPeriodTable } from '../../components/cash-flow/CashFlowPeriodTable';
 import CashPositionChart, { CashPositionLegend } from '../../components/cash-flow/CashPositionChart';
-import { PositionAccountPicker, UpcomingItems } from '../../components/cash-flow/CashPositionAccounts';
+import { PositionAccountPicker, UpcomingItems, happenedStartNote } from '../../components/cash-flow/CashPositionAccounts';
 import CreditCardsPanel from '../../components/cash-flow/CreditCardsPanel';
 import ForecastBasis from '../../components/cash-flow/ForecastBasis';
 import ForecastBoard from '../../components/cash-flow/ForecastBoard';
@@ -419,11 +419,11 @@ export default function CashFlowPageClient() {
                     </p>
                   )}
                   <p className="mt-1 text-xs leading-5 text-[#66736b]">
-                    Starts from {formatMoney(report.position.startingCash ?? 0)} {coversAllCash(report) ? 'across' : 'in'} {positionScope(report)}.
+                    Starts from {formatMoney(report.position.startingCash ?? 0)} {coversAllCash(report) ? 'across' : 'in'} {positionScope(report)}{happenedStartNote(report)}.
                     Card payments come out of the account that pays each card, on their due days; planned income and
                     expenses land in the account you chose for them.
                   </p>
-                  <UpcomingItems report={report} />
+                  <UpcomingItems report={report} apiUrl={API_URL} onChanged={load} />
                 </div>
               ) : (
                 <div className="mt-5">
