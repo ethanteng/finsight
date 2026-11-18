@@ -280,7 +280,7 @@ Card balances cover only the cards the model projects. The report lists the card
 
 ### Items that already happened
 
-The user can mark any item in "Coming up in the next month" as already happened (`src/cash-flow/happened.ts`). A paycheck pending at the bank, a bill paid early or a planned transfer already made is the common case.
+The user can mark any item in "Coming up in the next month" as already happened (`src/cash-flow/happened.ts`). A paycheck pending at the bank, a bill paid early or a planned transfer already made is the common case. Each listed item carries a muted, underlined **Mark as already happened** control, worded as an action: a bare "Already happened" under every row read as a status, as if every item were already marked.
 
 - **Why the forecast still expects them:** the cash position starts from the provider's reported balance, and Plaid's reported (`current`) balance for a checking or savings account leaves pending transactions out. The ledger skips pending transactions too. So a pending paycheck is in neither the balance nor the history, and the forecast still expects it on its date.
 - **What a mark does:** the item moves to the first forecast day, in cash and, for a card payment, off the card. It moves by the amount it had when the user marked it, which the mark keeps: that is what happened, whatever the item is projected at later. From its own date on, nothing changes, so it is counted once. The reported balance stays the starting point. The page says what the marks add to it ("Starts from $2,402 in Personal Checking, plus $3,031 you marked as already happened") and lists marked items above the rest under **Already happened**, each with Undo.
