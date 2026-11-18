@@ -295,7 +295,7 @@ The user can mark any item in "Coming up in the next month" as already happened 
   - `transfer`: a recurring transfer, by stream id and due date.
   - `card`: everything a card is paid on one day, by its account id. The coming-up list shows a card's payments on one day as one item for the same reason.
   - `planned`: one occurrence of a planned event, by event id and date.
-- **Expiry:** a mark whose day has passed the forecast start names nothing. Marks for days more than 45 days past are removed when the user saves another.
+- **Expiry:** a mark names nothing once the forecast no longer expects that occurrence. That is a planned event or card payment whose day has passed, or a regular item overdue by more than its grace. A late item still inside that grace keeps the mark, named by the day it was due. Marks for days more than 45 days past are removed when the user saves another.
 - **Storage and limits:** marks are stored in `cash_flow_happened_marks`, unique per item. A mark must name an item the user's cash position lists (`happenedTarget`), and is stored under that item's own label. The cap is 100 per user, checked under a per-user advisory lock (namespace 872014274).
 - **Ask Linc:** the projections already count marks. "Cash now, as last reported" stays the reported balance. When marks add to it, the pack also publishes what they add (`cash_flow_marked_happened_net`) and the sum (`cash_flow_cash_now_with_marked`), since the model may not add the two itself.
 
