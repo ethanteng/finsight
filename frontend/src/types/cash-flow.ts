@@ -387,6 +387,8 @@ export interface CashPositionHappenedItem {
   /** The data shows it posted, so the reported balance already counts it. */
   inBalance: boolean;
   transfer?: CashPositionItem['transfer'];
+  /** A card payment the accounts in view no longer pay: it moves what the card owes, and no cash. */
+  paidFromElsewhere?: true;
 }
 
 export interface CashFlowPositionAccount {

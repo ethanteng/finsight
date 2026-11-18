@@ -1353,6 +1353,28 @@ describe('CashFlowPageClient', () => {
         await waitFor(() => expect(calls.some(call => call.url.endsWith('/api/cash-flow/happened/mark-1') && call.init?.method === 'DELETE')).toBe(true));
       });
 
+      it('says how a card payment that has partly posted, or is paid from elsewhere, is counted', async () => {
+        const card = { source: 'card' as const, sourceId: 'card', date: '2026-10-20' };
+        mockFetch(url => (url.includes('/api/cash-flow?') ? {
+          status: 200,
+          body: checkingOnly({
+            upcoming: [rent],
+            happened: [
+              { markId: 'm1', ref: card, label: 'Rewards Card', kind: 'card_payment', amount: -2300, counted: -500, inBalance: false },
+              { markId: 'm2', ref: { ...card, sourceId: 'other-card' }, label: 'Store Card', kind: 'card_payment', amount: -90, counted: 0, inBalance: false, paidFromElsewhere: true },
+            ],
+          }),
+        } : undefined));
+        render(<CashFlowPageClient />);
+        await screen.findByRole('heading', { name: 'This month' });
+        fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+        const happened = screen.getByRole('region', { name: 'Already happened' });
+        expect(within(happened).getByText('Expected Oct 20, 2026 · Card payment · $500 counted today, the rest already in your balance'))
+          .toBeInTheDocument();
+        expect(within(happened).getByText('Expected Oct 20, 2026 · Card payment · paid from another account')).toBeInTheDocument();
+        expect(screen.getByText(/Starts from \$5,200 in Everyday Checking ••1234, less \$500 you marked as already happened\./)).toBeInTheDocument();
+      });
+
       it('says why a mark could not be saved', async () => {
         mockFetch((url, init) => {
           if (url.endsWith('/api/cash-flow/happened') && init?.method === 'POST') {

@@ -121,6 +121,17 @@ function ItemAmount({ item }: { item: Pick<CashPositionItem, 'kind' | 'transfer'
     : <p className={`font-bold tabular-nums ${item.amount < 0 ? 'text-[#9b4137]' : 'text-[#28704d]'}`}>{formatSignedMoney(item.amount)}</p>;
 }
 
+/** How a marked item is counted now, for its row. */
+function happenedStatus(item: CashPositionHappenedItem): string {
+  if (item.paidFromElsewhere) return 'paid from another account';
+  if (item.inBalance) return 'already in your balance';
+  // A payment that has partly posted counts only what hasn't.
+  if (item.kind === 'card_payment' && Math.round(Math.abs(item.counted)) < Math.round(Math.abs(item.amount))) {
+    return `${formatMoney(Math.abs(item.counted))} counted today, the rest already in your balance`;
+  }
+  return 'counted today';
+}
+
 const linkButtonClass = 'text-xs font-bold text-[#28704d] underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50';
 
 /**
@@ -188,7 +199,7 @@ export function UpcomingItems({ report, apiUrl, onChanged }: {
                   <p className="truncate font-semibold text-[#102319]">{item.label}</p>
                   <p className="text-xs text-[#66736b]">
                     Expected {formatCalendarDate(item.ref.date)} · {KIND_WORDS[item.kind]}{transferRoute(item, names)}
-                    {' · '}{item.inBalance ? 'already in your balance' : 'counted today'}
+                    {' · '}{happenedStatus(item)}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">

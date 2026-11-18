@@ -285,6 +285,55 @@ describe('items marked as already happened', () => {
       expect(marked.cashBefore('2026-10-21') - plain.cashBefore('2026-10-21')).toBeCloseTo(300, 2);
     });
 
+    it('counts only what has not posted of a day’s payments', () => {
+      // The 20th carries the usual statement payment and a planned $500 extra.
+      // The statement has posted on both sides; the extra has not.
+      const extra: PlannedCashFlowEvent = event({ id: 'extra', label: 'Extra', kind: 'card_payment', amount: 500, startDate: '2026-10-20', accountId: 'card', paymentMode: 'fixed' });
+      const statement = [
+        tx('checking', '2026-09-30', 'transfer_out', 1800, 'CARD CO AUTOPAY', { personal_finance_category: CARD_PAYMENT_CATEGORY }),
+        tx('card', '2026-09-30', 'transfer_out', -1800, 'PAYMENT THANK YOU', { personal_finance_category: CARD_PAYMENT_CATEGORY }),
+      ];
+      const accounts = [...ACCOUNTS, SAVINGS].map(account => account.account_id === 'card'
+        ? { ...account, liabilityDetails: [{ kind: 'credit', nextPaymentDueDate: '2026-10-20' }] }
+        : account);
+      const plainModel = model({ accounts, plannedEvents: [extra] }, statement);
+      const total = plainModel.cards[0].projection!.payments
+        .filter(item => item.date === '2026-10-20')
+        .reduce((sum, item) => sum + item.amount, 0);
+      // The extra is no more than the card owes once the statement is paid.
+      const extraPaid = total - 1800;
+      expect(extraPaid).toBeGreaterThan(400);
+
+      const plain = available(buildCashPosition(plainModel));
+      const marked = available(buildCashPosition(model({ accounts, plannedEvents: [extra], happened: [mark(payment, total)] }, statement)));
+      expect(marked.happened).toEqual([expect.objectContaining({ inBalance: false })]);
+      expect(marked.happened[0].amount).toBeCloseTo(-total, 2);
+      expect(marked.happened[0].counted).toBeCloseTo(-extraPaid, 2);
+      // Only the extra leaves on the first day, in cash and off the card...
+      expect(marked.cashBefore('2026-10-02') - plain.cashBefore('2026-10-02')).toBeCloseTo(-extraPaid, 2);
+      expect(marked.cardDebtBefore('2026-10-02') - plain.cardDebtBefore('2026-10-02')).toBeCloseTo(-extraPaid, 2);
+      // ...and the statement is not paid again on the 20th.
+      expect(marked.cashBefore('2026-10-21') - plain.cashBefore('2026-10-21')).toBeCloseTo(1800, 2);
+    });
+
+    it('still lists a marked payment for a card the accounts no longer pay', () => {
+      // Every payment the card received came from outside the connected accounts.
+      const transactions = householdTransactions(FROM, THROUGH).filter(item => item.name !== 'CARD CO AUTOPAY');
+      const build = (happened: HappenedMark[]) => buildCashFlowModel({
+        transactions, accounts: [...ACCOUNTS, SAVINGS], plannedEvents: [], dataThrough: THROUGH, today: START, happened,
+      });
+      const plainModel = build([]);
+      expect(plainModel.cards[0].paymentSource).toBe('other');
+      const plain = available(buildCashPosition(plainModel));
+      const marked = available(buildCashPosition(build([mark(payment, 1800)])));
+      expect(marked.happened).toEqual([expect.objectContaining({
+        markId: 'mark', amount: -1800, counted: 0, inBalance: false, paidFromElsewhere: true,
+      })]);
+      // No cash moves; the card owes less from the first day.
+      expect(marked.cashBefore('2026-10-02')).toBeCloseTo(plain.cashBefore('2026-10-02'), 2);
+      expect(marked.cardDebtBefore('2026-10-02') - plain.cardDebtBefore('2026-10-02')).toBeCloseTo(-1800, 2);
+    });
+
     it('counts the amount marked while the payment is still pending', () => {
       // New purchases since the mark raise what the card is projected to be paid.
       const accounts = [...ACCOUNTS, SAVINGS].map(account => account.account_id === 'card'

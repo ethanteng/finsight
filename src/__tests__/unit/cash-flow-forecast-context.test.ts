@@ -358,8 +358,15 @@ describe('credit cards and cash position in the pack', () => {
       provenance: { kind: 'calculation', formula: 'sum(inputs)', inputFactIds: ['cash_flow_cash_now', 'cash_flow_marked_happened_net'] },
     });
     expect(validateCanonicalFactPack({ version: 1, facts: Array.from(facts.values()) })).toEqual([]);
+    // The details say the marked items are already in the projections, without naming payees.
+    const details = compactCashFlowForecastDetails(marked) as any;
+    expect(details.cashPosition.markedAsHappened.count).toBe(1);
+    expect(details.cashPosition.markedAsHappened.note).toContain('do not describe them as still to come on those dates');
+    expect(details.cashPosition.markedAsHappened.note).toContain('cash_flow_cash_now_with_marked');
+    expect(JSON.stringify(details.cashPosition.markedAsHappened)).not.toMatch(/gusto/i);
 
     const unmarked = byId(cashFlowForecastFacts(context()));
+    expect((compactCashFlowForecastDetails(context()) as any).cashPosition).not.toHaveProperty('markedAsHappened');
     expect(unmarked.has('cash_flow_marked_happened_net')).toBe(false);
     expect(unmarked.has('cash_flow_cash_now_with_marked')).toBe(false);
   });

@@ -74,6 +74,11 @@ export interface CashPositionHappenedItem {
   /** The data shows it posted on every side in view, so the reported balance already counts it. */
   inBalance: boolean;
   transfer?: CashPositionItem['transfer'];
+  /**
+   * A card payment the accounts in view no longer pay: the mark moves what the
+   * card owes, and no cash. Listed so it can still be undone.
+   */
+  paidFromElsewhere?: true;
 }
 
 export type CashPosition =
@@ -201,6 +206,28 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
   };
   const fromPayee = (counterpartyKey: string | undefined) => (row: Row) => Boolean(counterpartyKey) && row.counterpartyKey === counterpartyKey;
   const isCardPayment = (row: Row) => 'cardPayment' in row && row.cardPayment;
+  /**
+   * How much of a marked card payment one side's data shows posted, up to the
+   * marked amount: one transaction that is the whole payment, or else the
+   * card's own payments since the mark, each of which can be part of it -- a
+   * regular payment that has posted beside a planned extra that has not.
+   * `sign` is the side's direction: in on the card, out of the cash account.
+   * Only `own` payments count as part, so a payment to some other card from
+   * the same account is never taken for part of this one.
+   */
+  const postedPart = (mark: HappenedMark, accountId: string | null, sign: 1 | -1, own: (row: CashFlowMovement) => boolean) => {
+    if (posted(mark, accountId, sign * mark.amount, isCardPayment)) return mark.amount;
+    const since = postedSince(mark);
+    let part = 0;
+    for (const row of model.ledger.movements) {
+      if (claimed.has(row.id) || row.accountId !== accountId || row.date < since || !row.cardPayment || !own(row)) continue;
+      const amount = sign * row.amount;
+      if (amount <= 0 || amountMatches(part, mark.amount) || part + amount > mark.amount + 0.005) continue;
+      part += amount;
+      claimed.add(row.id);
+    }
+    return part;
+  };
   type Listed = Omit<CashPositionItem, 'balanceAfter' | 'date' | 'amount'>;
   /** Count a marked item on the first day, unless it is in the balance; list it either way. */
   const happen = (mark: HappenedMark, signed: number, inBalance: boolean, item: Listed) => {
@@ -345,14 +372,28 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
       // The payment that happened is the one the user marked. Once it posts,
       // the card's lower balance projects a smaller payment for this day,
       // which the mark replaces rather than counting as a second payment.
-      // The card and the account that paid it each have the payment in their
-      // reported balance once their own side posts.
+      // The card and the account that paid it each have the payment, or the
+      // part of it that has posted there, in their reported balance; what
+      // has not posted yet moves on the first day.
       const paid = mark.amount;
-      if (!posted(mark, card.account.id, paid, isCardPayment)) addCard(start, -paid);
-      if (!fromCash) continue;
-      const inBalance = posted(mark, place(card.paidFrom), -paid, isCardPayment);
-      if (!inBalance) paidToCards[0] += paid;
-      happened.push({ markId: mark.id, ref, label: card.account.name, kind: 'card_payment', amount: -paid, counted: inBalance ? 0 : -paid, inBalance });
+      const onCard = postedPart(mark, card.account.id, 1, () => true);
+      if (!amountMatches(onCard, paid)) addCard(start, -(paid - onCard));
+      if (!fromCash) {
+        // The card is no longer paid from these accounts, so the mark moves
+        // only what the card owes. It is still listed, so it can be undone.
+        happened.push({
+          markId: mark.id, ref, label: card.account.name, kind: 'card_payment', amount: -paid, counted: 0,
+          inBalance: amountMatches(onCard, paid), paidFromElsewhere: true,
+        });
+        continue;
+      }
+      // Of the cash account's payments, only one sent to this card can be part of this one.
+      const cardRows = new Set(model.ledger.movements.filter(row => row.accountId === card.account.id).map(row => row.id));
+      const fromCashPart = postedPart(mark, place(card.paidFrom), -1, row => row.pairedWith !== null && cardRows.has(row.pairedWith));
+      const inBalance = amountMatches(fromCashPart, paid);
+      const counted = inBalance ? 0 : paid - fromCashPart;
+      paidToCards[0] += counted;
+      happened.push({ markId: mark.id, ref, label: card.account.name, kind: 'card_payment', amount: -paid, counted: -counted, inBalance });
     }
     for (const posting of card.projection!.interestPostings) addCard(posting.date, posting.amount);
   }

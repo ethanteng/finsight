@@ -857,6 +857,15 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
               })),
               accountsNote: 'Each account on its own; the cash figures above are their sum. Card payments come out of the account that pays each card.',
             }),
+            // Payees are left out: the facts carry what the marks add, and
+            // this only keeps the dates listed above from being read as still to come.
+            ...(context.position.marked && {
+              markedAsHappened: {
+                count: context.position.marked.count,
+                note: 'The user marked upcoming items as already happened since the balances were reported. Every cash projection counts them from the first forecast day, not on the dates the recurring items, card payments and planned events list, so do not describe them as still to come on those dates.'
+                  + (context.position.marked.net !== 0 ? ' Cash now counting them is cash_flow_cash_now_with_marked.' : ''),
+              },
+            }),
             ...(context.position.cardsLeftOut.length > 0 && {
               cardDebtLeavesOut: context.position.cardsLeftOut.map(card => ({
                 card: cardLabel(card),
