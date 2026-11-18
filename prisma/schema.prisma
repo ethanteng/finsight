@@ -730,6 +730,10 @@ model CashFlowHappenedMark {
   date      DateTime @db.Date
   /// What the item was called when the user marked it.
   label     String
+  /// How much it moved when the user marked it, positive; for a planned
+  /// transfer, what it moves between the accounts. Counted and reconciled in
+  /// place of whatever the item is projected at later.
+  amount    Float
   createdAt DateTime @default(now())
 
   @@unique([userId, source, sourceId, date])

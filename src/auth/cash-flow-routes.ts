@@ -214,7 +214,7 @@ router.post('/happened', requireAuth, async (req: AuthenticatedRequest, res) => 
     if (!loaded) return res.status(404).json({ error: NOT_COMING_UP });
     const target = happenedTarget(loaded.model, validation.value);
     if (!target) return res.status(404).json({ error: NOT_COMING_UP });
-    const result = await saveHappenedMarkWithinLimit(req.user!.id, validation.value, target.label, HAPPENED_MARKS_PER_USER_LIMIT, {
+    const result = await saveHappenedMarkWithinLimit(req.user!.id, validation.value, target, HAPPENED_MARKS_PER_USER_LIMIT, {
       today: loaded.model.today,
       timeZone: loaded.timeZone,
     });

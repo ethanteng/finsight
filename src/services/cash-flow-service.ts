@@ -232,13 +232,14 @@ function toHappenedMark(row: CashFlowHappenedMarkRow, timeZone: string): Happene
     sourceId: row.sourceId,
     date: dateOnly(row.date),
     label: row.label,
+    amount: row.amount,
     markedOn: calendarDateInTimeZone(row.createdAt, timeZone),
   };
 }
 
 /**
- * Mark an item as already happened unless the user already has `limit` marks;
- * null when they do. Marking the same item twice returns the mark already
+ * Mark an item as already happened, under the label and amount the user's own
+ * data gives it, unless the user already has `limit` marks; null when they do. Marking the same item twice returns the mark already
  * saved. Marks for days long past name nothing the forecast still expects, so
  * they are removed first and never count toward the cap. The cleanup, lookup,
  * count and write run under a per-user advisory lock (namespace 872014274,
@@ -248,7 +249,7 @@ function toHappenedMark(row: CashFlowHappenedMarkRow, timeZone: string): Happene
 export async function saveHappenedMarkWithinLimit(
   userId: string,
   ref: OccurrenceRef,
-  label: string,
+  target: { label: string; amount: number },
   limit: number,
   options: { today: CalendarDate; timeZone: string }
 ): Promise<{ mark: HappenedMark; created: boolean } | null> {
@@ -260,7 +261,7 @@ export async function saveHappenedMarkWithinLimit(
     if (existing) return { mark: toHappenedMark(existing, options.timeZone), created: false };
     if (await tx.cashFlowHappenedMark.count({ where: { userId } }) >= limit) return null;
     const row = await tx.cashFlowHappenedMark.create({
-      data: { ...where, label: label.slice(0, ADJUSTMENT_LABEL_MAX_LENGTH) },
+      data: { ...where, label: target.label.slice(0, ADJUSTMENT_LABEL_MAX_LENGTH), amount: target.amount },
     });
     return { mark: toHappenedMark(row, options.timeZone), created: true };
   });

@@ -19,6 +19,12 @@ import { addDays, isCalendarDate, type CalendarDate } from './calendar';
  * A mark changes when cash moves, never what is earned or spent: savings still
  * count a marked paycheck in the period it was expected.
  *
+ * A mark keeps the amount the item had when it was marked, and the position
+ * counts and reconciles that amount rather than whatever the item is projected
+ * at now. A card paid early is the case that needs it: once the payment posts,
+ * the card's lower balance projects a smaller payment for the same day, which
+ * is not the payment that happened.
+ *
  * An item is named by what produces it and the day it was expected:
  *
  *   stream   -- a regular income or bill, by stream id and the due date of
@@ -42,6 +48,14 @@ export interface HappenedMark extends OccurrenceRef {
   id: string;
   /** What the item was called when the user marked it. */
   label: string;
+  /**
+   * How much it moved when the user marked it, as a positive amount; for a
+   * planned transfer, the amount it moves between the two accounts. This is
+   * what happened, so it is what the position counts and what a posted
+   * transaction must match: a projection can change once the data refreshes,
+   * as a card paid early is projected a smaller payment for that day.
+   */
+  amount: number;
   /** The user's calendar date when they marked it. */
   markedOn: CalendarDate;
 }
