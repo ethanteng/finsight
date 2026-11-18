@@ -1319,6 +1319,12 @@ describe('CashFlowPageClient', () => {
         await screen.findByRole('heading', { name: 'This month' });
         fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
 
+        // The control reads as an action, never as a status on an item nothing has marked.
+        const unmarked = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
+        expect(within(unmarked).getAllByText('Mark as already happened')).toHaveLength(2);
+        expect(within(unmarked).queryByText('Already happened')).not.toBeInTheDocument();
+        expect(within(unmarked).getByText(/Already paid or received one, like a paycheck still pending at your bank\?/)).toBeInTheDocument();
+
         fireEvent.click(screen.getByRole('button', { name: 'Mark Gusto Payroll on Oct 16, 2026 as already happened' }));
         await waitFor(() => expect(marked).toBe(true));
         const post = calls.find(call => call.url.endsWith('/api/cash-flow/happened'))!;
@@ -1399,6 +1405,7 @@ describe('CashFlowPageClient', () => {
         const list = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
         expect(within(list).getByText('Gusto Payroll')).toBeInTheDocument();
         expect(within(list).queryByRole('button', { name: /as already happened/ })).not.toBeInTheDocument();
+        expect(within(list).queryByText(/Already paid or received one/)).not.toBeInTheDocument();
       });
     });
 

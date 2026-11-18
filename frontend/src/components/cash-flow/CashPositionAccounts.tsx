@@ -135,6 +135,13 @@ function happenedStatus(item: CashPositionHappenedItem): string {
 const linkButtonClass = 'text-xs font-bold text-[#28704d] underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50';
 
 /**
+ * The control that marks an upcoming item as already happened. It sits under
+ * every listed item, so it is muted and always underlined: green bold text
+ * under each row read as a status -- every item looked already marked.
+ */
+const markButtonClass = 'mt-0.5 text-xs font-semibold text-[#66736b] underline decoration-[#66736b]/40 underline-offset-4 hover:text-[#28704d] hover:decoration-current disabled:cursor-not-allowed disabled:opacity-50';
+
+/**
  * The dated amounts coming up in the accounts the position covers, with the
  * balance after each day. Any of them can be marked as already happened -- a
  * paycheck pending at the bank, a bill paid early -- which counts it in today's
@@ -185,6 +192,12 @@ export function UpcomingItems({ report, apiUrl, onChanged }: {
         Paychecks, bills, transfers, card payments and planned events, with the balance at the end of each day.
         {note && ` ${note}`}
       </p>
+      {items.some(item => item.ref) && (
+        <p className="mt-1 text-xs leading-5 text-[#66736b]">
+          Already paid or received one, like a paycheck still pending at your bank? Mark it as already happened and
+          it counts in today’s cash instead.
+        </p>
+      )}
       {happened.length > 0 && (
         <section aria-labelledby="cash-flow-happened" className="mt-3 rounded-xl border border-[#28704d]/15 bg-[#f1f7ec] px-3 py-2.5">
           <h5 id="cash-flow-happened" className="text-xs font-bold text-[#102319]">Already happened</h5>
@@ -223,9 +236,9 @@ export function UpcomingItems({ report, apiUrl, onChanged }: {
                 {formatCalendarDate(item.date)} · {KIND_WORDS[item.kind]}{transferRoute(item, names)}
               </p>
               {item.ref && (
-                <button type="button" disabled={busy} onClick={() => markHappened(item.ref!)} className={linkButtonClass}
+                <button type="button" disabled={busy} onClick={() => markHappened(item.ref!)} className={markButtonClass}
                   aria-label={`Mark ${item.label} on ${formatCalendarDate(item.date)} as already happened`}>
-                  Already happened
+                  Mark as already happened
                 </button>
               )}
             </div>
