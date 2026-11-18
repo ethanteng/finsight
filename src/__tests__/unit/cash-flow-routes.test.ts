@@ -538,16 +538,17 @@ describe('cash flow routes', () => {
       sourceId: 'income:gusto-payroll-smith',
       date: new Date('2026-10-09T00:00:00.000Z'),
       label: 'GUSTO PAYROLL SMITH',
+      amount: 2500,
       // Late on Oct 1 in Los Angeles is already Oct 2 in UTC.
       createdAt: new Date('2026-10-02T05:00:00.000Z'),
       ...overrides,
     });
 
-    it('marks an item the forecast lists, labelled from the user’s own data under a per-user lock', async () => {
+    it('marks an item the forecast lists, labelled and sized from the user’s own data under a per-user lock', async () => {
       prisma.cashFlowHappenedMark.count.mockResolvedValue(0);
       prisma.cashFlowHappenedMark.create.mockResolvedValue(markRow());
 
-      const response = await request(app).post('/api/cash-flow/happened').send({ ...paycheck, label: 'Anything the client says' });
+      const response = await request(app).post('/api/cash-flow/happened').send({ ...paycheck, label: 'Anything the client says', amount: 1 });
 
       expect(response.status).toBe(201);
       expect(response.body.mark).toEqual({
@@ -556,6 +557,7 @@ describe('cash flow routes', () => {
         sourceId: 'income:gusto-payroll-smith',
         date: '2026-10-09',
         label: 'GUSTO PAYROLL SMITH',
+        amount: 2500,
         markedOn: '2026-10-01',
       });
       expect(prisma.cashFlowHappenedMark.create).toHaveBeenCalledWith({
@@ -565,6 +567,7 @@ describe('cash flow routes', () => {
           sourceId: 'income:gusto-payroll-smith',
           date: new Date('2026-10-09T00:00:00.000Z'),
           label: 'GUSTO PAYROLL SMITH',
+          amount: 2500,
         },
       });
       const lock = prisma.$executeRaw.mock.calls[0];

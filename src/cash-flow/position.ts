@@ -209,7 +209,9 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
     if (!inWindow(date)) return;
     const mark = markFor(item.ref);
     if (mark) {
-      happen(mark, signed, posted(mark, accountId, signed, matches), item);
+      // What happened is the amount the user marked, whatever it is projected at now.
+      const marked = signed < 0 ? -mark.amount : mark.amount;
+      happen(mark, marked, posted(mark, accountId, marked, matches), item);
       return;
     }
     if (signed > 0) into(date, signed, item);
@@ -268,10 +270,11 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
         const mark = markFor(ref);
         if (mark) {
           // Each leg is in its own account's balance once it posts.
-          const leftInBalance = leaves && posted(mark, transfer.fromAccountId, -event.amount);
-          const arrivedInBalance = arrives && posted(mark, transfer.toAccountId, event.amount);
-          const out = leaves && !leftInBalance ? event.amount : 0;
-          const inward = arrives && !arrivedInBalance ? event.amount : 0;
+          const moved = mark.amount;
+          const leftInBalance = leaves && posted(mark, transfer.fromAccountId, -moved);
+          const arrivedInBalance = arrives && posted(mark, transfer.toAccountId, moved);
+          const out = leaves && !leftInBalance ? moved : 0;
+          const inward = arrives && !arrivedInBalance ? moved : 0;
           moneyOut[0] += out;
           moneyIn[0] += inward;
           happened.push({
@@ -279,10 +282,10 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
             ref,
             label: event.label,
             kind,
-            amount: (arrives ? event.amount : 0) - (leaves ? event.amount : 0),
+            amount: (arrives ? moved : 0) - (leaves ? moved : 0),
             counted: inward - out,
             inBalance: (!leaves || leftInBalance) && (!arrives || arrivedInBalance),
-            transfer,
+            transfer: { ...transfer, amount: moved },
           });
         } else if (leaves && arrives) {
           // Both sides are in view: one item, since the two legs would list
@@ -333,13 +336,17 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
         }
         continue;
       }
-      // The card and the account that paid it each have it in their reported
-      // balance once their own side posts.
-      if (!posted(mark, card.account.id, amount, isCardPayment)) addCard(start, -amount);
+      // The payment that happened is the one the user marked. Once it posts,
+      // the card's lower balance projects a smaller payment for this day,
+      // which the mark replaces rather than counting as a second payment.
+      // The card and the account that paid it each have the payment in their
+      // reported balance once their own side posts.
+      const paid = mark.amount;
+      if (!posted(mark, card.account.id, paid, isCardPayment)) addCard(start, -paid);
       if (!fromCash) continue;
-      const inBalance = posted(mark, place(card.paidFrom), -amount, isCardPayment);
-      if (!inBalance) paidToCards[0] += amount;
-      happened.push({ markId: mark.id, ref, label: card.account.name, kind: 'card_payment', amount: -amount, counted: inBalance ? 0 : -amount, inBalance });
+      const inBalance = posted(mark, place(card.paidFrom), -paid, isCardPayment);
+      if (!inBalance) paidToCards[0] += paid;
+      happened.push({ markId: mark.id, ref, label: card.account.name, kind: 'card_payment', amount: -paid, counted: inBalance ? 0 : -paid, inBalance });
     }
     for (const posting of card.projection!.interestPostings) addCard(posting.date, posting.amount);
   }
@@ -431,17 +438,19 @@ export function cashMilestones(model: CashFlowModel, position: Extract<CashPosit
 /**
  * The upcoming item a mark would name, if the cash position lists it: in the
  * whole position, or in one account's when the whole cannot be added up. Its
- * label is what the mark is stored under, so the server names the item, not
- * the client. An item already marked is still found, so marking it again
- * returns the mark already saved.
+ * label and amount are what the mark is stored under, so the server names the
+ * item and what it moved, not the client. The amount is positive: a planned
+ * transfer's is what it moves between the accounts. An item already marked is
+ * still found, so marking it again returns the mark already saved.
  */
-export function happenedTarget(model: CashFlowModel, ref: OccurrenceRef): { label: string } | null {
+export function happenedTarget(model: CashFlowModel, ref: OccurrenceRef): { label: string; amount: number } | null {
   const key = occurrenceKey(ref);
   const find = (position: CashPosition) => {
     if (!position.available) return null;
     const item = position.itemsBetween(model.forecastStart, model.forecastEndLimit).find(candidate => occurrenceKey(candidate.ref) === key)
       ?? position.happened.find(candidate => occurrenceKey(candidate.ref) === key);
-    return item ? { label: item.label } : null;
+    if (!item) return null;
+    return { label: item.label, amount: Math.abs(item.transfer ? item.transfer.amount : item.amount) };
   };
   const whole = buildCashPosition(model);
   if (whole.available || whole.reason !== 'unknown_balance') return find(whole);

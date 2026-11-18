@@ -6,6 +6,7 @@ CREATE TABLE "cash_flow_happened_marks" (
     "sourceId" TEXT NOT NULL,
     "date" DATE NOT NULL,
     "label" TEXT NOT NULL,
+    "amount" DOUBLE PRECISION NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "cash_flow_happened_marks_pkey" PRIMARY KEY ("id")

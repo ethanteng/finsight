@@ -345,7 +345,7 @@ describe('credit cards and cash position in the pack', () => {
       dataThrough: '2026-10-14',
       today: '2026-10-15',
       happened: [{
-        id: 'mark', label: 'Gusto', markedOn: '2026-10-15', source: 'stream', sourceId: 'income:gusto-payroll-smith', date: '2026-10-23',
+        id: 'mark', label: 'Gusto', amount: 2500, markedOn: '2026-10-15', source: 'stream', sourceId: 'income:gusto-payroll-smith', date: '2026-10-23',
       }],
     }));
     expect(marked.position?.marked).toEqual({ count: 1, net: 2500 });
