@@ -186,12 +186,18 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
   const markFor = (ref: OccurrenceRef) => marks.get(occurrenceKey(ref));
   type Row = CashFlowEntry | CashFlowMovement;
   const effectOf = (row: Row) => ('flow' in row ? (row.flow === 'income' ? row.amount : -row.amount) : row.amount);
+  // A posted transaction explains at most one marked item. Two planned bills of
+  // about the same size would otherwise both look posted once either of them was.
+  const claimed = new Set<string>();
   /** Whether a posted transaction in the account moves about `signed` since the mark allows, and is the item by `matches`. */
   const posted = (mark: HappenedMark, accountId: string | null, signed: number, matches: (row: Row) => boolean = () => true) => {
     if (!accountId) return false;
     const since = postedSince(mark);
-    const fits = (row: Row) => row.accountId === accountId && row.date >= since && amountMatches(effectOf(row), signed) && matches(row);
-    return model.ledger.entries.some(fits) || model.ledger.movements.some(fits);
+    const fits = (row: Row) => !claimed.has(row.id) && row.accountId === accountId && row.date >= since && amountMatches(effectOf(row), signed) && matches(row);
+    const found = model.ledger.entries.find(fits) ?? model.ledger.movements.find(fits);
+    if (!found) return false;
+    claimed.add(found.id);
+    return true;
   };
   const fromPayee = (counterpartyKey: string | undefined) => (row: Row) => Boolean(counterpartyKey) && row.counterpartyKey === counterpartyKey;
   const isCardPayment = (row: Row) => 'cardPayment' in row && row.cardPayment;

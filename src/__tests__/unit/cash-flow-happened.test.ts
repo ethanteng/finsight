@@ -165,6 +165,26 @@ describe('items marked as already happened', () => {
         expect(marked.happened).toEqual([expect.objectContaining({ counted: -800, inBalance: false })]);
       }
     });
+
+    it('lets one posted payment explain only one similar item', () => {
+      const tires = event({ id: 'tires', label: 'Tires', amount: 500, startDate: '2026-10-20' });
+      const brakes = event({ id: 'brakes', label: 'Brakes', amount: 500, startDate: '2026-10-22' });
+      const paid = [tx('checking', '2026-09-30', 'expense', 500, 'TIRES PLUS')];
+      const marks = [
+        mark({ source: 'planned', sourceId: 'tires', date: '2026-10-20' }, { id: 'tires-mark' }),
+        mark({ source: 'planned', sourceId: 'brakes', date: '2026-10-22' }, { id: 'brakes-mark' }),
+      ];
+      const marked = available(buildCashPosition(model({ plannedEvents: [tires, brakes], happened: marks }, paid)));
+      expect(marked.happened).toEqual([
+        expect.objectContaining({ markId: 'tires-mark', counted: 0, inBalance: true }),
+        expect.objectContaining({ markId: 'brakes-mark', counted: -500, inBalance: false }),
+      ]);
+      // Brakes still leave on the first day. Tires are already in the balance, so
+      // they are not taken out again on the 20th, and cash stays that much higher.
+      const plain = available(buildCashPosition(model({ plannedEvents: [tires, brakes] }, paid)));
+      expect(marked.cashBefore('2026-10-02') - plain.cashBefore('2026-10-02')).toBeCloseTo(-500, 2);
+      expect(marked.cashBefore('2026-10-23') - plain.cashBefore('2026-10-23')).toBeCloseTo(500, 2);
+    });
   });
 
   describe('a planned transfer between two accounts', () => {
