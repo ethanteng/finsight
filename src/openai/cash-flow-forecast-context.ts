@@ -1,6 +1,7 @@
 import {
   CASH_FLOW_HIGHLIGHT_KEYS,
   buildCashFlowHighlights,
+  roundCents,
   summarizeCards,
   type CardOutcome,
   type CashFlowHighlight,
@@ -97,6 +98,13 @@ export interface CashFlowForecastContext {
     /** Whether any card's balance is projected; card debt figures cover only those cards. */
     projectsCards: boolean;
     cardsLeftOut: Array<{ name: string; mask: string | null; reason: 'no_balance' | 'no_pace' }>;
+    /**
+     * Upcoming items the user marked as already happened since the balance
+     * was reported, and what they add to cash on the first forecast day
+     * (signed). The milestones already count them. Present only when there
+     * are some.
+     */
+    marked?: { count: number; net: number };
     /**
      * Each cash account on its own, when there is more than one: what it holds
      * now and at the same milestones, and its lowest point. Every account, the
@@ -293,6 +301,12 @@ function positionContext(model: CashFlowModel): CashFlowForecastContext['positio
     lowNext12Months: milestones.lowNext12Months,
     projectsCards: model.cards.some(card => card.projection),
     cardsLeftOut: position.cardsLeftOut.map(card => ({ name: card.name, mask: masks.get(card.accountId) ?? null, reason: card.reason })),
+    ...(position.happened.length > 0 && {
+      marked: {
+        count: position.happened.length,
+        net: roundCents(position.happened.reduce((total, item) => total + item.counted, 0)),
+      },
+    }),
     ...(accounts && accounts.length > 0 && { accounts }),
   };
 }
@@ -548,6 +562,29 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
     if (position.projectsCards) {
       observed('cash_flow_card_debt_now', 'Total owed now on the credit cards the forecast covers, as last reported',
         position.startingCardDebt, 'cashFlowForecast.position.startingCardDebt');
+    }
+    // Items the user said have already happened are not in the reported
+    // balance yet; the model may not add them to it, so the sum is published.
+    if (position.marked && position.marked.net !== 0 && position.startingCash !== null) {
+      add({
+        id: 'cash_flow_marked_happened_net',
+        label: 'Net of the upcoming items the user marked as already happened since that balance was reported',
+        value: position.marked.net,
+        unit: 'usd',
+        provenance: { kind: 'user_input', source: 'cashFlowForecast.position.marked.net' },
+      });
+      add({
+        id: 'cash_flow_cash_now_with_marked',
+        label: 'Cash across the user’s connected checking and savings accounts now, counting what they marked as already happened',
+        value: roundCents(position.startingCash + position.marked.net),
+        unit: 'usd',
+        provenance: {
+          kind: 'calculation',
+          source: 'cashFlowForecast.position',
+          formula: 'sum(inputs)',
+          inputFactIds: ['cash_flow_cash_now', 'cash_flow_marked_happened_net'],
+        },
+      });
     }
     for (const milestone of position.milestones) {
       const words = MILESTONE_WORDS[milestone.key] ?? milestone.key.replace(/_/g, ' ');

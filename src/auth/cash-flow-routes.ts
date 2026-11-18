@@ -5,6 +5,8 @@ import {
   validateForecastAdjustmentInput,
 } from '../cash-flow/adjustments';
 import { forecastAdjustmentTarget, listCashFlowTransactions } from '../cash-flow/forecast';
+import { HAPPENED_MARKS_PER_USER_LIMIT, validateOccurrenceRef } from '../cash-flow/happened';
+import { happenedTarget } from '../cash-flow/position';
 import { parseCashFlowQuery } from '../cash-flow/report-query';
 import {
   PLANNED_EVENTS_PER_USER_LIMIT,
@@ -13,12 +15,14 @@ import {
 import {
   createPlannedEventWithinLimit,
   deleteForecastAdjustment,
+  deleteHappenedMark,
   deletePlannedEvent,
   getCashFlowReport,
   getExpectedMonthly,
   listPlannedEvents,
   loadCashFlowModel,
   saveForecastAdjustmentWithinLimit,
+  saveHappenedMarkWithinLimit,
   updatePlannedEvent,
   userCashFlowAccountKind,
 } from '../services/cash-flow-service';
@@ -194,6 +198,44 @@ router.delete('/adjustments/:id', requireAuth, async (req: AuthenticatedRequest,
   } catch (error) {
     console.error('Failed to delete cash flow forecast adjustment:', error);
     return res.status(500).json({ error: 'Failed to undo the change' });
+  }
+});
+
+// Marks: upcoming items the user says have already happened. The item a mark
+// names must be one the user's cash position lists, and the server labels it
+// from there; marking an item twice returns the mark already saved.
+const NOT_COMING_UP = 'That isn’t coming up in your forecast anymore. Reload the page and try again.';
+
+router.post('/happened', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const validation = validateOccurrenceRef(req.body);
+  if (!validation.ok) return res.status(400).json({ error: validation.error });
+  try {
+    const loaded = await loadCashFlowModel(req.user!.id);
+    if (!loaded) return res.status(404).json({ error: NOT_COMING_UP });
+    const target = happenedTarget(loaded.model, validation.value);
+    if (!target) return res.status(404).json({ error: NOT_COMING_UP });
+    const result = await saveHappenedMarkWithinLimit(req.user!.id, validation.value, target.label, HAPPENED_MARKS_PER_USER_LIMIT, {
+      today: loaded.model.today,
+      timeZone: loaded.timeZone,
+    });
+    if (!result) {
+      return res.status(409).json({ error: `You can mark up to ${HAPPENED_MARKS_PER_USER_LIMIT} items as already happened` });
+    }
+    return res.status(result.created ? 201 : 200).json({ mark: result.mark });
+  } catch (error) {
+    console.error('Failed to mark a cash flow item as happened:', error);
+    return res.status(500).json({ error: 'Failed to save that it happened' });
+  }
+});
+
+router.delete('/happened/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const deleted = await deleteHappenedMark(req.user!.id, routeId(req));
+    if (!deleted) return res.status(404).json({ error: 'Mark not found' });
+    return res.status(204).send();
+  } catch (error) {
+    console.error('Failed to undo a cash flow happened mark:', error);
+    return res.status(500).json({ error: 'Failed to undo that' });
   }
 });
 

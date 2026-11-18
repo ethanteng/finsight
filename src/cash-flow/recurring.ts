@@ -443,24 +443,26 @@ function expectedDates(stream: RecurringStream): Generator<CalendarDate> {
  * was due shortly before the forecast starts and has not posted yet is still
  * expected, so it lands on the first forecast day; one overdue by more than
  * the cadence's grace is treated as missed rather than piled onto that day.
+ * Each keeps the date its cycle was due (`dueDate`), which is how the user's
+ * mark that it has already happened names it, late or not.
  */
 export function scheduleStream(
   stream: RecurringStream,
   forecastStart: CalendarDate,
   endExclusive: CalendarDate
-): Array<{ date: CalendarDate; amount: number }> {
+): Array<{ date: CalendarDate; dueDate: CalendarDate; amount: number }> {
   if (stream.status !== 'active' || forecastStart >= endExclusive) return [];
   const { graceDays } = CADENCE_RULES[stream.cadence];
-  const scheduled: Array<{ date: CalendarDate; amount: number }> = [];
+  const scheduled: Array<{ date: CalendarDate; dueDate: CalendarDate; amount: number }> = [];
   for (const expected of expectedDates(stream)) {
     if (expected >= endExclusive) break;
     if (expected < forecastStart) {
       if (daysBetween(expected, forecastStart) <= graceDays) {
-        scheduled.push({ date: forecastStart, amount: stream.amount });
+        scheduled.push({ date: forecastStart, dueDate: expected, amount: stream.amount });
       }
       continue;
     }
-    scheduled.push({ date: expected, amount: stream.amount });
+    scheduled.push({ date: expected, dueDate: expected, amount: stream.amount });
   }
   return scheduled;
 }

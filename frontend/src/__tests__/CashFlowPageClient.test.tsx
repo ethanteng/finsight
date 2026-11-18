@@ -1289,6 +1289,97 @@ describe('CashFlowPageClient', () => {
       expect(within(list).getByText('−$900 after')).toBeInTheDocument();
     });
 
+    describe('items that already happened', () => {
+      const paycheckRef = { source: 'stream' as const, sourceId: 'income:gusto', date: '2026-10-16' };
+      const paycheck = { date: '2026-10-16', label: 'Gusto Payroll', kind: 'income' as const, amount: 2500, balanceAfter: 7700, ref: paycheckRef };
+      const rent = {
+        date: '2026-11-01', label: 'Oak Street Apartments', kind: 'bill' as const, amount: -2000, balanceAfter: 5700,
+        ref: { source: 'stream' as const, sourceId: 'spending:oak', date: '2026-11-01' },
+      };
+
+      it('marks an upcoming item as already happened and reloads the forecast', async () => {
+        let marked = false;
+        const calls = mockFetch((url, init) => {
+          if (url.endsWith('/api/cash-flow/happened') && init?.method === 'POST') {
+            marked = true;
+            return { status: 201, body: { mark: { id: 'mark-1' } } };
+          }
+          if (!url.includes('/api/cash-flow?')) return undefined;
+          return {
+            status: 200,
+            body: marked
+              ? checkingOnly({
+                upcoming: [{ ...rent, balanceAfter: 5700 }],
+                happened: [{ markId: 'mark-1', ref: paycheckRef, label: 'Gusto Payroll', kind: 'income', amount: 2500, counted: 2500, inBalance: false }],
+              })
+              : checkingOnly({ upcoming: [paycheck, rent] }),
+          };
+        });
+        render(<CashFlowPageClient />);
+        await screen.findByRole('heading', { name: 'This month' });
+        fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Mark Gusto Payroll on Oct 16, 2026 as already happened' }));
+        await waitFor(() => expect(marked).toBe(true));
+        const post = calls.find(call => call.url.endsWith('/api/cash-flow/happened'))!;
+        expect(JSON.parse(String(post.init!.body))).toEqual(paycheckRef);
+
+        const happened = await screen.findByRole('region', { name: 'Already happened' });
+        expect(within(happened).getByText('Gusto Payroll')).toBeInTheDocument();
+        expect(within(happened).getByText('Expected Oct 16, 2026 · Regular income · counted today')).toBeInTheDocument();
+        expect(within(happened).getByText('+$2,500')).toBeInTheDocument();
+        expect(screen.getByText(/Starts from \$5,200 in Everyday Checking ••1234, plus \$2,500 you marked as already happened\./)).toBeInTheDocument();
+        const list = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
+        expect(within(list).getAllByText('Gusto Payroll')).toHaveLength(1);
+      });
+
+      it('undoes a mark, and says when the bank’s data already has the item', async () => {
+        const inBalance = { markId: 'mark-1', ref: paycheckRef, label: 'Gusto Payroll', kind: 'income' as const, amount: 2500, counted: 0, inBalance: true };
+        const calls = mockFetch((url, init) => {
+          if (url.endsWith('/api/cash-flow/happened/mark-1') && init?.method === 'DELETE') return { status: 204 };
+          if (!url.includes('/api/cash-flow?')) return undefined;
+          return { status: 200, body: checkingOnly({ upcoming: [rent], happened: [inBalance] }) };
+        });
+        render(<CashFlowPageClient />);
+        await screen.findByRole('heading', { name: 'This month' });
+        fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+
+        const happened = screen.getByRole('region', { name: 'Already happened' });
+        expect(within(happened).getByText('Expected Oct 16, 2026 · Regular income · already in your balance')).toBeInTheDocument();
+        // Nothing is added to the start: the reported balance already has it.
+        expect(screen.getByText(/Starts from \$5,200 in Everyday Checking ••1234\./)).toBeInTheDocument();
+
+        fireEvent.click(within(happened).getByRole('button', { name: 'Undo: Gusto Payroll already happened' }));
+        await waitFor(() => expect(calls.some(call => call.url.endsWith('/api/cash-flow/happened/mark-1') && call.init?.method === 'DELETE')).toBe(true));
+      });
+
+      it('says why a mark could not be saved', async () => {
+        mockFetch((url, init) => {
+          if (url.endsWith('/api/cash-flow/happened') && init?.method === 'POST') {
+            return { status: 404, body: { error: 'That isn’t coming up in your forecast anymore. Reload the page and try again.' } };
+          }
+          if (!url.includes('/api/cash-flow?')) return undefined;
+          return { status: 200, body: checkingOnly({ upcoming: [paycheck] }) };
+        });
+        render(<CashFlowPageClient />);
+        await screen.findByRole('heading', { name: 'This month' });
+        fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Mark Gusto Payroll on Oct 16, 2026 as already happened' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent('That isn’t coming up in your forecast anymore.');
+      });
+
+      it('offers no mark on an item from an older report that cannot name it', async () => {
+        const { ref: _ref, ...unnamed } = paycheck;
+        mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: checkingOnly({ upcoming: [unnamed] }) } : undefined));
+        render(<CashFlowPageClient />);
+        await screen.findByRole('heading', { name: 'This month' });
+        fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+        const list = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
+        expect(within(list).getByText('Gusto Payroll')).toBeInTheDocument();
+        expect(within(list).queryByRole('button', { name: /as already happened/ })).not.toBeInTheDocument();
+      });
+    });
+
     it('names where a planned transfer goes, once when both accounts are in view', async () => {
       const transfer = { fromAccountId: 'checking', toAccountId: 'savings', amount: 3000 };
       const both_ = both({ upcoming: [

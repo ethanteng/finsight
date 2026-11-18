@@ -337,6 +337,33 @@ describe('credit cards and cash position in the pack', () => {
     expect(facts.get('cash_flow_cash_low_point_next_12_months')!.label).toMatch(/Lowest projected cash in the next 12 months, on \d{4}-\d{2}-\d{2}/);
   });
 
+  it('adds what the user marked as already happened to cash now, as a sum the model can quote', () => {
+    const marked = buildCashFlowForecastContext(buildCashFlowModel({
+      transactions: householdTransactions('2026-06-03', '2026-10-14'),
+      accounts: ACCOUNTS,
+      plannedEvents: [],
+      dataThrough: '2026-10-14',
+      today: '2026-10-15',
+      happened: [{
+        id: 'mark', label: 'Gusto', markedOn: '2026-10-15', source: 'stream', sourceId: 'income:gusto-payroll-smith', date: '2026-10-23',
+      }],
+    }));
+    expect(marked.position?.marked).toEqual({ count: 1, net: 2500 });
+    const facts = byId(cashFlowForecastFacts(marked));
+    // The reported balance is still what the bank last reported.
+    expect(facts.get('cash_flow_cash_now')!.value).toBe(5200);
+    expect(facts.get('cash_flow_marked_happened_net')).toMatchObject({ value: 2500, provenance: { kind: 'user_input' } });
+    expect(facts.get('cash_flow_cash_now_with_marked')).toMatchObject({
+      value: 7700,
+      provenance: { kind: 'calculation', formula: 'sum(inputs)', inputFactIds: ['cash_flow_cash_now', 'cash_flow_marked_happened_net'] },
+    });
+    expect(validateCanonicalFactPack({ version: 1, facts: Array.from(facts.values()) })).toEqual([]);
+
+    const unmarked = byId(cashFlowForecastFacts(context()));
+    expect(unmarked.has('cash_flow_marked_happened_net')).toBe(false);
+    expect(unmarked.has('cash_flow_cash_now_with_marked')).toBe(false);
+  });
+
   it('describes the cards and the cash position by fact id', () => {
     const details = compactCashFlowForecastDetails(cardContext([payoff])) as any;
     expect(details.creditCards[0]).toMatchObject({

@@ -278,6 +278,27 @@ On the page, Cash position has an account picker when there is more than one cas
 
 Card balances cover only the cards the model projects. The report lists the cards it leaves out and why (`cardsLeftOut`: no reported balance, or no pace to project), and the page names them beside the chart, so a partial total is never shown as all card debt.
 
+### Items that already happened
+
+The user can mark any item in "Coming up in the next month" as already happened (`src/cash-flow/happened.ts`). A paycheck pending at the bank, a bill paid early or a planned transfer already made is the common case.
+
+- **Why the forecast still expects them:** the cash position starts from the provider's reported balance, and Plaid's reported (`current`) balance for a checking or savings account leaves pending transactions out. The ledger skips pending transactions too. So a pending paycheck is in neither the balance nor the history, and the forecast still expects it on its date.
+- **What a mark does:** the item moves to the first forecast day, in cash and, for a card payment, off the card. From its own date on, nothing changes, so it is counted once. The reported balance stays the starting point. The page says what the marks add to it ("Starts from $2,402 in Personal Checking, plus $3,031 you marked as already happened") and lists marked items above the rest under **Already happened**, each with Undo.
+- **Once the data shows it:** the reported balance then has the item, and the mark only keeps it from being counted again.
+  - A regular item or recurring transfer that posts usually ends its own cycle, so its mark names nothing.
+  - Otherwise an item counts as posted when its account has a posted transaction moving about the same amount the same way (within 10%, or $1), dated no earlier than three days before the mark was made. For a regular item or transfer the transaction must also come from the same payee; a raise can put a paycheck outside the run its stream is made of, so its cycle goes on. A planned event or card payment has nothing in the data linked to it, so this is the only test it gets.
+  - A card payment checks each side on its own: the card's balance has it once the card posts the payment, and the cash account's once the payment posts there.
+  - A planned transfer checks each leg in its own account. With one leg posted, only the other is counted.
+- **What it never changes:** savings. A mark is about when cash moves, never what is earned or spent, so the savings view still counts a marked paycheck in the period it was expected. The card model's months, interest and the credit cards panel are unchanged too.
+- **How items are named:** by what produces them and the day they were expected (`ref` on each upcoming item):
+  - `stream`: a regular item, by stream id and the due date of its cycle. A late paycheck the forecast expects on its first day keeps its mark.
+  - `transfer`: a recurring transfer, by stream id and due date.
+  - `card`: everything a card is paid on one day, by its account id. The coming-up list shows a card's payments on one day as one item for the same reason.
+  - `planned`: one occurrence of a planned event, by event id and date.
+- **Expiry:** a mark whose day has passed the forecast start names nothing. Marks for days more than 45 days past are removed when the user saves another.
+- **Storage and limits:** marks are stored in `cash_flow_happened_marks`, unique per item. A mark must name an item the user's cash position lists (`happenedTarget`), and is stored under that item's own label. The cap is 100 per user, checked under a per-user advisory lock (namespace 872014274).
+- **Ask Linc:** the projections already count marks. "Cash now, as last reported" stays the reported balance. When marks add to it, the pack also publishes what they add (`cash_flow_marked_happened_net`) and the sum (`cash_flow_cash_now_with_marked`), since the model may not add the two itself.
+
 ## API
 
 All routes are under `/api/cash-flow` and use `requireAuth`:
@@ -287,6 +308,7 @@ All routes are under `/api/cash-flow` and use `requireAuth`:
 - `GET /expected-monthly` returns the expected month: income and spending, which side an override sets, whether the forecast is available, and, while an override replaces a side, what the transactions alone would give (`learned`). It returns 204 with no snapshot.
 - `GET /transactions?ref=...` returns every transaction behind a list the report names by `transactionsRef`, latest first: a regular item (`stream:<id>`), a recurring transfer (`transfer:<id>`), a typical rate's category (`category:<flow>:<key>`), or what one of the user's changes is about (`adjustment:<id>`). It rebuilds the model like the report, and returns 404 for a list the model no longer has.
 - `POST /adjustments` with `{kind, flow, key}`, plus `spreadMonths` for `spread_payee`, saves a change to what the forecast counts. It returns 201 when saved, 200 when the same change was already saved (or a spread payee's months changed), 404 when the item is not in the user's data, and 409 at the cap. `DELETE /adjustments/:id` undoes a change and matches on the user like the event routes.
+- `POST /happened` with an upcoming item's `ref` (`{source, sourceId, date}`) marks it as already happened. It returns 201 when saved, 200 when it was already marked, 404 when the cash position does not list it, and 409 at the cap. `DELETE /happened/:id` undoes a mark and matches on the user.
 
 ## Category rules
 

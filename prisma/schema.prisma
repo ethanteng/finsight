@@ -29,6 +29,7 @@ model User {
   statedFigures                StatedFigures?
   plannedCashFlowEvents        PlannedCashFlowEvent[]
   cashFlowForecastAdjustments  CashFlowForecastAdjustment[]
+  cashFlowHappenedMarks        CashFlowHappenedMark[]
   conversations                Conversation[]
   privacySettings              PrivacySettings?
   syncStatuses                 SyncStatus[]
@@ -709,6 +710,31 @@ model CashFlowForecastAdjustment {
   @@unique([userId, kind, flow, key])
   @@index([userId])
   @@map("cash_flow_forecast_adjustments")
+}
+
+/// An upcoming cash-flow item the user says has already happened: one
+/// occurrence of a regular item or recurring transfer, everything a card is
+/// paid on one day, or one occurrence of a planned event. The cash position
+/// counts it on the first forecast day instead of its own, or not again once
+/// the data shows it posted. It changes when cash moves, never what is earned
+/// or spent.
+model CashFlowHappenedMark {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 'stream', 'transfer', 'card' or 'planned'.
+  source    String
+  /// A regular item's or transfer's stream id, a card's account id, or a planned event's id.
+  sourceId  String
+  /// The day the item was expected: a regular item's due date, a card's payment day, a planned occurrence.
+  date      DateTime @db.Date
+  /// What the item was called when the user marked it.
+  label     String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, source, sourceId, date])
+  @@index([userId])
+  @@map("cash_flow_happened_marks")
 }
 
 /// Retirement portfolio analysis results

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from 'react';
-import type { CashFlowReport, CashPositionItem } from '../../types/cash-flow';
+import type { CashFlowReport, CashPositionHappenedItem, CashPositionItem, CashPositionItemRef } from '../../types/cash-flow';
+import { sendCashFlowRequest } from '../../lib/cash-flow-api';
 import {
   cashAccountName,
   formatCalendarDate,
@@ -74,7 +75,7 @@ const KIND_WORDS: Record<CashPositionItem['kind'], string> = {
  * Where a planned transfer goes, from the accounts in view: "from Checking to
  * Savings" when both are, otherwise just the account on the other side.
  */
-function transferRoute(item: CashPositionItem, names: Map<string, string>): string {
+function transferRoute(item: Pick<CashPositionItem, 'kind' | 'transfer'>, names: Map<string, string>): string {
   if (!item.transfer) return '';
   const name = (id: string | null) => (id && names.get(id)) || 'another account';
   if (item.kind === 'planned_transfer_out') return ` to ${name(item.transfer.toAccountId)}`;
@@ -102,14 +103,70 @@ export function spreadNote(spread: CashFlowReport['position']['spreadPerDay']): 
   return `Everything else isn’t listed: it’s spread evenly across the days, about ${parts.join(' and ')} each day.`;
 }
 
-/** The dated amounts coming up in the accounts the position covers, with the balance after each day. */
-export function UpcomingItems({ report }: { report: Pick<CashFlowReport, 'position'> }) {
+/**
+ * What the items the user marked as already happened add to the cash the
+ * position starts from: ", plus $3,031 you marked as already happened". Empty
+ * when they add nothing, which includes when the bank's data already has them.
+ */
+export function happenedStartNote(report: Pick<CashFlowReport, 'position'>): string {
+  const net = (report.position.happened ?? []).reduce((total, item) => total + item.counted, 0);
+  if (Math.round(net) === 0) return '';
+  return `, ${net > 0 ? 'plus' : 'less'} ${formatMoney(Math.abs(net))} you marked as already happened`;
+}
+
+/** An item's amount: a move between two accounts in view has no sign, since it leaves their total as it was. */
+function ItemAmount({ item }: { item: Pick<CashPositionItem, 'kind' | 'transfer' | 'amount'> }) {
+  return item.kind === 'planned_transfer' && item.transfer
+    ? <p className="font-bold tabular-nums text-[#102319]">{formatMoney(item.transfer.amount)}</p>
+    : <p className={`font-bold tabular-nums ${item.amount < 0 ? 'text-[#9b4137]' : 'text-[#28704d]'}`}>{formatSignedMoney(item.amount)}</p>;
+}
+
+const linkButtonClass = 'text-xs font-bold text-[#28704d] underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50';
+
+/**
+ * The dated amounts coming up in the accounts the position covers, with the
+ * balance after each day. Any of them can be marked as already happened -- a
+ * paycheck pending at the bank, a bill paid early -- which counts it in today's
+ * cash instead of on its date; marked items are listed above the rest, each
+ * with an undo.
+ */
+export function UpcomingItems({ report, apiUrl, onChanged }: {
+  report: Pick<CashFlowReport, 'position'>;
+  apiUrl: string;
+  onChanged: () => Promise<void> | void;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const items = report.position.upcoming;
-  if (items.length === 0) return null;
+  const happened = report.position.happened ?? [];
+  if (items.length === 0 && happened.length === 0) return null;
   const shown = expanded ? items : items.slice(0, UPCOMING_SHOWN);
   const note = spreadNote(report.position.spreadPerDay);
   const names = new Map(report.position.accounts.map(account => [account.id, cashAccountName(account)]));
+
+  const change = async (method: 'POST' | 'DELETE', path: string, body?: CashPositionItemRef) => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const response = await sendCashFlowRequest(apiUrl, path, method, body);
+      // Undo is idempotent: a mark that is already gone means the list is already right.
+      if (!response.ok && !(method === 'DELETE' && response.status === 404)) {
+        const data = await response.json().catch(() => ({}));
+        setError(typeof data.error === 'string' ? data.error : 'We couldn’t update the forecast. Please try again.');
+        return;
+      }
+      await onChanged();
+    } catch {
+      setError('We couldn’t update the forecast. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const markHappened = (ref: CashPositionItemRef) => change('POST', '/api/cash-flow/happened', ref);
+  const undo = (item: CashPositionHappenedItem) => change('DELETE', `/api/cash-flow/happened/${encodeURIComponent(item.markId)}`);
+
   return (
     <div className="mt-5 rounded-2xl border border-[#102319]/10 bg-white/50 p-4">
       <h4 className="text-sm font-bold text-[#102319]">Coming up in the next month</h4>
@@ -117,6 +174,35 @@ export function UpcomingItems({ report }: { report: Pick<CashFlowReport, 'positi
         Paychecks, bills, transfers, card payments and planned events, with the balance at the end of each day.
         {note && ` ${note}`}
       </p>
+      {happened.length > 0 && (
+        <section aria-labelledby="cash-flow-happened" className="mt-3 rounded-xl border border-[#28704d]/15 bg-[#f1f7ec] px-3 py-2.5">
+          <h5 id="cash-flow-happened" className="text-xs font-bold text-[#102319]">Already happened</h5>
+          <p className="mt-0.5 text-xs leading-5 text-[#66736b]">
+            You marked these as done, so they count in today’s cash instead of on their dates. Once your bank’s data
+            shows one, it’s in the balance and isn’t counted twice.
+          </p>
+          <ul className="mt-1 divide-y divide-[#102319]/10">
+            {happened.map(item => (
+              <li key={item.markId} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-[#102319]">{item.label}</p>
+                  <p className="text-xs text-[#66736b]">
+                    Expected {formatCalendarDate(item.ref.date)} · {KIND_WORDS[item.kind]}{transferRoute(item, names)}
+                    {' · '}{item.inBalance ? 'already in your balance' : 'counted today'}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <ItemAmount item={item} />
+                  <button type="button" disabled={busy} onClick={() => undo(item)} className={linkButtonClass}
+                    aria-label={`Undo: ${item.label} already happened`}>
+                    Undo
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <ul className="mt-2 divide-y divide-[#102319]/10">
         {shown.map((item, index) => (
           <li key={`${item.date}-${item.kind}-${item.label}-${index}`} className="flex items-center justify-between gap-3 py-2.5 text-sm">
@@ -125,12 +211,15 @@ export function UpcomingItems({ report }: { report: Pick<CashFlowReport, 'positi
               <p className="text-xs text-[#66736b]">
                 {formatCalendarDate(item.date)} · {KIND_WORDS[item.kind]}{transferRoute(item, names)}
               </p>
+              {item.ref && (
+                <button type="button" disabled={busy} onClick={() => markHappened(item.ref!)} className={linkButtonClass}
+                  aria-label={`Mark ${item.label} on ${formatCalendarDate(item.date)} as already happened`}>
+                  Already happened
+                </button>
+              )}
             </div>
             <div className="shrink-0 text-right">
-              {/* A move between two accounts in view changes neither their total nor the sign. */}
-              {item.kind === 'planned_transfer' && item.transfer
-                ? <p className="font-bold tabular-nums text-[#102319]">{formatMoney(item.transfer.amount)}</p>
-                : <p className={`font-bold tabular-nums ${item.amount < 0 ? 'text-[#9b4137]' : 'text-[#28704d]'}`}>{formatSignedMoney(item.amount)}</p>}
+              <ItemAmount item={item} />
               <p className={`text-xs tabular-nums ${item.balanceAfter < 0 ? 'font-bold text-[#9b4137]' : 'text-[#66736b]'}`}>
                 {formatMoney(item.balanceAfter)} after
               </p>
@@ -138,6 +227,7 @@ export function UpcomingItems({ report }: { report: Pick<CashFlowReport, 'positi
           </li>
         ))}
       </ul>
+      {error && <p className="mt-2 text-xs font-semibold text-[#9b4137]" role="alert">{error}</p>}
       {items.length > UPCOMING_SHOWN && (
         <button
           type="button"

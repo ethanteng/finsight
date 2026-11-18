@@ -42,6 +42,7 @@ import {
   periodStart,
   type CashFlowGranularity,
 } from './periods';
+import type { HappenedMark } from './happened';
 import {
   expandPlannedEvent,
   type PlannedCashFlowEvent,
@@ -49,6 +50,7 @@ import {
 import {
   buildCashPosition,
   cashMilestones,
+  type CashPositionHappenedItem,
   type CashPositionItem,
   type CashPositionUnavailableReason,
 } from './position';
@@ -133,6 +135,8 @@ export interface CashFlowModelInput {
   overrides?: { monthlyIncome?: number | null; monthlyExpense?: number | null };
   /** The user's choices about what the forecast counts. */
   adjustments?: readonly ForecastAdjustment[];
+  /** Upcoming items the user says have already happened; only the cash position reads them. */
+  happened?: readonly HappenedMark[];
   reportingCurrency?: string;
 }
 
@@ -173,6 +177,8 @@ export interface CashFlowModel {
   /** How large a non-repeating amount must be to be left out as a one-off; null without a basis. */
   oneOffThresholds: Record<CashFlowDirection, number> | null;
   adjustments: readonly ForecastAdjustment[];
+  /** Upcoming items the user says have already happened. */
+  happened: readonly HappenedMark[];
   /** Streams that had stopped and are projected because the user kept them: stream id to the id of that choice. */
   continuedStreams: ReadonlyMap<string, string>;
   /** Projected stream occurrences over the whole forecast limit. */
@@ -181,6 +187,8 @@ export interface CashFlowModel {
     flow: CashFlowDirection;
     accountId: string;
     date: CalendarDate;
+    /** The day its cycle was due: `date`, unless it is late and expected on the first forecast day. */
+    dueDate: CalendarDate;
     amount: number;
     /** True when the stream was learned from card interest charges. */
     interest: boolean;
@@ -249,7 +257,7 @@ export interface TypicalCategory {
 export interface TransferModel {
   streams: RecurringStream[];
   /** Signed: positive into the user's cash, negative out of it. */
-  scheduled: Array<{ streamId: string; accountId: string; date: CalendarDate; amount: number }>;
+  scheduled: Array<{ streamId: string; accountId: string; date: CalendarDate; dueDate: CalendarDate; amount: number }>;
   /** Net typical transfers per day; negative when more leaves than arrives. */
   dailyNet: number;
   /** The typical transfers into and out of each cash account, per day. */
@@ -863,6 +871,7 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
           streamId: stream.id,
           accountId: stream.accountId,
           date: occurrence.date,
+          dueDate: occurrence.dueDate,
           amount: stream.flow === 'income' ? occurrence.amount : -occurrence.amount,
         }))),
     dailyNet: sumDaily(learnedTransfers.dailyByAccount, 'income') - sumDaily(learnedTransfers.dailyByAccount, 'spending'),
@@ -898,6 +907,7 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
     spreadEntries: learned.spreadEntries,
     oneOffThresholds: learned.oneOffThresholds,
     adjustments,
+    happened: input.happened ?? [],
     continuedStreams,
     scheduled,
     cardDailySpending,
@@ -1688,6 +1698,12 @@ export interface CashFlowPositionSummary {
   }>;
   /** Every dated amount in the month from the forecast start, with the balance after each day. */
   upcoming: CashPositionItem[];
+  /**
+   * What the user marked as already happened among the items the position
+   * covers: counted on the first forecast day, or already in the reported
+   * balance once the data shows it posted. Never in `upcoming`.
+   */
+  happened: CashPositionHappenedItem[];
   /** What arrives and leaves every day without being listed in `upcoming`: typical rates and transfers that run as a rate. Null when unavailable. */
   spreadPerDay: { in: number; out: number } | null;
   /** The lowest end-of-day cash within the range's forecast part. */
@@ -1860,6 +1876,7 @@ function positionSummary(
       startingCardDebt: null,
       periods: periods.map(period => ({ key: period.key, cash: null, cardDebt: null, cardPayments: null, moneyIn: null, moneyOut: null })),
       upcoming: [],
+      happened: [],
       spreadPerDay: null,
       lowPoint: null,
       milestones: [],
@@ -1904,6 +1921,7 @@ function positionSummary(
       };
     }),
     upcoming: position.itemsBetween(model.forecastStart, addDays(model.forecastStart, UPCOMING_DAYS)),
+    happened: position.happened,
     spreadPerDay: position.spreadPerDay,
     lowPoint: position.lowPoint(maxDate(range.from, model.forecastStart), range.toExclusive),
     milestones: milestones.points,
