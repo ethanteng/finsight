@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Pencil } from 'lucide-react';
 import InvestmentPortfolio from '../InvestmentPortfolio';
+import AccountValueChart from './AccountValueChart';
 import { useDialog } from '../ui/dialog';
 import type {
   FinancesAccount,
@@ -225,6 +226,8 @@ export default function AccountDetailModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          {/* Loads on its own, so the chart never waits on holdings and transactions. */}
+          <AccountValueChart account={account} accountId={accountId} revisionId={revisionId} />
           {loading && <div className="py-10 text-center text-gray-400">Loading account details...</div>}
           {loadError && <div className="rounded border border-red-700/50 bg-red-900/30 p-4 text-red-300">{loadError}</div>}
           {!loading && !loadError && details && details.revisionId !== revisionId && (

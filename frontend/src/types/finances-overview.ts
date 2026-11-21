@@ -125,3 +125,19 @@ export interface FinancesAccountDetails {
     unavailableValueIds: string[];
   };
 }
+
+/**
+ * One account's value over time, from GET /api/finances/accounts/:id/history.
+ * Mirrors `AccountValueHistory` in src/services/account-value-history.ts.
+ */
+export interface AccountValueHistory {
+  revisionId: string;
+  accountId: string;
+  /** Cash held, what is owed, or what the account is worth. */
+  measure: 'balance' | 'owed' | 'value';
+  /** Rebuilt from posted transactions, or the values Linc recorded. */
+  method: 'transactions' | 'recorded';
+  currency: string;
+  /** Oldest first, one per calendar day (`YYYY-MM-DD`), each the value at that day's end. */
+  points: Array<{ date: string; value: number }>;
+}

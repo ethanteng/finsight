@@ -608,6 +608,12 @@ model FinancialSummaryHistory {
   observationReason String?
   timeZone          String    @default("UTC")
   dailyKey          String?   @unique
+  /// Every account's value at this observation, keyed by account id:
+  /// { value, observedAt }. `observedAt` is when the provider reported the
+  /// account (null when none confirmed it), so a stale account's repeated value
+  /// keeps its own date instead of looking observed again. Null on rows written
+  /// before per-account values were recorded. See docs/ACCOUNT_VALUE_HISTORY.md.
+  accountValues     Json?
   createdAt         DateTime  @default(now())
 
   @@index([userId, computedAt])

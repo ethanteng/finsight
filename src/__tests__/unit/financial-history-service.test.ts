@@ -92,6 +92,58 @@ describe('FinancialHistoryService', () => {
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
+  describe('per-account values', () => {
+    const accountValues = {
+      'chk-1': { value: 10, observedAt: '2026-08-15T04:00:00.000Z' },
+      'brk-1': { value: 20, observedAt: null },
+    };
+
+    it('stores every account value with the daily observation', async () => {
+      await FinancialHistoryService.saveHistoricalSnapshot('user-1', { ...snapshot, accountValues });
+
+      expect(mockCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ dailyKey: 'user-1:2026-08-14', accountValues }),
+      });
+    });
+
+    it('rewrites the day when only an account moved, as a transfer between accounts does', async () => {
+      mockFindUnique.mockResolvedValue({
+        ...canonicalValues,
+        accountValues: { ...accountValues, 'chk-1': { value: 4, observedAt: '2026-08-15T04:00:00.000Z' } },
+      } as never);
+
+      await FinancialHistoryService.saveHistoricalSnapshot('user-1', { ...snapshot, accountValues });
+
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { dailyKey: 'user-1:2026-08-14', computedAt: { lte: computedAt } },
+        data: expect.objectContaining({ accountValues }),
+      });
+    });
+
+    it('fills in account values on a day recorded before they were kept', async () => {
+      mockFindUnique.mockResolvedValue({ ...canonicalValues, accountValues: null } as never);
+
+      await FinancialHistoryService.saveHistoricalSnapshot('user-1', { ...snapshot, accountValues });
+
+      expect(mockUpdateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not rewrite the day when the stored values differ only in key order', async () => {
+      mockFindUnique.mockResolvedValue({
+        ...canonicalValues,
+        accountValues: {
+          'brk-1': { observedAt: null, value: 20 },
+          'chk-1': { observedAt: '2026-08-15T04:00:00.000Z', value: 10 },
+        },
+      } as never);
+
+      await FinancialHistoryService.saveHistoricalSnapshot('user-1', { ...snapshot, accountValues });
+
+      expect(mockUpdateMany).not.toHaveBeenCalled();
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+  });
+
   it('records a changed material observation with its reason and updates the daily point', async () => {
     mockFindFirst.mockResolvedValue({ ...canonicalValues, netWorth: 20 } as never);
 
