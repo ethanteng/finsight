@@ -72,6 +72,7 @@ describe('buildAccountValueHistory: cash accounts and cards', () => {
       method: 'transactions',
       currency: 'USD',
       unconverted: false,
+      rebuildRefused: false,
       points: [
         { date: '2026-11-18', value: 800 },
         { date: '2026-11-19', value: 1000 },
@@ -144,6 +145,7 @@ describe('buildAccountValueHistory: cash accounts and cards', () => {
       ],
     }));
     expect(history.method).toBe('recorded');
+    expect(history.rebuildRefused).toBe(true);
     expect(history.points).toEqual([{ date: '2026-11-20', value: 1000 }]);
   });
 
@@ -155,12 +157,14 @@ describe('buildAccountValueHistory: cash accounts and cards', () => {
       ],
     }));
     expect(history.method).toBe('recorded');
+    expect(history.rebuildRefused).toBe(true);
     expect(history.points).toEqual([{ date: '2026-11-20', value: 1000 }]);
   });
 
-  it('falls back to recorded values when nothing has posted', () => {
+  it('falls back to recorded values when nothing has posted, without calling the rebuild refused', () => {
     const history = buildAccountValueHistory(input({}));
     expect(history.method).toBe('recorded');
+    expect(history.rebuildRefused).toBe(false);
   });
 
   it('records a hand-entered cash balance rather than rebuilding it', () => {
@@ -209,6 +213,7 @@ describe('buildAccountValueHistory: recorded values', () => {
       method: 'recorded',
       currency: 'USD',
       unconverted: false,
+      rebuildRefused: false,
       points: [
         { date: '2026-11-17', value: 20000 },
         { date: '2026-11-20', value: 21500 },
@@ -348,6 +353,7 @@ describe('buildAccountValueHistory: currency', () => {
       currency: 'USD',
       points: [],
       unconverted: true,
+      rebuildRefused: false,
     });
   });
 

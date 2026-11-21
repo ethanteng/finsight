@@ -76,6 +76,7 @@ describe('GET /api/finances/accounts/:id/history', () => {
         { date: '2026-11-20', value: 21500 },
       ],
       unconverted: false,
+      rebuildRefused: false,
     });
     expect(prisma.financialSummaryHistory.findMany).toHaveBeenCalledWith({
       where: { userId: 'user-1', observationKind: 'daily' },

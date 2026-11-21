@@ -20,7 +20,7 @@ A cash account's or card's balance changes only when a transaction posts, so its
 - **Pending transactions are left out**, as the reported balance leaves them out.
 - **The line ends on the provider's observation day**, or on the latest posted transaction if that is later.
 - **It starts at the earliest posted transaction.** Before that the balance is unknown, not zero, so nothing is drawn.
-- **It refuses rather than guesses.** A transaction in another currency, or one with no usable date or amount, cannot be walked back through, and the account falls back to its recorded values. So does an account with nothing posted.
+- **It refuses rather than guesses.** A transaction in another currency, or one with no usable date or amount (a missing amount is missing, not zero), cannot be walked back through, and the account falls back to its recorded values. The response marks that `rebuildRefused` and the caption says so, rather than that recording has only just started for an account with a long transaction history. An account with nothing posted also falls back, without that note.
 
 Pending, missed or later-removed transactions would make the rebuilt line differ from what the bank showed on a given day; that is why the caption names it as rebuilt.
 

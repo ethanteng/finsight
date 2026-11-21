@@ -46,6 +46,7 @@ function history(overrides: Partial<AccountValueHistory>): AccountValueHistory {
     currency: 'USD',
     points: [],
     unconverted: false,
+    rebuildRefused: false,
     ...overrides,
   };
 }
@@ -132,6 +133,16 @@ describe('describeSource', () => {
       .toBe('Linc has one recorded value for this account so far, from Nov 21, 2026. The chart fills in as Betterment reports new values.');
     expect(describeSource(history({ points: [] }), brokerage))
       .toBe("Linc records this account's value each time Betterment reports it. Nothing has been recorded yet.");
+  });
+
+  it('says a rebuild was refused, rather than that a long-held account has only just started', () => {
+    expect(describeSource(
+      history({ rebuildRefused: true, points: [{ date: '2026-11-21', value: 1 }] }),
+      { institution: 'Chase', source: 'plaid' }
+    )).toBe(
+      "Linc couldn't rebuild this account's history from its transactions, because one has no usable date, amount or currency. "
+      + 'Linc has one recorded value for this account so far, from Nov 21, 2026. The chart fills in as Chase reports new values.'
+    );
   });
 
   it('says a hand-entered balance is the user\'s own', () => {

@@ -65,6 +65,13 @@ export interface AccountValueHistory {
    * rather than that nothing has been recorded yet.
    */
   unconverted: boolean;
+  /**
+   * A cash account or card whose transactions could not be walked back through
+   * (one has no usable date or amount, or is in another currency), so it shows
+   * its recorded values instead. The chart says so, rather than that recording
+   * has only just started for an account with a long transaction history.
+   */
+  rebuildRefused: boolean;
 }
 
 export interface AccountValueHistoryInput {
@@ -211,20 +218,30 @@ function providerAmount(transaction: any): number | null {
 }
 
 /**
+ * A walk back through an account's transactions: its points, or why there are
+ * none. `unusable` is the one worth telling the user about -- the account has a
+ * transaction history, but one transaction in it cannot be counted.
+ */
+type WalkBack =
+  | { points: AccountValuePoint[] }
+  | { refused: 'no_balance' | 'no_transactions' | 'unusable' };
+
+/**
  * Rebuild a cash account's or card's end-of-day balances from its posted
- * transactions, or null when they cannot honestly explain it: no reported
- * balance, or a transaction in another currency or with no usable date or
- * amount. The caller has already checked the balance's own currency. Pending
- * transactions are left out, as the reported balance leaves them out.
+ * transactions, or refuse when they cannot honestly explain it: no reported
+ * balance, nothing posted, or a transaction in another currency or with no
+ * usable date or amount. The caller has already checked the balance's own
+ * currency. Pending transactions are left out, as the reported balance leaves
+ * them out.
  */
 function walkBackFromTransactions(
   account: FinancesAccount,
   transactionsInput: unknown,
   reportingCurrency: string,
   anchorDate: CalendarDate
-): AccountValuePoint[] | null {
+): WalkBack {
   const balance = reportedBalance(account);
-  if (balance === null) return null;
+  if (balance === null) return { refused: 'no_balance' };
 
   const transactions = Array.isArray(transactionsInput) ? transactionsInput : [];
   const netCentsByDate = new Map<CalendarDate, number>();
@@ -243,12 +260,12 @@ function walkBackFromTransactions(
     const currency = String(transaction?.iso_currency_code || transaction?.currency || reportingCurrency).toUpperCase();
     const amount = providerAmount(transaction);
     const date = calendarDateFrom(transaction?.date ?? transaction?.posted_date);
-    if (currency !== reportingCurrency || amount === null || !date) return null;
+    if (currency !== reportingCurrency || amount === null || !date) return { refused: 'unusable' };
     netCentsByDate.set(date, (netCentsByDate.get(date) ?? 0) + toCents(amount));
     if (!earliest || date < earliest) earliest = date;
     if (!latest || date > latest) latest = date;
   }
-  if (!earliest || !latest) return null;
+  if (!earliest || !latest) return { refused: 'no_transactions' };
 
   // A cash account held that much more the day before money left it; a card
   // owed that much less the day before a charge.
@@ -262,7 +279,7 @@ function walkBackFromTransactions(
     date = addDays(date, -1);
     points.push({ date, value: cents / 100 });
   }
-  return points.reverse();
+  return { points: points.reverse() };
 }
 
 /** Recorded values for one account, one per provider-observed day; the latest computation wins a day. */
@@ -304,16 +321,18 @@ export function buildAccountValueHistory(input: AccountValueHistoryInput): Accou
   // Checked on the way out as well as on the way in: an account's currency can
   // change under the same id, and an earlier row would then be in the old one.
   if (isUnconverted(account, reportingCurrency)) {
-    return { ...base, method: 'recorded', points: [], unconverted: true };
+    return { ...base, method: 'recorded', points: [], unconverted: true, rebuildRefused: false };
   }
 
+  let rebuildRefused = false;
   if ((category === 'cash' || category === 'credit') && account.source !== 'manual') {
     const observed = observedAt(account);
     const anchorDate = calendarDateInTimeZone(observed ? new Date(observed) : input.computedAt, timeZone);
-    const points = walkBackFromTransactions(account, input.transactions, reportingCurrency, anchorDate);
-    if (points && points.length >= 2) {
-      return { ...base, method: 'transactions', points, unconverted: false };
+    const walk = walkBackFromTransactions(account, input.transactions, reportingCurrency, anchorDate);
+    if ('points' in walk && walk.points.length >= 2) {
+      return { ...base, method: 'transactions', points: walk.points, unconverted: false, rebuildRefused: false };
     }
+    rebuildRefused = 'refused' in walk && walk.refused === 'unusable';
   }
 
   const displayBalances = isRecord(input.displayBalances) ? input.displayBalances : {};
@@ -325,6 +344,7 @@ export function buildAccountValueHistory(input: AccountValueHistoryInput): Accou
     ...base,
     method: 'recorded',
     unconverted: false,
+    rebuildRefused,
     points: recordedSeries(id, input.recorded, current, timeZone),
   };
 }

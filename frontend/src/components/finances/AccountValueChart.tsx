@@ -107,7 +107,7 @@ export function describeChange(
 
 /** Where the series came from, said plainly under the chart. */
 export function describeSource(
-  history: Pick<AccountValueHistory, 'method' | 'points' | 'currency' | 'unconverted'>,
+  history: Pick<AccountValueHistory, 'method' | 'points' | 'currency' | 'unconverted' | 'rebuildRefused'>,
   account: Pick<FinancesAccount, 'institution' | 'source'>
 ): string {
   const institution = account.institution?.trim() || 'your institution';
@@ -120,16 +120,29 @@ export function describeSource(
     return `Rebuilt from this account's posted transactions, working back from the balance ${institution} reported. `
       + `Pending transactions aren't counted, and the line starts at the earliest transaction Linc has.`;
   }
-  const first = history.points[0];
+  // The account has a transaction history; recording has not merely just begun.
+  const refused = history.rebuildRefused
+    ? `Linc couldn't rebuild this account's history from its transactions, because one has no usable `
+      + `date, amount or currency. `
+    : '';
+  return refused + describeRecorded(history.points, account, institution);
+}
+
+function describeRecorded(
+  points: AccountValueHistory['points'],
+  account: Pick<FinancesAccount, 'source'>,
+  institution: string
+): string {
+  const first = points[0];
   if (account.source === 'manual') {
-    if (history.points.length < 2) {
+    if (points.length < 2) {
       return first
         ? `You entered this balance on ${formatCalendarDate(first.date)}. The chart adds a point each time you change it.`
         : 'The chart adds a point each time you change this balance.';
     }
     return `The balance you entered, each time you changed it, since ${formatCalendarDate(first.date)}.`;
   }
-  if (history.points.length < 2) {
+  if (points.length < 2) {
     return first
       ? `Linc has one recorded value for this account so far, from ${formatCalendarDate(first.date)}. `
         + `The chart fills in as ${institution} reports new values.`

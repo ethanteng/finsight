@@ -143,4 +143,6 @@ export interface AccountValueHistory {
   points: Array<{ date: string; value: number }>;
   /** The balance is in another currency, which Linc does not convert, so there are no points. */
   unconverted: boolean;
+  /** A cash account or card whose transactions could not be walked back through; it shows recorded values instead. */
+  rebuildRefused: boolean;
 }
