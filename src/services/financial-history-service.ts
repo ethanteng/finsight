@@ -1,5 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
 import type { CanonicalFinancialOverview, SnapshotStatus } from '../domain/financial-truth';
+import type { RecordedAccountValues } from './account-value-history';
 import {
   calendarDateInTimeZone,
   normalizeTimeZone,
@@ -19,6 +20,12 @@ export interface CanonicalHistoryInput {
   status: SnapshotStatus;
   reportingCurrency: string;
   financialOverview: CanonicalFinancialOverview;
+  /**
+   * Every account's value and provider observation time, for each account's own
+   * chart. Optional so a caller without the accounts still records the totals;
+   * a row written without it charts nothing for any account.
+   */
+  accountValues?: RecordedAccountValues;
 }
 
 export type MaterialHistoryReason =
@@ -95,6 +102,30 @@ function isOlderThanExisting(
   );
 }
 
+/** JSON with object keys sorted, so a value read back from jsonb compares equal to the one written. */
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map(key => `${JSON.stringify(key)}:${stableJson((value as Record<string, unknown>)[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/**
+ * Accounts can move with the totals unchanged -- a transfer between two cash
+ * accounts -- so a day's row is rewritten when any account's value does.
+ */
+function hasSameAccountValues(
+  existing: Record<string, unknown>,
+  snapshot: CanonicalHistoryInput
+): boolean {
+  if (snapshot.accountValues === undefined) return true;
+  return stableJson(existing.accountValues) === stableJson(snapshot.accountValues);
+}
+
 function hasSameCanonicalValues(
   existing: Record<string, unknown> | null,
   snapshot: CanonicalHistoryInput
@@ -102,6 +133,7 @@ function hasSameCanonicalValues(
   if (!existing) return false;
   const overview = snapshot.financialOverview;
   return (
+    hasSameAccountValues(existing, snapshot) &&
     sameDate(existing.asOf instanceof Date ? existing.asOf : null, snapshot.asOf) &&
     existing.status === snapshot.status &&
     existing.reportingCurrency === snapshot.reportingCurrency &&
@@ -158,6 +190,7 @@ function canonicalHistoryData(
     homeValue: overview.homeValue,
     totalAssets: overview.totalAssets,
     totalLiabilities: overview.totalLiabilities,
+    ...(snapshot.accountValues !== undefined && { accountValues: snapshot.accountValues as unknown as Prisma.InputJsonValue }),
     ...fields,
   };
 }

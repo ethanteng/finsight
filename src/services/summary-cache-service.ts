@@ -1,4 +1,5 @@
 import { buildTransactionSummary } from './transaction-summary-service';
+import { accountValuesForHistory } from './account-value-history';
 import { transactionHistoryDays } from '../config/transaction-history';
 import { buildCanonicalSnapshotCore } from './canonical-financial-snapshot';
 import {
@@ -359,6 +360,11 @@ export class SummaryCacheService {
         status: canonical.status,
         reportingCurrency: canonical.reportingCurrency,
         financialOverview: canonical.financialOverview,
+        accountValues: accountValuesForHistory(
+          payload.accounts,
+          payload.meta.accountDisplayBalances,
+          canonical.reportingCurrency
+        ),
       };
       await FinancialHistoryService.saveHistoricalSnapshot(
         userId,

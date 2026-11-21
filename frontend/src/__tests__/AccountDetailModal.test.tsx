@@ -8,6 +8,11 @@ jest.mock('@/components/InvestmentPortfolio', () => ({
   default: () => <div>portfolio</div>,
 }));
 
+jest.mock('@/components/finances/AccountValueChart', () => ({
+  __esModule: true,
+  default: ({ accountId }: { accountId: string }) => <div>value chart for {accountId}</div>,
+}));
+
 const details = {
   revisionId: 'revision-1',
   accountId: 'snaptrade-1',
@@ -69,6 +74,12 @@ describe('AccountDetailModal provenance and refresh', () => {
     renderModal();
 
     expect(await screen.findByText('Updated Nov 23, 2025')).toBeInTheDocument();
+  });
+
+  it('charts the account value over time', async () => {
+    renderModal();
+
+    expect(await screen.findByText('value chart for snaptrade-1')).toBeInTheDocument();
   });
 
   it('asks the provider to re-sync the connection behind this account', async () => {

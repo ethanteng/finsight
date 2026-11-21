@@ -219,7 +219,7 @@ function requiredFinite(value: unknown, field: string): number {
   return result;
 }
 
-function accountId(account: FinancesAccount): string {
+export function accountId(account: FinancesAccount): string {
   return String(
     account.account_id
     || (account as FinancesAccount & { plaidAccountId?: string }).plaidAccountId
@@ -807,15 +807,23 @@ function accountIdMatches(candidate: unknown, requested: string): boolean {
   return candidate.replace(/^snaptrade-/, '') === requested.replace(/^snaptrade-/, '');
 }
 
+/** The snapshot account an account view asked for, by any of the ids the page links it with. */
+export function findFinancesAccount(
+  snapshot: Pick<FinancesSnapshotLike, 'accounts'>,
+  requestedAccountId: string
+): FinancesAccount | null {
+  const accounts = Array.isArray(snapshot.accounts) ? snapshot.accounts as FinancesAccount[] : [];
+  return accounts.find(candidate =>
+    accountIdMatches(candidate.account_id, requestedAccountId)
+      || accountIdMatches(candidate.id, requestedAccountId)
+  ) ?? null;
+}
+
 export function buildFinancesAccountDetails(
   snapshot: FinancesSnapshotLike,
   requestedAccountId: string
 ): FinancesAccountDetails | null {
-  const accounts = Array.isArray(snapshot.accounts) ? snapshot.accounts as FinancesAccount[] : [];
-  const account = accounts.find(candidate =>
-    accountIdMatches(candidate.account_id, requestedAccountId)
-      || accountIdMatches(candidate.id, requestedAccountId)
-  );
+  const account = findFinancesAccount(snapshot, requestedAccountId);
   if (!account) return null;
 
   const resolvedId = accountId(account);

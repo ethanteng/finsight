@@ -7,9 +7,13 @@ import { FinancialRevisionService } from '../services/financial-revision-service
 import {
   buildFinancesAccountDetails,
   buildFinancesOverview,
+  findFinancesAccount,
+  withAccountDisplayBalances,
   type FinancesHomeData,
 } from '../services/finances-overview-service';
 import { isUserActionRequiredPlaidError } from '../services/plaid-error-classification';
+import { buildAccountValueHistory } from '../services/account-value-history';
+import { normalizeTimeZone } from '../domain/time-zone';
 
 const router = express.Router();
 
@@ -142,6 +146,46 @@ router.get('/accounts/:id/details', requireAuth, async (req: AuthenticatedReques
   } catch (error) {
     console.error('Failed to load finances account details:', error);
     return res.status(500).json({ error: 'Failed to load account details' });
+  }
+});
+
+// One account's value over time, for the chart in its detail view. See
+// docs/ACCOUNT_VALUE_HISTORY.md for where each kind of account's series comes from.
+router.get('/accounts/:id/history', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    if (!id) return res.status(400).json({ error: 'Account id is required' });
+    const userId = req.user!.id;
+    const prisma = getPrismaClient();
+    const [snapshot, user, recorded] = await Promise.all([
+      getLatestFinancialSnapshot(userId, 'full'),
+      prisma.user.findUnique({ where: { id: userId }, select: { timeZone: true } }),
+      prisma.financialSummaryHistory.findMany({
+        where: { userId, observationKind: 'daily' },
+        select: { computedAt: true, accountValues: true },
+        orderBy: { computedAt: 'asc' },
+      }),
+    ]);
+    if (!snapshot) return res.status(404).json({ error: 'Financial snapshot not found' });
+    // A snapshot written before display balances were stored gets them the way
+    // the overview derives them, so the chart ends on the figure the page shows.
+    const current = withAccountDisplayBalances(snapshot as any) as any;
+    const account = findFinancesAccount(current, decodeURIComponent(id));
+    if (!account) return res.status(404).json({ error: 'Account not found in current snapshot' });
+    const computedAt = new Date(current.computedAt);
+    const history = buildAccountValueHistory({
+      account,
+      displayBalances: current.meta?.accountDisplayBalances,
+      transactions: current.transactions,
+      recorded,
+      reportingCurrency: typeof current.reportingCurrency === 'string' ? current.reportingCurrency : 'USD',
+      timeZone: normalizeTimeZone(user?.timeZone),
+      computedAt,
+    });
+    return res.json({ revisionId: computedAt.toISOString(), ...history });
+  } catch (error) {
+    console.error('Failed to load account value history:', error);
+    return res.status(500).json({ error: 'Failed to load account value history' });
   }
 });
 
