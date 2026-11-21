@@ -161,10 +161,14 @@ function tickLabel(date: string, longSpan: boolean): string {
   return longSpan ? `${MONTHS[month - 1]} ’${String(year).slice(2)}` : `${MONTHS[month - 1]} ${day}`;
 }
 
-function ValueTooltip({ active, payload, label }: {
+export function ValueTooltip({ active, payload, seriesLabel }: {
   active?: boolean;
   payload?: Array<{ payload: Point }>;
-  label: string;
+  /**
+   * "Value", "Balance", or "Owed". Not named `label`: Recharts clones this
+   * element and overwrites `label` with the x-axis value, the raw date.
+   */
+  seriesLabel?: string;
 }) {
   const point = active ? payload?.[0]?.payload : undefined;
   if (!point) return null;
@@ -172,7 +176,7 @@ function ValueTooltip({ active, payload, label }: {
     <div className="space-y-1 rounded-lg border border-[#486657] bg-[#102319] p-3 text-xs text-white shadow-lg">
       <p className="font-bold">{formatCalendarDate(point.date)}</p>
       <p className="flex justify-between gap-6">
-        <span className="text-white/70">{label}</span>
+        <span className="text-white/70">{seriesLabel}</span>
         <span className="font-bold tabular-nums">{formatMoney(point.value)}</span>
       </p>
     </div>
@@ -316,7 +320,7 @@ export default function AccountValueChart({ account, accountId, revisionId }: Ac
                 width={56}
                 tick={{ fill: COLORS.axis, fontSize: 11 }}
               />
-              <Tooltip content={<ValueTooltip label={seriesLabel} />} />
+              <Tooltip content={<ValueTooltip seriesLabel={seriesLabel} />} />
               {crossesZero && <ReferenceLine y={0} stroke={COLORS.down} strokeDasharray="4 4" />}
               <Area
                 dataKey="value"

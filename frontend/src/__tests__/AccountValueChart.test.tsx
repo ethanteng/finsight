@@ -6,6 +6,7 @@ import AccountValueChart, {
   describeSource,
   formatAxisMoney,
   pointsInRange,
+  ValueTooltip,
 } from '@/components/finances/AccountValueChart';
 import type { AccountValueHistory, FinancesAccount } from '@/types/finances-overview';
 
@@ -180,6 +181,23 @@ describe('AccountValueChart', () => {
     expect(await screen.findByText(/Linc has one recorded value for this account so far/)).toBeInTheDocument();
     expect(screen.queryByTestId('chart')).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Time range' })).not.toBeInTheDocument();
+  });
+
+  it('names the series in the tooltip instead of the raw date Recharts injects', () => {
+    render(
+      <ValueTooltip
+        active
+        seriesLabel="Value"
+        // Recharts overwrites a prop named label with the x-axis value.
+        {...{ label: '2026-11-21' }}
+        payload={[{ payload: { date: '2026-11-21', value: 22116 } }]}
+      />
+    );
+
+    expect(screen.getByText('Value')).toBeInTheDocument();
+    expect(screen.getByText('Nov 21, 2026')).toBeInTheDocument();
+    expect(screen.getByText('$22,116')).toBeInTheDocument();
+    expect(screen.queryByText('2026-11-21')).not.toBeInTheDocument();
   });
 
   it('says so when the history cannot load', async () => {
