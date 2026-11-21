@@ -107,10 +107,15 @@ export function describeChange(
 
 /** Where the series came from, said plainly under the chart. */
 export function describeSource(
-  history: Pick<AccountValueHistory, 'method' | 'points'>,
+  history: Pick<AccountValueHistory, 'method' | 'points' | 'currency' | 'unconverted'>,
   account: Pick<FinancesAccount, 'institution' | 'source'>
 ): string {
   const institution = account.institution?.trim() || 'your institution';
+  if (history.unconverted) {
+    // Not "nothing recorded yet": nothing will be, until Linc converts currencies.
+    return `This account's balance isn't reported in ${history.currency}, and Linc doesn't convert currencies, `
+      + `so it can't chart this account.`;
+  }
   if (history.method === 'transactions') {
     return `Rebuilt from this account's posted transactions, working back from the balance ${institution} reported. `
       + `Pending transactions aren't counted, and the line starts at the earliest transaction Linc has.`;

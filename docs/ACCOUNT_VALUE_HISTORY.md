@@ -33,11 +33,15 @@ An investment account's value moves with the market with no transaction at all, 
 ```
 
 - **`value` is the figure the Finances page shows for the account** (`meta.accountDisplayBalances`): an investment account's holdings-reconciled value, and what a loan or card owes as a positive amount. A cash account keeps its sign, so an overdraft plots below zero rather than as a positive debt.
-- **`observedAt` is when the provider reported the account** (`lastSyncedAt`), never when Linc read it. A point is dated by it, so an account the provider has not refreshed adds no new day to the chart instead of repeating an old value as if it were observed again, and an account no provider confirmed (no `observedAt`) adds no point at all. This is the same rule the account's "Updated" line follows.
+- **`observedAt` is when the provider observed the account's value**, never when Linc read it: the same observation the snapshot's quality evaluation judges, `snapshotTimestamp` and then `lastSyncedAt`. The two usually agree, but a Plaid account read back from the database when a live fetch fails carries its latest balance fetch in `snapshotTimestamp` and an older account sync in `lastSyncedAt`, so reading only the second would date a fresh balance to an old day and overwrite that day's point. SnapTrade is the exception: its `snapshotTimestamp` falls back to when Linc read SnapTrade's cache, which confirms nothing, so only its holdings sync (`lastSyncedAt`) counts. A point is dated by `observedAt`, so an account the provider has not refreshed adds no new day to the chart instead of repeating an old value as if it were observed again, and an account no provider confirmed (no `observedAt`) adds no point at all. The rebuilt series anchors on the same observation.
 - **A day's row is rewritten when any account moves**, even when the totals do not (a transfer between two cash accounts), and not when the stored values differ only in key order.
 - **The latest computation wins a day**, and the snapshot on screen wins its own day, so the chart always ends on the figure the page shows even if writing that day's history row failed.
 
 Rows written before `accountValues` existed carry none, so a recorded series starts when this shipped and fills in a point a day after that. Until there are two points the chart says how much has been recorded instead of drawing a line through one.
+
+### Balances in another currency
+
+Linc does not convert currencies, and the canonical totals leave out a balance that is not in the reporting currency. The chart does the same. An account valued from its balance (cash, cards, loans, entered balances) whose balance is in another currency, or carries none, records a null value and gets no series, rebuilt or recorded, even from rows written before its currency changed. The response marks it `unconverted`, and the chart says why instead of saying nothing has been recorded yet. A connected investment account is unaffected: its value is its reporting-currency holdings, and its own balance stands in only when it is in that currency (`resolveInvestmentAccountValue`).
 
 ## What the chart shows
 

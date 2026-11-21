@@ -71,6 +71,7 @@ describe('buildAccountValueHistory: cash accounts and cards', () => {
       measure: 'balance',
       method: 'transactions',
       currency: 'USD',
+      unconverted: false,
       points: [
         { date: '2026-11-18', value: 800 },
         { date: '2026-11-19', value: 1000 },
@@ -195,6 +196,7 @@ describe('buildAccountValueHistory: recorded values', () => {
       measure: 'value',
       method: 'recorded',
       currency: 'USD',
+      unconverted: false,
       points: [
         { date: '2026-11-17', value: 20000 },
         { date: '2026-11-20', value: 21500 },
@@ -239,7 +241,7 @@ describe('buildAccountValueHistory: recorded values', () => {
     const history = buildAccountValueHistory(input({
       account: {
         account_id: 'loan-1', type: 'loan', subtype: 'student', source: 'plaid',
-        balance: { current: -12000 }, lastSyncedAt: '2026-11-20T15:00:00.000Z',
+        balance: { current: -12000, iso_currency_code: 'USD' }, lastSyncedAt: '2026-11-20T15:00:00.000Z',
       },
       displayBalances: { 'loan-1': 12000 },
     }));
@@ -253,12 +255,13 @@ describe('accountValuesForHistory', () => {
     const values = accountValuesForHistory(
       [
         brokerage,
-        { ...checking, balance: { current: -40 } },
+        { ...checking, balance: { current: -40, iso_currency_code: 'USD' } },
         card,
         { account_id: 'unsynced', type: 'investment', source: 'snaptrade', balance: { current: 10 } },
         brokerage,
       ],
-      { 'snaptrade-brk-1': 21500, 'chk-1': 40, 'card-1': 500, unsynced: 10 }
+      { 'snaptrade-brk-1': 21500, 'chk-1': 40, 'card-1': 500, unsynced: 10 },
+      'USD'
     );
 
     expect(values).toEqual({
@@ -271,6 +274,79 @@ describe('accountValuesForHistory', () => {
   });
 
   it('records nothing without accounts', () => {
-    expect(accountValuesForHistory(undefined, undefined)).toEqual({});
+    expect(accountValuesForHistory(undefined, undefined, 'USD')).toEqual({});
+  });
+
+  it('dates a balance by the fetch that produced it, not an older account sync', () => {
+    // A Plaid account read back from the database when the live fetch failed:
+    // the balance fetch is in snapshotTimestamp, the last account sync in lastSyncedAt.
+    const persisted = {
+      ...checking,
+      persisted: true,
+      snapshotTimestamp: '2026-11-20T15:00:00.000Z',
+      lastSyncedAt: '2026-11-02T15:00:00.000Z',
+    };
+    expect(accountValuesForHistory([persisted], {}, 'USD')['chk-1'])
+      .toEqual({ value: 1000, observedAt: '2026-11-20T15:00:00.000Z' });
+  });
+
+  it('does not date a SnapTrade value by when Linc read the cache', () => {
+    // Without a holdings sync, snapshotTimestamp is only Linc's own fetch time.
+    const unsynced = { ...brokerage, snapshotTimestamp: '2026-11-20T18:00:00.000Z', lastSyncedAt: undefined };
+    expect(accountValuesForHistory([unsynced], { 'snaptrade-brk-1': 21500 }, 'USD')['snaptrade-brk-1'])
+      .toEqual({ value: 21500, observedAt: null });
+  });
+
+  it('records no value for a balance Linc does not convert, but keeps a holdings value', () => {
+    const values = accountValuesForHistory(
+      [
+        { ...checking, account_id: 'eur-1', balance: { current: 1000, iso_currency_code: 'EUR' } },
+        { ...card, account_id: 'nocode-1', balance: { current: 300 } },
+        // Valued from its reporting-currency holdings, whatever its own balance is in.
+        { ...brokerage, account_id: 'snaptrade-eur-brk', balance: { current: 900, iso_currency_code: 'EUR' } },
+      ],
+      { 'eur-1': 1000, 'nocode-1': 300, 'snaptrade-eur-brk': 1200 },
+      'USD'
+    );
+    expect(values['eur-1'].value).toBeNull();
+    expect(values['nocode-1'].value).toBeNull();
+    expect(values['snaptrade-eur-brk'].value).toBe(1200);
+  });
+});
+
+describe('buildAccountValueHistory: currency', () => {
+  it('charts nothing for a cash account in another currency, and says so', () => {
+    const eur = { ...checking, balance: { current: 1000, iso_currency_code: 'EUR' } };
+    const history = buildAccountValueHistory(input({
+      account: eur,
+      transactions: [
+        { transaction_id: 't1', account_id: 'chk-1', date: '2026-11-18', amount: 50, iso_currency_code: 'EUR' },
+        { transaction_id: 't2', account_id: 'chk-1', date: '2026-11-19', amount: 20, iso_currency_code: 'EUR' },
+      ],
+      // Even a value recorded before the account's currency changed is not charted as dollars.
+      recorded: [{
+        computedAt: new Date('2026-11-19T12:00:00.000Z'),
+        accountValues: { 'chk-1': { value: 950, observedAt: '2026-11-19T11:00:00.000Z' } },
+      }],
+    }));
+    expect(history).toEqual({
+      accountId: 'chk-1',
+      measure: 'balance',
+      method: 'recorded',
+      currency: 'USD',
+      points: [],
+      unconverted: true,
+    });
+  });
+
+  it('anchors a rebuilt balance on the fetch that produced it', () => {
+    const history = buildAccountValueHistory(input({
+      account: { ...checking, snapshotTimestamp: '2026-11-20T15:00:00.000Z', lastSyncedAt: '2026-11-02T15:00:00.000Z' },
+      transactions: [
+        { transaction_id: 't1', account_id: 'chk-1', date: '2026-11-17', amount: 20 },
+        { transaction_id: 't2', account_id: 'chk-1', date: '2026-11-18', amount: 20 },
+      ],
+    }));
+    expect(history.points[history.points.length - 1]).toEqual({ date: '2026-11-20', value: 1000 });
   });
 });

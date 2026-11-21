@@ -360,7 +360,11 @@ export class SummaryCacheService {
         status: canonical.status,
         reportingCurrency: canonical.reportingCurrency,
         financialOverview: canonical.financialOverview,
-        accountValues: accountValuesForHistory(payload.accounts, payload.meta.accountDisplayBalances),
+        accountValues: accountValuesForHistory(
+          payload.accounts,
+          payload.meta.accountDisplayBalances,
+          canonical.reportingCurrency
+        ),
       };
       await FinancialHistoryService.saveHistoricalSnapshot(
         userId,

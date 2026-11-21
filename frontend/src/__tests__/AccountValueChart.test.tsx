@@ -44,6 +44,7 @@ function history(overrides: Partial<AccountValueHistory>): AccountValueHistory {
     method: 'recorded',
     currency: 'USD',
     points: [],
+    unconverted: false,
     ...overrides,
   };
 }
@@ -115,6 +116,11 @@ describe('describeChange', () => {
 });
 
 describe('describeSource', () => {
+  it('says why a balance in another currency is not charted, rather than that nothing is recorded yet', () => {
+    expect(describeSource(history({ unconverted: true }), { institution: 'Wise', source: 'plaid' }))
+      .toBe("This account's balance isn't reported in USD, and Linc doesn't convert currencies, so it can't chart this account.");
+  });
+
   it('says a rebuilt series came from posted transactions', () => {
     expect(describeSource(history({ method: 'transactions', points: points2() }), { institution: 'Chase', source: 'plaid' }))
       .toMatch(/^Rebuilt from this account's posted transactions, working back from the balance Chase reported/);

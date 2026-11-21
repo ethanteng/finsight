@@ -55,9 +55,16 @@ export interface AccountValueHistory {
   accountId: string;
   measure: AccountValueMeasure;
   method: AccountValueMethod;
+  /** The reporting currency every point is in. */
   currency: string;
   /** Oldest first, at most one per day. */
   points: AccountValuePoint[];
+  /**
+   * The account's balance is in another currency (or none) and Linc does not
+   * convert it, so there is no series: points is empty, and the chart says why
+   * rather than that nothing has been recorded yet.
+   */
+  unconverted: boolean;
 }
 
 export interface AccountValueHistoryInput {
@@ -89,11 +96,52 @@ function reportedBalance(account: FinancesAccount): number | null {
   return finite(account.balance.current) ?? finite(account.balance.available);
 }
 
-function observedAt(account: FinancesAccount): string | null {
-  const raw = (account as FinancesAccount & { lastSyncedAt?: unknown }).lastSyncedAt;
+function isoTimestamp(raw: unknown): string | null {
   if (typeof raw !== 'string' && !(raw instanceof Date)) return null;
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function isSnapTrade(account: FinancesAccount): boolean {
+  return account.source === 'snaptrade' || String(account.account_id || account.id || '').startsWith('snaptrade-');
+}
+
+/**
+ * When the provider observed the account's value: the observation the
+ * snapshot's quality evaluation judges, `snapshotTimestamp` and then
+ * `lastSyncedAt`. They usually agree, but a Plaid account read back from the
+ * database when a live fetch fails carries its latest balance fetch in
+ * `snapshotTimestamp` and an older account sync in `lastSyncedAt`, so reading
+ * only the second would date a fresh balance to an old day.
+ *
+ * SnapTrade is the exception. Its `snapshotTimestamp` falls back to when Linc
+ * read SnapTrade's cache, which confirms nothing about the value, so only its
+ * holdings sync (`lastSyncedAt`) dates a point, and an account whose holdings
+ * have never synced has none.
+ */
+function observedAt(account: FinancesAccount): string | null {
+  const timestamps = account as FinancesAccount & { snapshotTimestamp?: unknown; lastSyncedAt?: unknown };
+  if (isSnapTrade(account)) return isoTimestamp(timestamps.lastSyncedAt);
+  return isoTimestamp(timestamps.snapshotTimestamp) ?? isoTimestamp(timestamps.lastSyncedAt);
+}
+
+/** The currency the provider reported the balance in, as the canonical snapshot reads it; null when it gave none. */
+function accountCurrency(account: FinancesAccount): string | null {
+  const code = isRecord(account.balance) ? account.balance.iso_currency_code : undefined;
+  return typeof code === 'string' && code.trim() ? code.trim().toUpperCase() : null;
+}
+
+/**
+ * A connected investment account's value is its reporting-currency holdings, and
+ * its reported balance stands in only when it is in that currency (see
+ * `resolveInvestmentAccountValue`), so it is already comparable. Any other
+ * account's value is its balance as reported, which Linc does not convert: one
+ * in another currency, or in none, is left out, as the canonical totals leave
+ * it out, rather than charted as if it were dollars.
+ */
+function isUnconverted(account: FinancesAccount, reportingCurrency: string): boolean {
+  const valuedFromHoldings = classifyAccount(account).isInvestment && account.source !== 'manual';
+  return !valuedFromHoldings && accountCurrency(account) !== reportingCurrency;
 }
 
 function measureFor(account: FinancesAccount): AccountValueMeasure {
@@ -106,13 +154,15 @@ function measureFor(account: FinancesAccount): AccountValueMeasure {
 /**
  * The value to record for an account: the figure the Finances page shows for
  * it, except that a cash account keeps its sign, so an overdraft plots below
- * zero instead of as a positive debt.
+ * zero instead of as a positive debt. Null for a balance in another currency.
  */
 function recordableValue(
   account: FinancesAccount,
   id: string,
-  displayBalances: Record<string, unknown>
+  displayBalances: Record<string, unknown>,
+  reportingCurrency: string
 ): number | null {
+  if (isUnconverted(account, reportingCurrency)) return null;
   const classified = classifyAccount(account);
   if (classified.isCash) return reportedBalance(account);
   const value = Object.prototype.hasOwnProperty.call(displayBalances, id)
@@ -124,16 +174,20 @@ function recordableValue(
 /** Each account's value and observation time, to store with a daily history observation. */
 export function accountValuesForHistory(
   accountsInput: unknown,
-  displayBalancesInput: unknown
+  displayBalancesInput: unknown,
+  reportingCurrencyInput: unknown
 ): RecordedAccountValues {
   const accounts = Array.isArray(accountsInput) ? accountsInput as FinancesAccount[] : [];
   const displayBalances = isRecord(displayBalancesInput) ? displayBalancesInput : {};
+  const reportingCurrency = typeof reportingCurrencyInput === 'string' && reportingCurrencyInput.trim()
+    ? reportingCurrencyInput.trim().toUpperCase()
+    : 'USD';
   const values: RecordedAccountValues = {};
   for (const account of accounts) {
     const id = financesAccountId(account);
     if (!id || Object.prototype.hasOwnProperty.call(values, id)) continue;
     values[id] = {
-      value: recordableValue(account, id, displayBalances),
+      value: recordableValue(account, id, displayBalances, reportingCurrency),
       observedAt: observedAt(account),
     };
   }
@@ -147,9 +201,9 @@ function toCents(value: number): number {
 /**
  * Rebuild a cash account's or card's end-of-day balances from its posted
  * transactions, or null when they cannot honestly explain it: no reported
- * balance, a currency other than the reporting one, or a transaction with no
- * usable date or amount. Pending transactions are left out, as the reported
- * balance leaves them out.
+ * balance, or a transaction in another currency or with no usable date or
+ * amount. The caller has already checked the balance's own currency. Pending
+ * transactions are left out, as the reported balance leaves them out.
  */
 function walkBackFromTransactions(
   account: FinancesAccount,
@@ -159,10 +213,6 @@ function walkBackFromTransactions(
 ): AccountValuePoint[] | null {
   const balance = reportedBalance(account);
   if (balance === null) return null;
-  const accountCurrency = isRecord(account.balance) && typeof account.balance.iso_currency_code === 'string'
-    ? account.balance.iso_currency_code.toUpperCase()
-    : reportingCurrency;
-  if (accountCurrency !== reportingCurrency) return null;
 
   const transactions = Array.isArray(transactionsInput) ? transactionsInput : [];
   const netCentsByDate = new Map<CalendarDate, number>();
@@ -238,26 +288,32 @@ export function buildAccountValueHistory(input: AccountValueHistoryInput): Accou
   const id = financesAccountId(account);
   const measure = measureFor(account);
   const category = classifyAccount(account).category;
+  const base = { accountId: id, measure, currency: reportingCurrency };
+
+  // Checked on the way out as well as on the way in: an account's currency can
+  // change under the same id, and an earlier row would then be in the old one.
+  if (isUnconverted(account, reportingCurrency)) {
+    return { ...base, method: 'recorded', points: [], unconverted: true };
+  }
 
   if ((category === 'cash' || category === 'credit') && account.source !== 'manual') {
     const observed = observedAt(account);
     const anchorDate = calendarDateInTimeZone(observed ? new Date(observed) : input.computedAt, timeZone);
     const points = walkBackFromTransactions(account, input.transactions, reportingCurrency, anchorDate);
     if (points && points.length >= 2) {
-      return { accountId: id, measure, method: 'transactions', currency: reportingCurrency, points };
+      return { ...base, method: 'transactions', points, unconverted: false };
     }
   }
 
   const displayBalances = isRecord(input.displayBalances) ? input.displayBalances : {};
   const current: RecordedAccountValue = {
-    value: recordableValue(account, id, displayBalances),
+    value: recordableValue(account, id, displayBalances, reportingCurrency),
     observedAt: observedAt(account),
   };
   return {
-    accountId: id,
-    measure,
+    ...base,
     method: 'recorded',
-    currency: reportingCurrency,
+    unconverted: false,
     points: recordedSeries(id, input.recorded, current, timeZone),
   };
 }

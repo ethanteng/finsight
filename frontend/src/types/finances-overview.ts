@@ -137,7 +137,10 @@ export interface AccountValueHistory {
   measure: 'balance' | 'owed' | 'value';
   /** Rebuilt from posted transactions, or the values Linc recorded. */
   method: 'transactions' | 'recorded';
+  /** The reporting currency every point is in. */
   currency: string;
   /** Oldest first, one per calendar day (`YYYY-MM-DD`), each the value at that day's end. */
   points: Array<{ date: string; value: number }>;
+  /** The balance is in another currency, which Linc does not convert, so there are no points. */
+  unconverted: boolean;
 }
