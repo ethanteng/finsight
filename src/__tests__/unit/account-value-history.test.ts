@@ -135,6 +135,18 @@ describe('buildAccountValueHistory: cash accounts and cards', () => {
     expect(history.points[history.points.length - 1]).toEqual({ date: '2026-11-12', value: 1000 });
   });
 
+  it('falls back to recorded values when a transaction has no amount', () => {
+    const history = buildAccountValueHistory(input({
+      transactions: [
+        { transaction_id: 't1', account_id: 'chk-1', date: '2026-11-18', amount: 50 },
+        // Null is missing, not zero. Number(null) is 0, which would keep the walk.
+        { transaction_id: 't2', account_id: 'chk-1', date: '2026-11-19', amount: null },
+      ],
+    }));
+    expect(history.method).toBe('recorded');
+    expect(history.points).toEqual([{ date: '2026-11-20', value: 1000 }]);
+  });
+
   it('falls back to recorded values when a transaction is in another currency', () => {
     const history = buildAccountValueHistory(input({
       transactions: [

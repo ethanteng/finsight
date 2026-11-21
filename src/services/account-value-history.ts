@@ -199,6 +199,18 @@ function toCents(value: number): number {
 }
 
 /**
+ * The provider's own amount, in dollars: positive when money leaves the account.
+ * Missing is null. `Number(null)` is 0, so a missing amount must not be coerced
+ * or the walk would treat it as a zero transaction and keep going.
+ */
+function providerAmount(transaction: any): number | null {
+  const raw = transaction?.source_amount ?? transaction?.sourceAmount ?? transaction?.amount;
+  if (typeof raw === 'number') return finite(raw);
+  if (typeof raw === 'string' && raw.trim()) return finite(Number(raw));
+  return null;
+}
+
+/**
  * Rebuild a cash account's or card's end-of-day balances from its posted
  * transactions, or null when they cannot honestly explain it: no reported
  * balance, or a transaction in another currency or with no usable date or
@@ -229,8 +241,7 @@ function walkBackFromTransactions(
       seen.add(transactionId);
     }
     const currency = String(transaction?.iso_currency_code || transaction?.currency || reportingCurrency).toUpperCase();
-    // The provider's own amount: positive when money leaves the account.
-    const amount = finite(Number(transaction?.source_amount ?? transaction?.sourceAmount ?? transaction?.amount));
+    const amount = providerAmount(transaction);
     const date = calendarDateFrom(transaction?.date ?? transaction?.posted_date);
     if (currency !== reportingCurrency || amount === null || !date) return null;
     netCentsByDate.set(date, (netCentsByDate.get(date) ?? 0) + toCents(amount));
