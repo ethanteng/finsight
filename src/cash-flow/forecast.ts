@@ -50,6 +50,7 @@ import {
 import {
   buildCashPosition,
   cashMilestones,
+  withoutMarkedPayments,
   type CashPositionHappenedItem,
   type CashPositionItem,
   type CashPositionUnavailableReason,
@@ -1700,8 +1701,8 @@ export interface CashFlowPositionSummary {
   upcoming: CashPositionItem[];
   /**
    * What the user marked as already happened among the items the position
-   * covers: counted on the first forecast day, or already in the reported
-   * balance once the data shows it posted. Never in `upcoming`.
+   * covers. The user says the balance already has them, so they are counted
+   * on no day, and never in `upcoming`.
    */
   happened: CashPositionHappenedItem[];
   /** What arrives and leaves every day without being listed in `upcoming`: typical rates and transfers that run as a rate. Null when unavailable. */
@@ -1727,13 +1728,21 @@ export interface CashFlowPositionSummary {
   cardsLeftOut: Array<{ accountId: string; name: string; reason: 'no_balance' | 'no_pace' }>;
 }
 
-function cardOutcome(projection: CardProjection | null, forecastStart: CalendarDate): CardOutcome | null {
+/**
+ * What a card projection comes to. `paying` is the projection its payments are
+ * read from, when the cash position counts them differently: a payment day the
+ * user marked as already happened is skipped there (`withoutMarkedPayments`),
+ * so the next payment the page names is the one cash still makes. Everything
+ * else stays on the card model's own projection.
+ */
+function cardOutcome(projection: CardProjection | null, forecastStart: CalendarDate, paying: CardProjection | null = projection): CardOutcome | null {
   if (!projection) return null;
+  const payments = (paying ?? projection).payments;
   // Payments are in date order and unrounded; a day can hold more than one,
   // such as the usual payment and a one-time extra.
-  const total = (payments: CardProjection['payments']) =>
-    roundCents(payments.reduce((sum, payment) => sum + payment.amount, 0));
-  const firstDate = projection.payments[0]?.date ?? null;
+  const total = (list: CardProjection['payments']) =>
+    roundCents(list.reduce((sum, payment) => sum + payment.amount, 0));
+  const firstDate = payments[0]?.date ?? null;
   const twelveMonthsOut = addMonths(forecastStart, 12);
   return {
     paidOffBy: projection.paidOffBy,
@@ -1742,9 +1751,9 @@ function cardOutcome(projection: CardProjection | null, forecastStart: CalendarD
     interestTotal: projection.interestTotal,
     balanceInTwelveMonths: projection.months[11]?.endBalance ?? projection.months[projection.months.length - 1]?.endBalance ?? null,
     nextPayment: firstDate
-      ? { date: firstDate, amount: total(projection.payments.filter(payment => payment.date === firstDate)) }
+      ? { date: firstDate, amount: total(payments.filter(payment => payment.date === firstDate)) }
       : null,
-    paymentsTwelveMonths: total(projection.payments.filter(payment => payment.date < twelveMonthsOut)),
+    paymentsTwelveMonths: total(payments.filter(payment => payment.date < twelveMonthsOut)),
     months: projection.months.map(month => ({
       month: month.month,
       payment: month.payment,
@@ -1755,7 +1764,7 @@ function cardOutcome(projection: CardProjection | null, forecastStart: CalendarD
 }
 
 export function summarizeCards(model: CashFlowModel): CashFlowCardSummary[] {
-  return model.cards.map(card => cardSummary(card, model.forecastStart));
+  return model.cards.map(card => cardSummary(card, model));
 }
 
 /**
@@ -1778,14 +1787,18 @@ function paceMatch(current: CardProjection | null, planned: CardProjection | nul
   return sameDays ? 'exactly' : 'monthly';
 }
 
-function cardSummary(card: CardModel, forecastStart: CalendarDate): CashFlowCardSummary {
+function cardSummary(card: CardModel, model: CashFlowModel): CashFlowCardSummary {
+  const forecastStart = model.forecastStart;
   const hasPlans = card.plans.length > 0;
   const current = card.currentPace;
   const planned = hasPlans ? card.projection : null;
+  // The payments the cash position counts: without the days the user marked as already happened.
+  const paying = (projection: CardProjection | null, plans: PlannedCashFlowEvent[]) =>
+    projection ? withoutMarkedPayments(model, card, plans, projection).projection : null;
   // "Now" is today's state whatever the plans: a plan that clears the card this
   // month still starts from a carried balance. With no usual pace to say
   // otherwise, a card that owes anything is carrying it.
-  const withPlans = cardOutcome(planned, forecastStart);
+  const withPlans = cardOutcome(planned, forecastStart, paying(planned, card.plans));
   if (withPlans) withPlans.carryingBalanceNow = current ? current.carryingBalanceNow : (card.terms.balance ?? 0) > 0;
   const saved = current && planned && current.interestTwelveMonths !== null && planned.interestTwelveMonths !== null
     && current.interestTotal !== null && planned.interestTotal !== null
@@ -1806,7 +1819,7 @@ function cardSummary(card: CardModel, forecastStart: CalendarDate): CashFlowCard
     behavior: card.baseline.behavior,
     usualMonthlyPayment: card.baseline.monthlyPayment,
     paymentSource: card.paymentSource,
-    currentPace: cardOutcome(current, forecastStart),
+    currentPace: cardOutcome(current, forecastStart, paying(current, [])),
     withPlans,
     interestSaved: saved,
     plansMatchCurrentPace: paceMatch(current, planned),
@@ -1921,7 +1934,10 @@ function positionSummary(
       };
     }),
     upcoming: position.itemsBetween(model.forecastStart, addDays(model.forecastStart, UPCOMING_DAYS)),
-    happened: position.happened,
+    // The page that counted a mark on the first forecast day still reads these.
+    // Zero keeps its "Starts from" line on the reported balance; `inBalance`
+    // keeps the row from saying the item is counted today.
+    happened: position.happened.map(item => ({ ...item, counted: 0, inBalance: true as const })),
     spreadPerDay: position.spreadPerDay,
     lowPoint: position.lowPoint(maxDate(range.from, model.forecastStart), range.toExclusive),
     milestones: milestones.points,

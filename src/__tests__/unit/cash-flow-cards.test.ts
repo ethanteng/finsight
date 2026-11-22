@@ -283,6 +283,38 @@ describe('projectCard', () => {
   });
 });
 
+describe('projectCard with payment days the user marked as already paid', () => {
+  const skipNovember = { skipPaymentsOn: new Set(['2026-11-15']) };
+
+  it('does not pay a card paid in full again, and carries nothing into interest', () => {
+    const plain = project({ behavior: 'pays_in_full', monthlyPayment: null });
+    const marked = project({ behavior: 'pays_in_full', monthlyPayment: null }, [], {}, skipNovember);
+    expect(plain.payments[0]).toEqual({ date: '2026-11-15', amount: 4000 });
+    expect(marked.payments.some(payment => payment.date === '2026-11-15')).toBe(false);
+    // The balance the card reported already has the payment, as one made before the forecast would.
+    expect(marked.months[0]).toMatchObject({ payment: 0, carried: 0, interest: 0, endBalance: 4800 });
+    // December pays what the card still owes, so nothing is left behind.
+    expect(marked.payments[0]).toEqual({ date: '2026-12-15', amount: 4800 });
+    expect(plain.payments[1]).toEqual({ date: '2026-12-15', amount: 800 });
+    expect(marked.months[1].endBalance).toBeCloseTo(plain.months[1].endBalance, 2);
+  });
+
+  it('lets a card that carries a balance keep its usual payment, with interest on what it still owes', () => {
+    const plain = project(carrying);
+    const marked = project(carrying, [], {}, skipNovember);
+    expect(marked.payments.some(payment => payment.date === '2026-11-15')).toBe(false);
+    expect(marked.months[0]).toMatchObject({ payment: 0, carried: 4000, interest: 80 });
+    expect(plain.months[0]).toMatchObject({ payment: 1000, carried: 3000, interest: 60 });
+    expect(marked.payments[0]).toEqual({ date: '2026-12-15', amount: 1000 });
+  });
+
+  it('skips a planned extra on the marked day too', () => {
+    const extra = plan({ paymentMode: 'fixed', amount: 500, startDate: '2026-11-15' });
+    const marked = project(carrying, [extra], {}, skipNovember);
+    expect(marked.months[0].payment).toBe(0);
+  });
+});
+
 describe('canProjectCard', () => {
   const unknown: CardBaseline = { behavior: 'unknown', monthlyPayment: null };
   const can = (baseline: CardBaseline, plans: PlannedCashFlowEvent[], overrides: Partial<CardTerms> = {}) => canProjectCard({

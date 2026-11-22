@@ -1,9 +1,8 @@
 /**
- * Items the user marked as already happened: a paycheck pending at the bank,
- * a bill paid early, a planned transfer already made. The forecast starts from
- * the reported balance, which leaves pending transactions out, so a marked
- * item moves to the first forecast day -- and once the data shows it posted,
- * the reported balance has it and it is never counted twice.
+ * Items the user marked as already happened: a paycheck the balance already
+ * has while the bank shows it pending, a bill paid early, a planned transfer
+ * already made. The user is saying the live balance has it, so the forecast
+ * skips it -- counted on no day, never twice.
  */
 
 import { addDays, addMonths } from '../../cash-flow/calendar';
@@ -11,6 +10,7 @@ import {
   buildCashFlowModel,
   buildCashFlowReport,
   forecastTotals,
+  summarizeCards,
   type CashFlowModelInput,
 } from '../../cash-flow/forecast';
 import {
@@ -21,7 +21,7 @@ import {
 } from '../../cash-flow/happened';
 import { buildCashPosition, happenedTarget, type CashPosition } from '../../cash-flow/position';
 import type { PlannedCashFlowEvent } from '../../cash-flow/planned-events';
-import { ACCOUNTS, CARD_PAYMENT_CATEGORY, householdTransactions, tx } from './factories/cash-flow.factory';
+import { ACCOUNTS, householdTransactions } from './factories/cash-flow.factory';
 
 const FROM = '2026-06-03';
 const THROUGH = '2026-09-30';
@@ -50,7 +50,7 @@ function available(position: CashPosition) {
 
 /** A mark, with the amount the item moved when the user marked it. */
 const mark = (ref: OccurrenceRef, amount: number, overrides: Partial<HappenedMark> = {}): HappenedMark => ({
-  id: 'mark', label: 'Marked', amount, markedOn: START, ...ref, ...overrides,
+  id: 'mark', label: 'Marked', amount, ...ref, ...overrides,
 });
 
 const event = (overrides: Partial<PlannedCashFlowEvent>): PlannedCashFlowEvent => ({
@@ -68,18 +68,18 @@ describe('items marked as already happened', () => {
   describe('a regular paycheck', () => {
     const paycheck: OccurrenceRef = { source: 'stream', sourceId: PAYROLL, date: '2026-10-09' };
 
-    it('counts on the first forecast day instead of its own, once', () => {
+    it('is skipped: counted neither on its day nor on the first', () => {
       const plain = available(buildCashPosition(model()));
       const marked = available(buildCashPosition(model({ happened: [mark(paycheck, 2500)] })));
-      // The reported balance is still where the position starts.
+      // The reported balance is still where the position starts, and already has it.
       expect(marked.startingCash).toBe(plain.startingCash);
-      // From the first day, cash has the paycheck...
-      expect(marked.cashBefore('2026-10-02') - plain.cashBefore('2026-10-02')).toBeCloseTo(2500, 2);
-      expect(marked.cashBefore('2026-10-09') - plain.cashBefore('2026-10-09')).toBeCloseTo(2500, 2);
-      // ...and from its own day on, nothing differs: it is counted once.
-      expect(marked.cashBefore('2026-10-10')).toBeCloseTo(plain.cashBefore('2026-10-10'), 2);
-      expect(marked.cashBefore('2027-03-01')).toBeCloseTo(plain.cashBefore('2027-03-01'), 2);
-      expect(marked.moneyInBetween(START, '2026-11-01')).toBeCloseTo(plain.moneyInBetween(START, '2026-11-01'), 2);
+      // Nothing is added on the first day...
+      expect(marked.cashBefore('2026-10-02')).toBeCloseTo(plain.cashBefore('2026-10-02'), 2);
+      expect(marked.cashBefore('2026-10-09')).toBeCloseTo(plain.cashBefore('2026-10-09'), 2);
+      // ...and it is not added on its own day either.
+      expect(marked.cashBefore('2026-10-10') - plain.cashBefore('2026-10-10')).toBeCloseTo(-2500, 2);
+      expect(marked.cashBefore('2027-03-01') - plain.cashBefore('2027-03-01')).toBeCloseTo(-2500, 2);
+      expect(marked.moneyInBetween(START, '2026-11-01') - plain.moneyInBetween(START, '2026-11-01')).toBeCloseTo(-2500, 2);
     });
 
     it('leaves the coming-up list for the list of what happened', () => {
@@ -92,8 +92,6 @@ describe('items marked as already happened', () => {
         label: 'GUSTO PAYROLL SMITH',
         kind: 'income',
         amount: 2500,
-        counted: 2500,
-        inBalance: false,
       }]);
       // The next paycheck is still coming up on its day.
       expect(listed(marked, { ...paycheck, date: '2026-10-23' })).toHaveLength(1);
@@ -119,9 +117,9 @@ describe('items marked as already happened', () => {
       expect(plain.itemsBetween('2026-09-27', '2026-09-28')).toEqual([
         expect.objectContaining({ kind: 'income', amount: 2500, ref: late }),
       ]);
-      const marked = available(buildCashPosition(build([mark(late, 2500, { markedOn: '2026-09-27' })])));
-      expect(marked.happened).toEqual([expect.objectContaining({ ref: late, counted: 2500 })]);
-      expect(marked.cashBefore('2026-09-28')).toBeCloseTo(plain.cashBefore('2026-09-28'), 2);
+      const marked = available(buildCashPosition(build([mark(late, 2500)])));
+      expect(marked.happened).toEqual([expect.objectContaining({ ref: late, amount: 2500 })]);
+      expect(marked.cashBefore('2026-09-28') - plain.cashBefore('2026-09-28')).toBeCloseTo(-2500, 2);
     });
 
     it('names nothing once the paycheck has posted', () => {
@@ -139,52 +137,22 @@ describe('items marked as already happened', () => {
     const repair = event({});
     const occurrence: OccurrenceRef = { source: 'planned', sourceId: 'event', date: '2026-10-15' };
 
-    it('leaves cash on the first day', () => {
+    it('never leaves cash', () => {
       const plain = available(buildCashPosition(model({ plannedEvents: [repair] })));
       const marked = available(buildCashPosition(model({ plannedEvents: [repair], happened: [mark(occurrence, 800)] })));
-      expect(marked.cashBefore('2026-10-02') - plain.cashBefore('2026-10-02')).toBeCloseTo(-800, 2);
-      expect(marked.cashBefore('2026-10-16')).toBeCloseTo(plain.cashBefore('2026-10-16'), 2);
-      expect(marked.happened).toEqual([expect.objectContaining({ kind: 'planned_expense', amount: -800, counted: -800, inBalance: false })]);
-    });
-
-    it('is not counted again once the data shows it posted, at about the amount planned', () => {
-      // Paid on the 29th for a little more than planned, and in the data.
-      const paid = [tx('checking', '2026-09-29', 'expense', 812, 'MIDAS AUTO', { merchant_name: 'Midas' })];
-      const plain = available(buildCashPosition(model({ plannedEvents: [repair] }, paid)));
-      const marked = available(buildCashPosition(model({ plannedEvents: [repair], happened: [mark(occurrence, 800, { markedOn: '2026-09-30' })] }, paid)));
-      expect(marked.happened).toEqual([expect.objectContaining({ amount: -800, counted: 0, inBalance: true })]);
-      // Nothing on the first day, and nothing on the 15th either.
       expect(marked.cashBefore('2026-10-02')).toBeCloseTo(plain.cashBefore('2026-10-02'), 2);
       expect(marked.cashBefore('2026-10-16') - plain.cashBefore('2026-10-16')).toBeCloseTo(800, 2);
+      expect(marked.happened).toEqual([expect.objectContaining({ kind: 'planned_expense', amount: -800 })]);
     });
 
-    it('does not take an older or different payment for it', () => {
-      const older = [tx('checking', '2026-09-20', 'expense', 800, 'MIDAS AUTO', { merchant_name: 'Midas' })];
-      const other = [tx('checking', '2026-09-30', 'expense', 450, 'MIDAS AUTO', { merchant_name: 'Midas' })];
-      for (const extra of [older, other]) {
-        const marked = available(buildCashPosition(model({ plannedEvents: [repair], happened: [mark(occurrence, 800)] }, extra)));
-        expect(marked.happened).toEqual([expect.objectContaining({ counted: -800, inBalance: false })]);
-      }
-    });
-
-    it('lets one posted payment explain only one similar item', () => {
-      const tires = event({ id: 'tires', label: 'Tires', amount: 500, startDate: '2026-10-20' });
-      const brakes = event({ id: 'brakes', label: 'Brakes', amount: 500, startDate: '2026-10-22' });
-      const paid = [tx('checking', '2026-09-30', 'expense', 500, 'TIRES PLUS')];
-      const marks = [
-        mark({ source: 'planned', sourceId: 'tires', date: '2026-10-20' }, 500, { id: 'tires-mark' }),
-        mark({ source: 'planned', sourceId: 'brakes', date: '2026-10-22' }, 500, { id: 'brakes-mark' }),
-      ];
-      const marked = available(buildCashPosition(model({ plannedEvents: [tires, brakes], happened: marks }, paid)));
-      expect(marked.happened).toEqual([
-        expect.objectContaining({ markId: 'tires-mark', counted: 0, inBalance: true }),
-        expect.objectContaining({ markId: 'brakes-mark', counted: -500, inBalance: false }),
-      ]);
-      // Brakes still leave on the first day. Tires are already in the balance, so
-      // they are not taken out again on the 20th, and cash stays that much higher.
-      const plain = available(buildCashPosition(model({ plannedEvents: [tires, brakes] }, paid)));
-      expect(marked.cashBefore('2026-10-02') - plain.cashBefore('2026-10-02')).toBeCloseTo(-500, 2);
-      expect(marked.cashBefore('2026-10-23') - plain.cashBefore('2026-10-23')).toBeCloseTo(500, 2);
+    it('skips what the item is planned at now, and lists what the user marked', () => {
+      // Marked at $800, then the plan was raised to $900: it is still the
+      // occurrence the user said the balance has.
+      const raised = event({ amount: 900 });
+      const plain = available(buildCashPosition(model({ plannedEvents: [raised] })));
+      const marked = available(buildCashPosition(model({ plannedEvents: [raised], happened: [mark(occurrence, 800)] })));
+      expect(marked.happened).toEqual([expect.objectContaining({ amount: -800 })]);
+      expect(marked.cashBefore('2026-10-16') - plain.cashBefore('2026-10-16')).toBeCloseTo(900, 2);
     });
   });
 
@@ -192,128 +160,62 @@ describe('items marked as already happened', () => {
     const move = event({ label: 'Savings', kind: 'transfer', amount: 3000, startDate: '2026-10-15', accountId: 'checking', toAccountId: 'savings' });
     const occurrence: OccurrenceRef = { source: 'planned', sourceId: 'event', date: '2026-10-15' };
 
-    it('moves each leg to the first day, leaving their total as it was', () => {
+    it('skips both legs, leaving their total as it was', () => {
       const plain = model({ plannedEvents: [move] });
       const marked = model({ plannedEvents: [move], happened: [mark(occurrence, 3000)] });
       const whole = available(buildCashPosition(marked));
-      expect(whole.happened).toEqual([expect.objectContaining({ kind: 'planned_transfer', amount: 0, counted: 0, inBalance: false })]);
+      expect(whole.happened).toEqual([expect.objectContaining({
+        kind: 'planned_transfer', amount: 0, transfer: { fromAccountId: 'checking', toAccountId: 'savings', amount: 3000 },
+      })]);
       for (const date of DATES) expect(whole.cashBefore(date)).toBeCloseTo(available(buildCashPosition(plain)).cashBefore(date), 2);
 
       const checking = available(buildCashPosition(marked, ['checking']));
       const savings = available(buildCashPosition(marked, ['savings']));
-      expect(checking.cashBefore('2026-10-02') - available(buildCashPosition(plain, ['checking'])).cashBefore('2026-10-02')).toBeCloseTo(-3000, 2);
-      expect(savings.cashBefore('2026-10-02') - available(buildCashPosition(plain, ['savings'])).cashBefore('2026-10-02')).toBeCloseTo(3000, 2);
-      expect(checking.happened).toEqual([expect.objectContaining({ kind: 'planned_transfer_out', amount: -3000, counted: -3000 })]);
+      const plainChecking = available(buildCashPosition(plain, ['checking']));
+      const plainSavings = available(buildCashPosition(plain, ['savings']));
+      // Each account already has its side, so neither moves on any day.
+      expect(checking.cashBefore('2026-10-02')).toBeCloseTo(plainChecking.cashBefore('2026-10-02'), 2);
+      expect(checking.cashBefore('2026-10-16') - plainChecking.cashBefore('2026-10-16')).toBeCloseTo(3000, 2);
+      expect(savings.cashBefore('2026-10-16') - plainSavings.cashBefore('2026-10-16')).toBeCloseTo(-3000, 2);
+      expect(checking.happened).toEqual([expect.objectContaining({ kind: 'planned_transfer_out', amount: -3000 })]);
       for (const date of DATES) {
         expect(checking.cashBefore(date) + savings.cashBefore(date)).toBeCloseTo(whole.cashBefore(date), 1);
       }
-    });
-
-    it('counts only the leg the data does not show yet', () => {
-      // The money has left checking, and savings hasn't reported it arriving.
-      const left = [tx('checking', '2026-09-30', 'transfer_out', 3000, 'ONLINE TRANSFER TO SAV 5678')];
-      const plain = available(buildCashPosition(model({ plannedEvents: [move] }, left)));
-      const whole = available(buildCashPosition(model({ plannedEvents: [move], happened: [mark(occurrence, 3000)] }, left)));
-      expect(whole.happened).toEqual([expect.objectContaining({ amount: 0, counted: 3000, inBalance: false })]);
-      expect(whole.cashBefore('2026-10-02') - plain.cashBefore('2026-10-02')).toBeCloseTo(3000, 2);
-      expect(whole.cashBefore('2026-10-16') - plain.cashBefore('2026-10-16')).toBeCloseTo(3000, 2);
     });
   });
 
   describe('a card payment', () => {
     const payment: OccurrenceRef = { source: 'card', sourceId: 'card', date: '2026-10-20' };
 
-    it('leaves cash and comes off the card on the first day', () => {
+    it('is skipped in cash and on the card', () => {
       const plain = available(buildCashPosition(model()));
       const marked = available(buildCashPosition(model({ happened: [mark(payment, 1800)] })));
-      expect(marked.cashBefore('2026-10-02') - plain.cashBefore('2026-10-02')).toBeCloseTo(-1800, 2);
-      expect(marked.cardDebtBefore('2026-10-02') - plain.cardDebtBefore('2026-10-02')).toBeCloseTo(-1800, 2);
-      expect(marked.cardPaymentsBetween(START, '2026-10-02')).toBeCloseTo(1800, 2);
-      for (const date of ['2026-10-21', '2026-11-01', '2027-03-01']) {
-        expect(marked.cashBefore(date)).toBeCloseTo(plain.cashBefore(date), 2);
-        expect(marked.cardDebtBefore(date)).toBeCloseTo(plain.cardDebtBefore(date), 2);
+      expect(marked.cashBefore('2026-10-02')).toBeCloseTo(plain.cashBefore('2026-10-02'), 2);
+      expect(marked.cardDebtBefore('2026-10-02')).toBeCloseTo(plain.cardDebtBefore('2026-10-02'), 2);
+      expect(plain.cardPaymentsBetween(START, '2026-11-01') - marked.cardPaymentsBetween(START, '2026-11-01')).toBeCloseTo(1800, 2);
+      // Both balances already have it, so neither moves for it on the 20th.
+      for (const date of ['2026-10-21', '2026-11-01']) {
+        expect(marked.cashBefore(date) - plain.cashBefore(date)).toBeCloseTo(1800, 2);
+        expect(marked.cardDebtBefore(date) - plain.cardDebtBefore(date)).toBeCloseTo(1800, 2);
       }
-      expect(marked.happened).toEqual([expect.objectContaining({ label: 'Rewards Card', kind: 'card_payment', amount: -1800, counted: -1800 })]);
+      expect(marked.happened).toEqual([{ markId: 'mark', ref: payment, label: 'Rewards Card', kind: 'card_payment', amount: -1800 }]);
       expect(listed(marked, payment)).toEqual([]);
     });
 
-    it('keeps each side where its own data has it', () => {
-      // The card shows the payment; the checking account hasn't posted it yet.
-      // The provider's due date keeps the payment on the 20th; without one, the
-      // card's last payment would set its day.
-      const received = [tx('card', '2026-09-30', 'transfer_out', -1800, 'PAYMENT THANK YOU', { personal_finance_category: CARD_PAYMENT_CATEGORY })];
+    it('skips what the card is projected to be paid now, and lists what the user marked', () => {
+      // New purchases since the mark raise what the card is projected to be paid.
       const accounts = [...ACCOUNTS, SAVINGS].map(account => account.account_id === 'card'
-        ? { ...account, liabilityDetails: [{ kind: 'credit', nextPaymentDueDate: '2026-10-20' }] }
+        ? { ...account, balance: { current: 2100 } }
         : account);
-      const plain = available(buildCashPosition(model({ accounts }, received)));
-      const marked = available(buildCashPosition(model({ accounts, happened: [mark(payment, 1800)] }, received)));
-      expect(marked.cardDebtBefore('2026-10-02')).toBeCloseTo(plain.cardDebtBefore('2026-10-02'), 2);
-      expect(marked.cashBefore('2026-10-02') - plain.cashBefore('2026-10-02')).toBeCloseTo(-1800, 2);
-      expect(marked.happened).toEqual([expect.objectContaining({ counted: -1800, inBalance: false })]);
-    });
-
-    it('reconciles the payment the user marked, not the smaller one projected after it posts', () => {
-      // Marked on Oct 1, paid in full on Oct 2. The refreshed card owes only
-      // what was bought since, so it projects $300 for the 20th: that is not
-      // the payment that happened, and must not be counted as one.
-      const through = '2026-10-03';
-      const paid = [
-        tx('checking', '2026-10-02', 'transfer_out', 1800, 'CARD CO AUTOPAY', { personal_finance_category: CARD_PAYMENT_CATEGORY }),
-        tx('card', '2026-10-02', 'transfer_out', -1800, 'PAYMENT THANK YOU', { personal_finance_category: CARD_PAYMENT_CATEGORY }),
-      ];
-      const accounts = [...ACCOUNTS, SAVINGS].map(account => account.account_id === 'card'
-        ? { ...account, balance: { current: 300 }, liabilityDetails: [{ kind: 'credit', nextPaymentDueDate: '2026-10-20' }] }
-        : account);
-      const build = (happened: HappenedMark[]) => buildCashFlowModel({
-        transactions: [...householdTransactions(FROM, through), ...paid],
-        accounts,
-        plannedEvents: [],
-        dataThrough: through,
-        today: '2026-10-04',
-        happened,
-      });
-      const refreshed = build([]);
-      expect(refreshed.cards[0].projection!.payments[0]).toEqual({ date: '2026-10-20', amount: 300 });
-
-      const plain = available(buildCashPosition(refreshed));
-      const marked = available(buildCashPosition(build([mark(payment, 1800)])));
-      expect(marked.happened).toEqual([expect.objectContaining({ amount: -1800, counted: 0, inBalance: true })]);
-      // Nothing more leaves on the first day: both balances already have the payment.
-      expect(marked.cashBefore('2026-10-05')).toBeCloseTo(plain.cashBefore('2026-10-05'), 2);
-      expect(marked.cardDebtBefore('2026-10-05')).toBeCloseTo(plain.cardDebtBefore('2026-10-05'), 2);
-      // This month's payment is the one that happened, so the $300 is not paid again on the 20th.
-      expect(marked.cashBefore('2026-10-21') - plain.cashBefore('2026-10-21')).toBeCloseTo(300, 2);
-    });
-
-    it('counts only what has not posted of a day’s payments', () => {
-      // The 20th carries the usual statement payment and a planned $500 extra.
-      // The statement has posted on both sides; the extra has not.
-      const extra: PlannedCashFlowEvent = event({ id: 'extra', label: 'Extra', kind: 'card_payment', amount: 500, startDate: '2026-10-20', accountId: 'card', paymentMode: 'fixed' });
-      const statement = [
-        tx('checking', '2026-09-30', 'transfer_out', 1800, 'CARD CO AUTOPAY', { personal_finance_category: CARD_PAYMENT_CATEGORY }),
-        tx('card', '2026-09-30', 'transfer_out', -1800, 'PAYMENT THANK YOU', { personal_finance_category: CARD_PAYMENT_CATEGORY }),
-      ];
-      const accounts = [...ACCOUNTS, SAVINGS].map(account => account.account_id === 'card'
-        ? { ...account, liabilityDetails: [{ kind: 'credit', nextPaymentDueDate: '2026-10-20' }] }
-        : account);
-      const plainModel = model({ accounts, plannedEvents: [extra] }, statement);
-      const total = plainModel.cards[0].projection!.payments
+      const plainModel = model({ accounts });
+      const projectedNow = plainModel.cards[0].projection!.payments
         .filter(item => item.date === '2026-10-20')
         .reduce((sum, item) => sum + item.amount, 0);
-      // The extra is no more than the card owes once the statement is paid.
-      const extraPaid = total - 1800;
-      expect(extraPaid).toBeGreaterThan(400);
-
+      expect(projectedNow).toBeGreaterThan(1800);
       const plain = available(buildCashPosition(plainModel));
-      const marked = available(buildCashPosition(model({ accounts, plannedEvents: [extra], happened: [mark(payment, total)] }, statement)));
-      expect(marked.happened).toEqual([expect.objectContaining({ inBalance: false })]);
-      expect(marked.happened[0].amount).toBeCloseTo(-total, 2);
-      expect(marked.happened[0].counted).toBeCloseTo(-extraPaid, 2);
-      // Only the extra leaves on the first day, in cash and off the card...
-      expect(marked.cashBefore('2026-10-02') - plain.cashBefore('2026-10-02')).toBeCloseTo(-extraPaid, 2);
-      expect(marked.cardDebtBefore('2026-10-02') - plain.cardDebtBefore('2026-10-02')).toBeCloseTo(-extraPaid, 2);
-      // ...and the statement is not paid again on the 20th.
-      expect(marked.cashBefore('2026-10-21') - plain.cashBefore('2026-10-21')).toBeCloseTo(1800, 2);
+      const marked = available(buildCashPosition(model({ accounts, happened: [mark(payment, 1800)] })));
+      expect(marked.happened).toEqual([expect.objectContaining({ amount: -1800 })]);
+      expect(marked.cashBefore('2026-10-21') - plain.cashBefore('2026-10-21')).toBeCloseTo(projectedNow, 2);
     });
 
     it('still lists a marked payment for a card the accounts no longer pay', () => {
@@ -326,24 +228,53 @@ describe('items marked as already happened', () => {
       expect(plainModel.cards[0].paymentSource).toBe('other');
       const plain = available(buildCashPosition(plainModel));
       const marked = available(buildCashPosition(build([mark(payment, 1800)])));
-      expect(marked.happened).toEqual([expect.objectContaining({
-        markId: 'mark', amount: -1800, counted: 0, inBalance: false, paidFromElsewhere: true,
-      })]);
-      // No cash moves; the card owes less from the first day.
-      expect(marked.cashBefore('2026-10-02')).toBeCloseTo(plain.cashBefore('2026-10-02'), 2);
-      expect(marked.cardDebtBefore('2026-10-02') - plain.cardDebtBefore('2026-10-02')).toBeCloseTo(-1800, 2);
+      expect(marked.happened).toEqual([{ markId: 'mark', ref: payment, label: 'Rewards Card', kind: 'card_payment', amount: -1800 }]);
+      // No cash moves either way; the card is not paid again on the 20th.
+      for (const date of DATES) expect(marked.cashBefore(date)).toBeCloseTo(plain.cashBefore(date), 2);
+      expect(marked.cardDebtBefore('2026-10-02')).toBeCloseTo(plain.cardDebtBefore('2026-10-02'), 2);
+      expect(marked.cardDebtBefore('2026-10-21') - plain.cardDebtBefore('2026-10-21')).toBeGreaterThan(0);
+      // The card is projected again without it, so November's payment clears it.
+      expect(marked.cardDebtBefore('2026-12-01')).toBeCloseTo(plain.cardDebtBefore('2026-12-01'), 2);
     });
 
-    it('counts the amount marked while the payment is still pending', () => {
-      // New purchases since the mark raise what the card is projected to be paid.
-      const accounts = [...ACCOUNTS, SAVINGS].map(account => account.account_id === 'card'
-        ? { ...account, balance: { current: 2100 } }
-        : account);
-      const plain = available(buildCashPosition(model({ accounts })));
-      const marked = available(buildCashPosition(model({ accounts, happened: [mark(payment, 1800)] })));
-      expect(marked.happened).toEqual([expect.objectContaining({ amount: -1800, counted: -1800, inBalance: false })]);
-      expect(marked.cashBefore('2026-10-02') - plain.cashBefore('2026-10-02')).toBeCloseTo(-1800, 2);
+    it('projects the card again without it, so later payments clear what it still owes', () => {
+      // The card is paid in full. With October's payment skipped, November's
+      // pays what October's would have, and no debt is left behind.
+      const plainModel = model();
+      const markedModel = model({ happened: [mark(payment, 1800)] });
+      expect(plainModel.cards[0].baseline.behavior).toBe('pays_in_full');
+      const plain = available(buildCashPosition(plainModel));
+      const marked = available(buildCashPosition(markedModel));
+      const paidInNovember = (position: Extract<CashPosition, { available: true }>) => position.cardPaymentsBetween('2026-11-01', '2026-12-01');
+      expect(paidInNovember(marked) - paidInNovember(plain)).toBeCloseTo(1800, 2);
+      expect(marked.itemsBetween('2026-11-01', '2026-12-01').filter(item => item.kind === 'card_payment')).toHaveLength(1);
+      for (const date of ['2026-12-01', '2027-03-01', '2027-09-01']) {
+        expect(marked.cardDebtBefore(date)).toBeCloseTo(plain.cardDebtBefore(date), 2);
+        expect(marked.cashBefore(date)).toBeCloseTo(plain.cashBefore(date), 2);
+      }
+      // A card paid in full carries nothing into interest for the skipped month.
+      expect(marked.cardDebtBefore('2026-11-01') - plain.cardDebtBefore('2026-11-01')).toBeCloseTo(1800, 2);
+      // A mark never changes what is spent, card interest included, nor the card model's own projection.
+      expect(forecastTotals(markedModel, START, '2027-10-01')).toEqual(forecastTotals(plainModel, START, '2027-10-01'));
+      expect(markedModel.cards[0].projection).toEqual(plainModel.cards[0].projection);
     });
+
+    it('names the payment cash still makes as the card’s next one', () => {
+      const plainModel = model();
+      const markedModel = model({ happened: [mark(payment, 1800)] });
+      const [plain] = summarizeCards(plainModel);
+      const [marked] = summarizeCards(markedModel);
+      expect(plain.currentPace!.nextPayment).toEqual({ date: '2026-10-20', amount: 1800 });
+      const november = plainModel.cards[0].projection!.payments.find(item => item.date === '2026-11-20')!.amount;
+      expect(marked.currentPace!.nextPayment!.date).toBe('2026-11-20');
+      expect(marked.currentPace!.nextPayment!.amount).toBeCloseTo(november + 1800, 2);
+      // A card paid in full pays the same over the year, a month later.
+      expect(marked.currentPace!.paymentsTwelveMonths).toBeCloseTo(plain.currentPace!.paymentsTwelveMonths, 2);
+      // The rest of the card's outlook stays on its own projection.
+      expect({ ...marked.currentPace!, nextPayment: null, paymentsTwelveMonths: 0 })
+        .toEqual({ ...plain.currentPace!, nextPayment: null, paymentsTwelveMonths: 0 });
+    });
+
   });
 
   it('keeps the accounts adding up to the whole', () => {
@@ -371,7 +302,9 @@ describe('items marked as already happened', () => {
   it('reports what happened beside what is coming up', () => {
     const paycheck: OccurrenceRef = { source: 'stream', sourceId: PAYROLL, date: '2026-10-09' };
     const report = buildCashFlowReport(model({ happened: [mark(paycheck, 2500)] }), { granularity: 'month', horizonMonths: 6 });
-    expect(report.position.happened).toEqual([expect.objectContaining({ ref: paycheck, counted: 2500 })]);
+    expect(report.position.happened).toEqual([expect.objectContaining({
+      ref: paycheck, amount: 2500, counted: 0, inBalance: true,
+    })]);
     expect(report.position.upcoming.some(item => occurrenceKey(item.ref) === occurrenceKey(paycheck))).toBe(false);
     expect(report.position.upcoming.find(item => item.kind === 'card_payment')?.ref).toEqual({ source: 'card', sourceId: 'card', date: '2026-10-20' });
   });

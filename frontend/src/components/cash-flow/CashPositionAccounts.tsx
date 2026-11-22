@@ -103,33 +103,11 @@ export function spreadNote(spread: CashFlowReport['position']['spreadPerDay']): 
   return `Everything else isn’t listed: it’s spread evenly across the days, about ${parts.join(' and ')} each day.`;
 }
 
-/**
- * What the items the user marked as already happened add to the cash the
- * position starts from: ", plus $3,031 you marked as already happened". Empty
- * when they add nothing, which includes when the bank's data already has them.
- */
-export function happenedStartNote(report: Pick<CashFlowReport, 'position'>): string {
-  const net = (report.position.happened ?? []).reduce((total, item) => total + item.counted, 0);
-  if (Math.round(net) === 0) return '';
-  return `, ${net > 0 ? 'plus' : 'less'} ${formatMoney(Math.abs(net))} you marked as already happened`;
-}
-
 /** An item's amount: a move between two accounts in view has no sign, since it leaves their total as it was. */
 function ItemAmount({ item }: { item: Pick<CashPositionItem, 'kind' | 'transfer' | 'amount'> }) {
   return item.kind === 'planned_transfer' && item.transfer
     ? <p className="font-bold tabular-nums text-[#102319]">{formatMoney(item.transfer.amount)}</p>
     : <p className={`font-bold tabular-nums ${item.amount < 0 ? 'text-[#9b4137]' : 'text-[#28704d]'}`}>{formatSignedMoney(item.amount)}</p>;
-}
-
-/** How a marked item is counted now, for its row. */
-function happenedStatus(item: CashPositionHappenedItem): string {
-  if (item.paidFromElsewhere) return 'paid from another account';
-  if (item.inBalance) return 'already in your balance';
-  // A payment that has partly posted counts only what hasn't.
-  if (item.kind === 'card_payment' && Math.round(Math.abs(item.counted)) < Math.round(Math.abs(item.amount))) {
-    return `${formatMoney(Math.abs(item.counted))} counted today, the rest already in your balance`;
-  }
-  return 'counted today';
 }
 
 const linkButtonClass = 'text-xs font-bold text-[#28704d] underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50';
@@ -144,9 +122,9 @@ const markButtonClass = 'mt-0.5 text-xs font-semibold text-[#66736b] underline d
 /**
  * The dated amounts coming up in the accounts the position covers, with the
  * balance after each day. Any of them can be marked as already happened -- a
- * paycheck pending at the bank, a bill paid early -- which counts it in today's
- * cash instead of on its date; marked items are listed above the rest, each
- * with an undo.
+ * paycheck the balance already has while the bank shows it pending, a bill
+ * paid early -- which skips it: the balance has it, so the forecast doesn't
+ * count it again. Marked items are listed above the rest, each with an undo.
  */
 export function UpcomingItems({ report, apiUrl, onChanged }: {
   report: Pick<CashFlowReport, 'position'>;
@@ -194,16 +172,15 @@ export function UpcomingItems({ report, apiUrl, onChanged }: {
       </p>
       {items.some(item => item.ref) && (
         <p className="mt-1 text-xs leading-5 text-[#66736b]">
-          Already paid or received one, like a paycheck still pending at your bank? Mark it as already happened and
-          it counts in today’s cash instead.
+          Already in your balance, like a paycheck your bank still shows as pending? Mark it as already happened and
+          the forecast skips it, so it isn’t counted twice.
         </p>
       )}
       {happened.length > 0 && (
         <section aria-labelledby="cash-flow-happened" className="mt-3 rounded-xl border border-[#28704d]/15 bg-[#f1f7ec] px-3 py-2.5">
           <h5 id="cash-flow-happened" className="text-xs font-bold text-[#102319]">Already happened</h5>
           <p className="mt-0.5 text-xs leading-5 text-[#66736b]">
-            You marked these as done, so they count in today’s cash instead of on their dates. Once your bank’s data
-            shows one, it’s in the balance and isn’t counted twice.
+            You marked these as already in your balance, so the forecast skips them and doesn’t count them again.
           </p>
           <ul className="mt-1 divide-y divide-[#102319]/10">
             {happened.map(item => (
@@ -211,8 +188,7 @@ export function UpcomingItems({ report, apiUrl, onChanged }: {
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-[#102319]">{item.label}</p>
                   <p className="text-xs text-[#66736b]">
-                    Expected {formatCalendarDate(item.ref.date)} · {KIND_WORDS[item.kind]}{transferRoute(item, names)}
-                    {' · '}{happenedStatus(item)}
+                    Expected {formatCalendarDate(item.ref.date)} · {KIND_WORDS[item.kind]}{transferRoute(item, names)} · skipped
                   </p>
                 </div>
                 <div className="shrink-0 text-right">

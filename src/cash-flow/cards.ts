@@ -236,6 +236,12 @@ export interface CardProjectionInput {
   plans: readonly PlannedCashFlowEvent[];
   forecastStart: CalendarDate;
   forecastEndLimit: CalendarDate;
+  /**
+   * Payment days the user marked as already happened: everything due those
+   * days is already in the reported balance, like a payment made before the
+   * forecast, so it is not paid again and later months follow what is owed.
+   */
+  skipPaymentsOn?: ReadonlySet<CalendarDate>;
 }
 
 /** The day after the last month a projection accounts: the month the window ends in is accounted whole. */
@@ -315,7 +321,12 @@ export function projectCard(input: CardProjectionInput): CardProjection | null {
     ].sort((left, right) => left.date.localeCompare(right.date));
 
     let paid = 0;
+    let regularAlreadyPaid = false;
     for (const item of due) {
+      if (input.skipPaymentsOn?.has(item.date)) {
+        if (item.kind === 'regular') regularAlreadyPaid = true;
+        continue;
+      }
       const owedThatDay = Math.max(0, statement + purchased(monthStart, addDays(item.date, 1)) - paid);
       const wanted = item.kind === 'clear'
         ? owedThatDay
@@ -328,8 +339,10 @@ export function projectCard(input: CardProjectionInput): CardProjection | null {
       if (inWindow(item.date)) payments.push({ date: item.date, amount });
     }
 
-    // A card paid in full had this month's statement settled before the forecast.
-    const carried = paidBeforeForecast && baseline.behavior === 'pays_in_full' ? 0 : Math.max(0, statement - paid);
+    // A card paid in full had this month's statement settled before the
+    // forecast, or on a day the user marked as already paid.
+    const settled = (paidBeforeForecast || regularAlreadyPaid) && baseline.behavior === 'pays_in_full';
+    const carried = settled ? 0 : Math.max(0, statement - paid);
     const interest = terms.apr === null ? null : round((carried * terms.apr) / 1200);
     owed = statement + purchases - paid + (interest ?? 0);
     if (interest && inWindow(lastDay)) interestPostings.push({ date: lastDay, amount: interest });

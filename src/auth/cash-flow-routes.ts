@@ -216,7 +216,6 @@ router.post('/happened', requireAuth, async (req: AuthenticatedRequest, res) => 
     if (!target) return res.status(404).json({ error: NOT_COMING_UP });
     const result = await saveHappenedMarkWithinLimit(req.user!.id, validation.value, target, HAPPENED_MARKS_PER_USER_LIMIT, {
       today: loaded.model.today,
-      timeZone: loaded.timeZone,
     });
     if (!result) {
       return res.status(409).json({ error: `You can mark up to ${HAPPENED_MARKS_PER_USER_LIMIT} items as already happened` });
