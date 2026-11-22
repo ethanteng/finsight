@@ -616,6 +616,10 @@ describe('cash flow routes', () => {
         label: 'GUSTO PAYROLL SMITH',
         kind: 'income',
         amount: 2500,
+        // The previous page adds `counted` into "Starts from" and treats a
+        // missing `inBalance` as "counted today".
+        counted: 0,
+        inBalance: true,
       }]);
       expect(response.body.position.upcoming.some((item: any) => item.ref.date === '2026-10-09' && item.kind === 'income')).toBe(false);
       expect(prisma.cashFlowHappenedMark.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 'user-1' } }));

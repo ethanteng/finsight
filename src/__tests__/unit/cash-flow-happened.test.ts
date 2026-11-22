@@ -285,7 +285,9 @@ describe('items marked as already happened', () => {
   it('reports what happened beside what is coming up', () => {
     const paycheck: OccurrenceRef = { source: 'stream', sourceId: PAYROLL, date: '2026-10-09' };
     const report = buildCashFlowReport(model({ happened: [mark(paycheck, 2500)] }), { granularity: 'month', horizonMonths: 6 });
-    expect(report.position.happened).toEqual([expect.objectContaining({ ref: paycheck, amount: 2500 })]);
+    expect(report.position.happened).toEqual([expect.objectContaining({
+      ref: paycheck, amount: 2500, counted: 0, inBalance: true,
+    })]);
     expect(report.position.upcoming.some(item => occurrenceKey(item.ref) === occurrenceKey(paycheck))).toBe(false);
     expect(report.position.upcoming.find(item => item.kind === 'card_payment')?.ref).toEqual({ source: 'card', sourceId: 'card', date: '2026-10-20' });
   });

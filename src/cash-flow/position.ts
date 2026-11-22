@@ -68,6 +68,16 @@ export interface CashPositionHappenedItem {
    */
   amount: number;
   transfer?: CashPositionItem['transfer'];
+  /**
+   * Always 0 on the cash-flow report. The previous page adds this into
+   * "Starts from"; leaving it off makes that sum `$NaN`, and 0 adds nothing.
+   */
+  counted?: number;
+  /**
+   * Always true on the cash-flow report, so that page says the balance
+   * already has the item instead of "counted today".
+   */
+  inBalance?: true;
 }
 
 export type CashPosition =

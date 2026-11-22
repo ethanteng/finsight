@@ -1921,7 +1921,10 @@ function positionSummary(
       };
     }),
     upcoming: position.itemsBetween(model.forecastStart, addDays(model.forecastStart, UPCOMING_DAYS)),
-    happened: position.happened,
+    // The page that counted a mark on the first forecast day still reads these.
+    // Zero keeps its "Starts from" line on the reported balance; `inBalance`
+    // keeps the row from saying the item is counted today.
+    happened: position.happened.map(item => ({ ...item, counted: 0, inBalance: true as const })),
     spreadPerDay: position.spreadPerDay,
     lowPoint: position.lowPoint(maxDate(range.from, model.forecastStart), range.toExclusive),
     milestones: milestones.points,
