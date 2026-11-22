@@ -1,5 +1,6 @@
 import { addDays, addMonths, daysBetween, minDate, startOfMonth, type CalendarDate } from './calendar';
 import type { CashFlowModel } from './forecast';
+import { projectCard } from './cards';
 import { occurrenceKey, type HappenedMark, type OccurrenceRef } from './happened';
 import { expandPlannedEvent } from './planned-events';
 
@@ -288,25 +289,40 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
     const fromCash = paysFromChosen(card);
     // Everything a card is paid on one day is one item: a regular payment and
     // a planned extra are one trip to the card.
-    const byDay = new Map<CalendarDate, number>();
-    for (const payment of card.projection!.payments) byDay.set(payment.date, (byDay.get(payment.date) ?? 0) + payment.amount);
-    for (const [date, amount] of byDay) {
-      const ref: OccurrenceRef = { source: 'card', sourceId: card.account.id, date };
-      const mark = inWindow(date) ? markFor(ref) : undefined;
-      if (!mark) {
-        addCard(date, -amount);
-        if (fromCash && inWindow(date)) {
-          paidToCards[indexOf(date)] += amount;
-          items.push({ date, amount: -amount, label: card.account.name, kind: 'card_payment', ref });
-        }
-        continue;
-      }
-      // The user says the payment is already in the balances, so neither the
-      // cash nor the card moves for it. It is listed even for a card the
-      // accounts in view no longer pay, so it can still be undone.
-      happened.push({ markId: mark.id, ref, label: card.account.name, kind: 'card_payment', amount: -mark.amount });
+    const byDay = (payments: ReadonlyArray<{ date: CalendarDate; amount: number }>) => {
+      const days = new Map<CalendarDate, number>();
+      for (const payment of payments) days.set(payment.date, (days.get(payment.date) ?? 0) + payment.amount);
+      return days;
+    };
+    const cardRef = (date: CalendarDate): OccurrenceRef => ({ source: 'card', sourceId: card.account.id, date });
+    // The user says a marked day's payment is already in the balances, so
+    // neither the cash nor the card moves for it. The card is projected again
+    // without it: its later payments and interest then follow what it still
+    // owes, rather than a balance that assumed the payment made again. It is
+    // listed even for a card the accounts in view no longer pay, so it can
+    // still be undone.
+    const skipped = [...byDay(card.projection!.payments).keys()].filter(date => inWindow(date) && markFor(cardRef(date)));
+    for (const date of skipped) {
+      const mark = markFor(cardRef(date))!;
+      happened.push({ markId: mark.id, ref: cardRef(date), label: card.account.name, kind: 'card_payment', amount: -mark.amount });
     }
-    for (const posting of card.projection!.interestPostings) addCard(posting.date, posting.amount);
+    const projection = skipped.length === 0 ? card.projection! : projectCard({
+      terms: card.terms,
+      baseline: card.baseline,
+      purchases: card.purchases,
+      plans: card.plans,
+      forecastStart: model.forecastStart,
+      forecastEndLimit: model.forecastEndLimit,
+      skipPaymentsOn: new Set(skipped),
+    }) ?? card.projection!;
+    for (const [date, amount] of byDay(projection.payments)) {
+      addCard(date, -amount);
+      if (fromCash && inWindow(date)) {
+        paidToCards[indexOf(date)] += amount;
+        items.push({ date, amount: -amount, label: card.account.name, kind: 'card_payment', ref: cardRef(date) });
+      }
+    }
+    for (const posting of projection.interestPostings) addCard(posting.date, posting.amount);
   }
 
   const startingCash = cashAccounts.reduce((total, account) => total + (account.balance ?? 0), 0);

@@ -232,7 +232,32 @@ describe('items marked as already happened', () => {
       for (const date of DATES) expect(marked.cashBefore(date)).toBeCloseTo(plain.cashBefore(date), 2);
       expect(marked.cardDebtBefore('2026-10-02')).toBeCloseTo(plain.cardDebtBefore('2026-10-02'), 2);
       expect(marked.cardDebtBefore('2026-10-21') - plain.cardDebtBefore('2026-10-21')).toBeGreaterThan(0);
+      // The card is projected again without it, so November's payment clears it.
+      expect(marked.cardDebtBefore('2026-12-01')).toBeCloseTo(plain.cardDebtBefore('2026-12-01'), 2);
     });
+
+    it('projects the card again without it, so later payments clear what it still owes', () => {
+      // The card is paid in full. With October's payment skipped, November's
+      // pays what October's would have, and no debt is left behind.
+      const plainModel = model();
+      const markedModel = model({ happened: [mark(payment, 1800)] });
+      expect(plainModel.cards[0].baseline.behavior).toBe('pays_in_full');
+      const plain = available(buildCashPosition(plainModel));
+      const marked = available(buildCashPosition(markedModel));
+      const paidInNovember = (position: Extract<CashPosition, { available: true }>) => position.cardPaymentsBetween('2026-11-01', '2026-12-01');
+      expect(paidInNovember(marked) - paidInNovember(plain)).toBeCloseTo(1800, 2);
+      expect(marked.itemsBetween('2026-11-01', '2026-12-01').filter(item => item.kind === 'card_payment')).toHaveLength(1);
+      for (const date of ['2026-12-01', '2027-03-01', '2027-09-01']) {
+        expect(marked.cardDebtBefore(date)).toBeCloseTo(plain.cardDebtBefore(date), 2);
+        expect(marked.cashBefore(date)).toBeCloseTo(plain.cashBefore(date), 2);
+      }
+      // A card paid in full carries nothing into interest for the skipped month.
+      expect(marked.cardDebtBefore('2026-11-01') - plain.cardDebtBefore('2026-11-01')).toBeCloseTo(1800, 2);
+      // A mark never changes what is spent, card interest included, nor the cards panel.
+      expect(forecastTotals(markedModel, START, '2027-10-01')).toEqual(forecastTotals(plainModel, START, '2027-10-01'));
+      expect(markedModel.cards[0].projection).toEqual(plainModel.cards[0].projection);
+    });
+
   });
 
   it('keeps the accounts adding up to the whole', () => {
