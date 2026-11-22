@@ -364,8 +364,9 @@ describe('credit cards and cash position in the pack', () => {
     // The details say the marked items are skipped, without naming payees.
     const details = compactCashFlowForecastDetails(marked) as any;
     expect(details.cashPosition.markedAsHappened.count).toBe(1);
-    expect(details.cashPosition.markedAsHappened.note).toContain('No cash projection counts them');
+    expect(details.cashPosition.markedAsHappened.note).toContain('not added to cash now and are not still due on their own dates');
     expect(details.cashPosition.markedAsHappened.note).toContain('do not describe them as still to come or add them to cash now');
+    expect(details.cashPosition.markedAsHappened.note).toContain('pays what it owes with its next statement');
     expect(JSON.stringify(details.cashPosition.markedAsHappened)).not.toMatch(/gusto/i);
     expect((compactCashFlowForecastDetails(plain) as any).cashPosition).not.toHaveProperty('markedAsHappened');
   });

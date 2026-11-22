@@ -828,11 +828,11 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
               accountsNote: 'Each account on its own; the cash figures above are their sum. Card payments come out of the account that pays each card.',
             }),
             // Payees are left out: this only keeps the skipped items from
-            // being read as still to come.
+            // being read as still to come or as cash on top of the balance.
             ...(context.position.marked && {
               markedAsHappened: {
                 count: context.position.marked.count,
-                note: 'The user marked upcoming items as already happened: they say the reported balances already have them. No cash projection counts them, on their own dates or any other, so do not describe them as still to come or add them to cash now.',
+                note: 'The user marked upcoming items as already happened: they say the reported balances already have them. They are not added to cash now and are not still due on their own dates, so do not describe them as still to come or add them to cash now. A card paid in full still pays what it owes with its next statement, so a later card payment can be larger by a skipped one.',
               },
             }),
             ...(context.position.cardsLeftOut.length > 0 && {

@@ -10,6 +10,7 @@ import {
   buildCashFlowModel,
   buildCashFlowReport,
   forecastTotals,
+  summarizeCards,
   type CashFlowModelInput,
 } from '../../cash-flow/forecast';
 import {
@@ -253,9 +254,25 @@ describe('items marked as already happened', () => {
       }
       // A card paid in full carries nothing into interest for the skipped month.
       expect(marked.cardDebtBefore('2026-11-01') - plain.cardDebtBefore('2026-11-01')).toBeCloseTo(1800, 2);
-      // A mark never changes what is spent, card interest included, nor the cards panel.
+      // A mark never changes what is spent, card interest included, nor the card model's own projection.
       expect(forecastTotals(markedModel, START, '2027-10-01')).toEqual(forecastTotals(plainModel, START, '2027-10-01'));
       expect(markedModel.cards[0].projection).toEqual(plainModel.cards[0].projection);
+    });
+
+    it('names the payment cash still makes as the card’s next one', () => {
+      const plainModel = model();
+      const markedModel = model({ happened: [mark(payment, 1800)] });
+      const [plain] = summarizeCards(plainModel);
+      const [marked] = summarizeCards(markedModel);
+      expect(plain.currentPace!.nextPayment).toEqual({ date: '2026-10-20', amount: 1800 });
+      const november = plainModel.cards[0].projection!.payments.find(item => item.date === '2026-11-20')!.amount;
+      expect(marked.currentPace!.nextPayment!.date).toBe('2026-11-20');
+      expect(marked.currentPace!.nextPayment!.amount).toBeCloseTo(november + 1800, 2);
+      // A card paid in full pays the same over the year, a month later.
+      expect(marked.currentPace!.paymentsTwelveMonths).toBeCloseTo(plain.currentPace!.paymentsTwelveMonths, 2);
+      // The rest of the card's outlook stays on its own projection.
+      expect({ ...marked.currentPace!, nextPayment: null, paymentsTwelveMonths: 0 })
+        .toEqual({ ...plain.currentPace!, nextPayment: null, paymentsTwelveMonths: 0 });
     });
 
   });

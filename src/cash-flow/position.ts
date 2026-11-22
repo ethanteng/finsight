@@ -1,6 +1,6 @@
 import { addDays, addMonths, daysBetween, minDate, startOfMonth, type CalendarDate } from './calendar';
 import type { CashFlowModel } from './forecast';
-import { projectCard } from './cards';
+import { projectCard, type CardProjection } from './cards';
 import { occurrenceKey, type HappenedMark, type OccurrenceRef } from './happened';
 import { expandPlannedEvent } from './planned-events';
 
@@ -297,35 +297,21 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
 
   for (const card of projected) {
     const fromCash = paysFromChosen(card);
-    // Everything a card is paid on one day is one item: a regular payment and
-    // a planned extra are one trip to the card.
-    const byDay = (payments: ReadonlyArray<{ date: CalendarDate; amount: number }>) => {
-      const days = new Map<CalendarDate, number>();
-      for (const payment of payments) days.set(payment.date, (days.get(payment.date) ?? 0) + payment.amount);
-      return days;
-    };
     const cardRef = (date: CalendarDate): OccurrenceRef => ({ source: 'card', sourceId: card.account.id, date });
     // The user says a marked day's payment is already in the balances, so
-    // neither the cash nor the card moves for it. The card is projected again
-    // without it: its later payments and interest then follow what it still
-    // owes, rather than a balance that assumed the payment made again. It is
-    // listed even for a card the accounts in view no longer pay, so it can
-    // still be undone.
-    const skipped = [...byDay(card.projection!.payments).keys()].filter(date => inWindow(date) && markFor(cardRef(date)));
+    // neither the cash nor the card moves for it, and the card's later
+    // payments and interest follow what it still owes. It is listed even for a
+    // card the accounts in view no longer pay, so it can still be undone.
+    const { projection, skipped } = withoutMarkedPayments(model, card, card.plans, card.projection!);
     for (const date of skipped) {
       const mark = markFor(cardRef(date))!;
       happened.push({ markId: mark.id, ref: cardRef(date), label: card.account.name, kind: 'card_payment', amount: -mark.amount });
     }
-    const projection = skipped.length === 0 ? card.projection! : projectCard({
-      terms: card.terms,
-      baseline: card.baseline,
-      purchases: card.purchases,
-      plans: card.plans,
-      forecastStart: model.forecastStart,
-      forecastEndLimit: model.forecastEndLimit,
-      skipPaymentsOn: new Set(skipped),
-    }) ?? card.projection!;
-    for (const [date, amount] of byDay(projection.payments)) {
+    // Everything a card is paid on one day is one item: a regular payment and
+    // a planned extra are one trip to the card.
+    const byDay = new Map<CalendarDate, number>();
+    for (const payment of projection.payments) byDay.set(payment.date, (byDay.get(payment.date) ?? 0) + payment.amount);
+    for (const [date, amount] of byDay) {
       addCard(date, -amount);
       if (fromCash && inWindow(date)) {
         paidToCards[indexOf(date)] += amount;
@@ -398,6 +384,39 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
         reason: card.terms.balance === null ? 'no_balance' as const : 'no_pace' as const,
       })),
   };
+}
+
+/**
+ * A card's projection with the payment days the user marked as already
+ * happened taken out (`skipped`, in date order). Those payments are already in
+ * the reported balances, so the card is projected again without them, like a
+ * payment made before the forecast: its later payments and interest then
+ * follow what it still owes, rather than a balance that assumed the payment
+ * made again. `plans` are the ones `projection` was built with. With no marked
+ * day in the window, it is `projection` itself.
+ */
+export function withoutMarkedPayments(
+  model: CashFlowModel,
+  card: CashFlowModel['cards'][number],
+  plans: CashFlowModel['cards'][number]['plans'],
+  projection: CardProjection
+): { projection: CardProjection; skipped: CalendarDate[] } {
+  const marked = new Set(model.happened
+    .filter(mark => mark.source === 'card' && mark.sourceId === card.account.id)
+    .map(mark => mark.date));
+  const skipped = [...new Set(projection.payments.map(payment => payment.date))]
+    .filter(date => date >= model.forecastStart && date < model.forecastEndLimit && marked.has(date));
+  if (skipped.length === 0) return { projection, skipped };
+  const again = projectCard({
+    terms: card.terms,
+    baseline: card.baseline,
+    purchases: card.purchases,
+    plans,
+    forecastStart: model.forecastStart,
+    forecastEndLimit: model.forecastEndLimit,
+    skipPaymentsOn: new Set(skipped),
+  });
+  return { projection: again ?? projection, skipped };
 }
 
 /** Fixed points a question can name: month ends ahead, and spans from the forecast start. */
