@@ -41,7 +41,6 @@ export interface CashFlowSnapshotMeta {
 export interface LoadedCashFlowModel {
   model: CashFlowModel;
   snapshot: CashFlowSnapshotMeta;
-  timeZone: string;
 }
 
 /**
@@ -224,8 +223,8 @@ function dateValue(date: CalendarDate): Date {
   return new Date(`${date}T00:00:00.000Z`);
 }
 
-/** A mark as the engine reads it; the day it was made is the user's own. */
-function toHappenedMark(row: CashFlowHappenedMarkRow, timeZone: string): HappenedMark {
+/** A mark as the engine reads it. */
+function toHappenedMark(row: CashFlowHappenedMarkRow): HappenedMark {
   return {
     id: row.id,
     source: row.source as HappenedSource,
@@ -233,7 +232,6 @@ function toHappenedMark(row: CashFlowHappenedMarkRow, timeZone: string): Happene
     date: dateOnly(row.date),
     label: row.label,
     amount: row.amount,
-    markedOn: calendarDateInTimeZone(row.createdAt, timeZone),
   };
 }
 
@@ -251,19 +249,19 @@ export async function saveHappenedMarkWithinLimit(
   ref: OccurrenceRef,
   target: { label: string; amount: number },
   limit: number,
-  options: { today: CalendarDate; timeZone: string }
+  options: { today: CalendarDate }
 ): Promise<{ mark: HappenedMark; created: boolean } | null> {
   return getPrismaClient().$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(872014274, hashtext(${userId}))`;
     await tx.cashFlowHappenedMark.deleteMany({ where: { userId, date: { lt: dateValue(happenedMarkCutoff(options.today)) } } });
     const where = { userId, source: ref.source, sourceId: ref.sourceId, date: dateValue(ref.date) };
     const existing = await tx.cashFlowHappenedMark.findFirst({ where });
-    if (existing) return { mark: toHappenedMark(existing, options.timeZone), created: false };
+    if (existing) return { mark: toHappenedMark(existing), created: false };
     if (await tx.cashFlowHappenedMark.count({ where: { userId } }) >= limit) return null;
     const row = await tx.cashFlowHappenedMark.create({
       data: { ...where, label: target.label.slice(0, ADJUSTMENT_LABEL_MAX_LENGTH), amount: target.amount },
     });
-    return { mark: toHappenedMark(row, options.timeZone), created: true };
+    return { mark: toHappenedMark(row), created: true };
   });
 }
 
@@ -275,8 +273,6 @@ export async function deleteHappenedMark(userId: string, id: string): Promise<bo
 interface LoadedCashFlowInput {
   input: CashFlowModelInput;
   snapshot: CashFlowSnapshotMeta;
-  /** The user's zone, which decides the calendar day a mark was made on. */
-  timeZone: string;
 }
 
 /**
@@ -319,9 +315,8 @@ async function loadCashFlowInput(userId: string, now: Date): Promise<LoadedCashF
         monthlyExpense: user.monthlyExpenseOverride,
       },
       adjustments,
-      happened: markRows.map(row => toHappenedMark(row, user.timeZone)),
+      happened: markRows.map(toHappenedMark),
     },
-    timeZone: user.timeZone,
     snapshot: {
       computedAt: snapshot.computedAt.toISOString(),
       asOf: snapshot.asOf ? snapshot.asOf.toISOString() : null,
@@ -333,7 +328,7 @@ async function loadCashFlowInput(userId: string, now: Date): Promise<LoadedCashF
 /** Build the user's cash-flow model. Null when they have no snapshot yet. */
 export async function loadCashFlowModel(userId: string, now = new Date()): Promise<LoadedCashFlowModel | null> {
   const loaded = await loadCashFlowInput(userId, now);
-  return loaded ? { model: buildCashFlowModel(loaded.input), snapshot: loaded.snapshot, timeZone: loaded.timeZone } : null;
+  return loaded ? { model: buildCashFlowModel(loaded.input), snapshot: loaded.snapshot } : null;
 }
 
 export interface ExpectedMonthlySummary extends ExpectedMonthly {

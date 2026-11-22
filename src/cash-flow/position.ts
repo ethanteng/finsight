@@ -1,7 +1,6 @@
 import { addDays, addMonths, daysBetween, minDate, startOfMonth, type CalendarDate } from './calendar';
 import type { CashFlowModel } from './forecast';
-import { amountMatches, occurrenceKey, postedSince, type HappenedMark, type OccurrenceRef } from './happened';
-import type { CashFlowEntry, CashFlowMovement } from './ledger';
+import { occurrenceKey, type HappenedMark, type OccurrenceRef } from './happened';
 import { expandPlannedEvent } from './planned-events';
 
 /**
@@ -27,10 +26,9 @@ import { expandPlannedEvent } from './planned-events';
  * its history says otherwise. A card that cannot be projected is left out of
  * card balances.
  *
- * An item the user marked as already happened (src/cash-flow/happened.ts)
- * moves to the first forecast day, in cash and on the card it pays: it has
- * happened since the balance was reported. Where the data already shows it
- * posted, the reported balance has it, and it is not counted again.
+ * An item the user marked as already happened (src/cash-flow/happened.ts) is
+ * skipped, in cash and on the card it pays: the user says the balance already
+ * has it, so counting it on any day would count it twice.
  */
 
 export type CashPositionUnavailableReason = 'forecast_unavailable' | 'no_cash_accounts' | 'unknown_balance';
@@ -56,29 +54,19 @@ export interface CashPositionItem {
   ref: OccurrenceRef;
 }
 
-/** An item the user marked as already happened, as the position counts it. */
+/** An item the user marked as already happened, which the position skips. */
 export interface CashPositionHappenedItem {
   markId: string;
   /** The item, and the day it was expected. */
   ref: OccurrenceRef;
   label: string;
   kind: CashPositionItem['kind'];
-  /** Signed, as the coming-up list would show it: zero for a planned transfer between two accounts in view. */
+  /**
+   * Signed, as the coming-up list showed it when the user marked it: zero for
+   * a planned transfer between two accounts in view. Not counted anywhere.
+   */
   amount: number;
-  /**
-   * Signed: what it moves the cash by on the first forecast day. Its amount,
-   * or nothing once the data shows it posted, since the reported balance then
-   * has it; for a planned transfer, the legs that have not posted.
-   */
-  counted: number;
-  /** The data shows it posted on every side in view, so the reported balance already counts it. */
-  inBalance: boolean;
   transfer?: CashPositionItem['transfer'];
-  /**
-   * A card payment the accounts in view no longer pay: the mark moves what the
-   * card owes, and no cash. Listed so it can still be undone.
-   */
-  paidFromElsewhere?: true;
 }
 
 export type CashPosition =
@@ -105,10 +93,10 @@ export type CashPosition =
       /**
        * Dated amounts in `[from, toExclusive)`, in date order. Everyday
        * spending runs as a daily rate and is not listed, and neither is what
-       * the user marked as already happened, which is in `happened`.
+       * the user marked as already happened, which is skipped and in `happened`.
        */
       itemsBetween(from: CalendarDate, toExclusive: CalendarDate): CashPositionItem[];
-      /** What the user marked as already happened, counted on the first forecast day, in the order the items were due. */
+      /** What the user marked as already happened, which nothing counts, in the order the items were due. */
       happened: CashPositionHappenedItem[];
       /**
        * What arrives and leaves every day without being listed: the typical
@@ -183,71 +171,23 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
   const paysFromChosen = (card: CashFlowModel['cards'][number]) => card.paymentSource === 'connected' && counts(card.paidFrom);
   const projected = model.cards.filter(card => card.projection && (whole || paysFromChosen(card)));
 
-  // What the user marked as already happened, by the item it names. A marked
-  // item moves to the first forecast day unless the data already shows it
-  // posted: then the reported balance has it, and it is not counted again.
+  // What the user marked as already happened, by the item it names. The user
+  // says the balance already has it, so it is skipped: listed for undo, and
+  // counted on no day.
   const marks = new Map(model.happened.map(mark => [occurrenceKey(mark), mark]));
   const happened: CashPositionHappenedItem[] = [];
   const markFor = (ref: OccurrenceRef) => marks.get(occurrenceKey(ref));
-  type Row = CashFlowEntry | CashFlowMovement;
-  const effectOf = (row: Row) => ('flow' in row ? (row.flow === 'income' ? row.amount : -row.amount) : row.amount);
-  // A posted transaction explains at most one marked item. Two planned bills of
-  // about the same size would otherwise both look posted once either of them was.
-  const claimed = new Set<string>();
-  /** Whether a posted transaction in the account moves about `signed` since the mark allows, and is the item by `matches`. */
-  const posted = (mark: HappenedMark, accountId: string | null, signed: number, matches: (row: Row) => boolean = () => true) => {
-    if (!accountId) return false;
-    const since = postedSince(mark);
-    const fits = (row: Row) => !claimed.has(row.id) && row.accountId === accountId && row.date >= since && amountMatches(effectOf(row), signed) && matches(row);
-    const found = model.ledger.entries.find(fits) ?? model.ledger.movements.find(fits);
-    if (!found) return false;
-    claimed.add(found.id);
-    return true;
-  };
-  const fromPayee = (counterpartyKey: string | undefined) => (row: Row) => Boolean(counterpartyKey) && row.counterpartyKey === counterpartyKey;
-  const isCardPayment = (row: Row) => 'cardPayment' in row && row.cardPayment;
-  /**
-   * How much of a marked card payment one side's data shows posted, up to the
-   * marked amount: one transaction that is the whole payment, or else the
-   * card's own payments since the mark, each of which can be part of it -- a
-   * regular payment that has posted beside a planned extra that has not.
-   * `sign` is the side's direction: in on the card, out of the cash account.
-   * Only `own` payments count as part, so a payment to some other card from
-   * the same account is never taken for part of this one.
-   */
-  const postedPart = (mark: HappenedMark, accountId: string | null, sign: 1 | -1, own: (row: CashFlowMovement) => boolean) => {
-    if (posted(mark, accountId, sign * mark.amount, isCardPayment)) return mark.amount;
-    const since = postedSince(mark);
-    let part = 0;
-    for (const row of model.ledger.movements) {
-      if (claimed.has(row.id) || row.accountId !== accountId || row.date < since || !row.cardPayment || !own(row)) continue;
-      const amount = sign * row.amount;
-      if (amount <= 0 || amountMatches(part, mark.amount) || part + amount > mark.amount + 0.005) continue;
-      part += amount;
-      claimed.add(row.id);
-    }
-    return part;
-  };
   type Listed = Omit<CashPositionItem, 'balanceAfter' | 'date' | 'amount'>;
-  /** Count a marked item on the first day, unless it is in the balance; list it either way. */
-  const happen = (mark: HappenedMark, signed: number, inBalance: boolean, item: Listed) => {
-    if (!inBalance) {
-      if (signed > 0) moneyIn[0] += signed;
-      else moneyOut[0] += -signed;
-    }
-    happened.push({ markId: mark.id, ...item, amount: signed, counted: inBalance ? 0 : signed, inBalance });
+  /** List a skipped item at the amount the user marked, in the direction it moves. */
+  const skip = (mark: HappenedMark, direction: number, item: Listed) => {
+    happened.push({ markId: mark.id, ...item, amount: direction < 0 ? -mark.amount : mark.amount });
   };
-  /** A dated item that moves one account: on its day, or on the first day once it has happened. */
-  const move = (date: CalendarDate, signed: number, accountId: string | null, item: Listed, matches?: (row: Row) => boolean) => {
+  /** A dated item that moves one account: on its day, unless the user marked it as already happened. */
+  const move = (date: CalendarDate, signed: number, item: Listed) => {
     if (!inWindow(date)) return;
     const mark = markFor(item.ref);
-    if (mark) {
-      // What happened is the amount the user marked, whatever it is projected at now.
-      const marked = signed < 0 ? -mark.amount : mark.amount;
-      happen(mark, marked, posted(mark, accountId, marked, matches), item);
-      return;
-    }
-    if (signed > 0) into(date, signed, item);
+    if (mark) skip(mark, signed, item);
+    else if (signed > 0) into(date, signed, item);
     else outOf(date, -signed, item);
   };
 
@@ -263,9 +203,9 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
       ref: { source: 'stream', sourceId: item.streamId, date: item.dueDate },
     });
     if (item.flow === 'income') {
-      if (counts(item.accountId)) move(item.date, item.amount, place(item.accountId), listed('income'), fromPayee(stream?.counterpartyKey));
+      if (counts(item.accountId)) move(item.date, item.amount, listed('income'));
     } else if (!cardIds.has(item.accountId) && counts(item.accountId)) {
-      move(item.date, -item.amount, place(item.accountId), listed('bill'), fromPayee(stream?.counterpartyKey));
+      move(item.date, -item.amount, listed('bill'));
     }
   }
   let cardDaily = 0;
@@ -300,24 +240,16 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
       const kind = leaves && arrives ? 'planned_transfer' : leaves ? 'planned_transfer_out' : 'planned_transfer_in';
       for (const date of expandPlannedEvent(event, start, model.forecastEndLimit)) {
         const ref: OccurrenceRef = { source: 'planned', sourceId: event.id, date };
-        const mark = markFor(ref);
+        const mark = inWindow(date) ? markFor(ref) : undefined;
         if (mark) {
-          // Each leg is in its own account's balance once it posts.
+          // Both legs are skipped: each account's balance already has its side.
           const moved = mark.amount;
-          const leftInBalance = leaves && posted(mark, transfer.fromAccountId, -moved);
-          const arrivedInBalance = arrives && posted(mark, transfer.toAccountId, moved);
-          const out = leaves && !leftInBalance ? moved : 0;
-          const inward = arrives && !arrivedInBalance ? moved : 0;
-          moneyOut[0] += out;
-          moneyIn[0] += inward;
           happened.push({
             markId: mark.id,
             ref,
             label: event.label,
             kind,
             amount: (arrives ? moved : 0) - (leaves ? moved : 0),
-            counted: inward - out,
-            inBalance: (!leaves || leftInBalance) && (!arrives || arrivedInBalance),
             transfer: { ...transfer, amount: moved },
           });
         } else if (leaves && arrives) {
@@ -337,19 +269,19 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
     if (event.kind === 'card_payment' || !counts(event.accountId)) continue;
     for (const date of expandPlannedEvent(event, start, model.forecastEndLimit)) {
       const ref: OccurrenceRef = { source: 'planned', sourceId: event.id, date };
-      if (event.kind === 'income') move(date, event.amount, place(event.accountId), { label: event.label, kind: 'planned_income', ref });
-      else move(date, -event.amount, place(event.accountId), { label: event.label, kind: 'planned_expense', ref });
+      if (event.kind === 'income') move(date, event.amount, { label: event.label, kind: 'planned_income', ref });
+      else move(date, -event.amount, { label: event.label, kind: 'planned_expense', ref });
     }
   }
   const transferStreams = new Map(model.transfers.streams.map(stream => [stream.id, stream]));
   for (const transfer of model.transfers.scheduled) {
     if (!counts(transfer.accountId)) continue;
     const stream = transferStreams.get(transfer.streamId);
-    move(transfer.date, transfer.amount, place(transfer.accountId), {
+    move(transfer.date, transfer.amount, {
       label: stream?.label ?? 'Regular transfer',
       kind: transfer.amount > 0 ? 'transfer_in' : 'transfer_out',
       ref: { source: 'transfer', sourceId: transfer.streamId, date: transfer.dueDate },
-    }, fromPayee(stream?.counterpartyKey));
+    });
   }
 
   for (const card of projected) {
@@ -369,31 +301,10 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
         }
         continue;
       }
-      // The payment that happened is the one the user marked. Once it posts,
-      // the card's lower balance projects a smaller payment for this day,
-      // which the mark replaces rather than counting as a second payment.
-      // The card and the account that paid it each have the payment, or the
-      // part of it that has posted there, in their reported balance; what
-      // has not posted yet moves on the first day.
-      const paid = mark.amount;
-      const onCard = postedPart(mark, card.account.id, 1, () => true);
-      if (!amountMatches(onCard, paid)) addCard(start, -(paid - onCard));
-      if (!fromCash) {
-        // The card is no longer paid from these accounts, so the mark moves
-        // only what the card owes. It is still listed, so it can be undone.
-        happened.push({
-          markId: mark.id, ref, label: card.account.name, kind: 'card_payment', amount: -paid, counted: 0,
-          inBalance: amountMatches(onCard, paid), paidFromElsewhere: true,
-        });
-        continue;
-      }
-      // Of the cash account's payments, only one sent to this card can be part of this one.
-      const cardRows = new Set(model.ledger.movements.filter(row => row.accountId === card.account.id).map(row => row.id));
-      const fromCashPart = postedPart(mark, place(card.paidFrom), -1, row => row.pairedWith !== null && cardRows.has(row.pairedWith));
-      const inBalance = amountMatches(fromCashPart, paid);
-      const counted = inBalance ? 0 : paid - fromCashPart;
-      paidToCards[0] += counted;
-      happened.push({ markId: mark.id, ref, label: card.account.name, kind: 'card_payment', amount: -paid, counted: -counted, inBalance });
+      // The user says the payment is already in the balances, so neither the
+      // cash nor the card moves for it. It is listed even for a card the
+      // accounts in view no longer pay, so it can still be undone.
+      happened.push({ markId: mark.id, ref, label: card.account.name, kind: 'card_payment', amount: -mark.amount });
     }
     for (const posting of card.projection!.interestPostings) addCard(posting.date, posting.amount);
   }
@@ -451,7 +362,7 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
       .map(item => ({ ...item, amount: round(item.amount), balanceAfter: round(cash[indexOf(item.date)]) })),
     happened: happened
       .sort((left, right) => left.ref.date.localeCompare(right.ref.date) || left.label.localeCompare(right.label))
-      .map(item => ({ ...item, amount: round(item.amount), counted: round(item.counted) })),
+      .map(item => ({ ...item, amount: round(item.amount) })),
     spreadPerDay: { in: round(dailyIn), out: round(dailyOut) },
     cardsLeftOut: model.cards
       .filter(card => !card.projection && (whole || paysFromChosen(card)))

@@ -1700,8 +1700,8 @@ export interface CashFlowPositionSummary {
   upcoming: CashPositionItem[];
   /**
    * What the user marked as already happened among the items the position
-   * covers: counted on the first forecast day, or already in the reported
-   * balance once the data shows it posted. Never in `upcoming`.
+   * covers. The user says the balance already has them, so they are counted
+   * on no day, and never in `upcoming`.
    */
   happened: CashPositionHappenedItem[];
   /** What arrives and leaves every day without being listed in `upcoming`: typical rates and transfers that run as a rate. Null when unavailable. */

@@ -380,15 +380,12 @@ export interface CashPositionHappenedItem {
   ref: CashPositionItemRef;
   label: string;
   kind: CashPositionItem['kind'];
-  /** Signed, as the coming-up list would show it: zero for a planned transfer between two accounts in view. */
+  /**
+   * Signed, as the coming-up list showed it when the user marked it: zero for
+   * a planned transfer between two accounts in view. Not counted anywhere.
+   */
   amount: number;
-  /** Signed: what it moves the cash by on the first forecast day; nothing once the data shows it posted. */
-  counted: number;
-  /** The data shows it posted, so the reported balance already counts it. */
-  inBalance: boolean;
   transfer?: CashPositionItem['transfer'];
-  /** A card payment the accounts in view no longer pay: it moves what the card owes, and no cash. */
-  paidFromElsewhere?: true;
 }
 
 export interface CashFlowPositionAccount {
@@ -429,7 +426,7 @@ export interface CashFlowPositionSummary {
   }>;
   /** Every dated amount in the month from the forecast start, with the balance after each day. */
   upcoming: CashPositionItem[];
-  /** What the user marked as already happened, never in `upcoming`. An older report leaves it out. */
+  /** What the user marked as already happened, which the forecast skips; never in `upcoming`. An older report leaves it out. */
   happened?: CashPositionHappenedItem[];
   /** What arrives and leaves every day without being listed in `upcoming`. Null when unavailable; an older report leaves it out. */
   spreadPerDay?: { in: number; out: number } | null;

@@ -558,7 +558,6 @@ describe('cash flow routes', () => {
         date: '2026-10-09',
         label: 'GUSTO PAYROLL SMITH',
         amount: 2500,
-        markedOn: '2026-10-01',
       });
       expect(prisma.cashFlowHappenedMark.create).toHaveBeenCalledWith({
         data: {
@@ -607,7 +606,7 @@ describe('cash flow routes', () => {
       expect(prisma.cashFlowHappenedMark.create).not.toHaveBeenCalled();
     });
 
-    it('counts a marked item on the first forecast day and lists it as happened', async () => {
+    it('skips a marked item and lists it as happened', async () => {
       prisma.cashFlowHappenedMark.findMany.mockResolvedValue([markRow()]);
       const response = await request(app).get('/api/cash-flow?granularity=month&horizonMonths=3');
       expect(response.status).toBe(200);
@@ -617,8 +616,6 @@ describe('cash flow routes', () => {
         label: 'GUSTO PAYROLL SMITH',
         kind: 'income',
         amount: 2500,
-        counted: 2500,
-        inBalance: false,
       }]);
       expect(response.body.position.upcoming.some((item: any) => item.ref.date === '2026-10-09' && item.kind === 'income')).toBe(false);
       expect(prisma.cashFlowHappenedMark.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 'user-1' } }));

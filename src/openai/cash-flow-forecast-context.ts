@@ -1,7 +1,6 @@
 import {
   CASH_FLOW_HIGHLIGHT_KEYS,
   buildCashFlowHighlights,
-  roundCents,
   summarizeCards,
   type CardOutcome,
   type CashFlowHighlight,
@@ -99,12 +98,11 @@ export interface CashFlowForecastContext {
     projectsCards: boolean;
     cardsLeftOut: Array<{ name: string; mask: string | null; reason: 'no_balance' | 'no_pace' }>;
     /**
-     * Upcoming items the user marked as already happened since the balance
-     * was reported, and what they add to cash on the first forecast day
-     * (signed). The milestones already count them. Present only when there
-     * are some.
+     * How many upcoming items the user marked as already happened. They say
+     * the balance already has them, so no projection counts them. Present
+     * only when there are some.
      */
-    marked?: { count: number; net: number };
+    marked?: { count: number };
     /**
      * Each cash account on its own, when there is more than one: what it holds
      * now and at the same milestones, and its lowest point. Every account, the
@@ -301,12 +299,7 @@ function positionContext(model: CashFlowModel): CashFlowForecastContext['positio
     lowNext12Months: milestones.lowNext12Months,
     projectsCards: model.cards.some(card => card.projection),
     cardsLeftOut: position.cardsLeftOut.map(card => ({ name: card.name, mask: masks.get(card.accountId) ?? null, reason: card.reason })),
-    ...(position.happened.length > 0 && {
-      marked: {
-        count: position.happened.length,
-        net: roundCents(position.happened.reduce((total, item) => total + item.counted, 0)),
-      },
-    }),
+    ...(position.happened.length > 0 && { marked: { count: position.happened.length } }),
     ...(accounts && accounts.length > 0 && { accounts }),
   };
 }
@@ -562,29 +555,6 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
     if (position.projectsCards) {
       observed('cash_flow_card_debt_now', 'Total owed now on the credit cards the forecast covers, as last reported',
         position.startingCardDebt, 'cashFlowForecast.position.startingCardDebt');
-    }
-    // Items the user said have already happened are not in the reported
-    // balance yet; the model may not add them to it, so the sum is published.
-    if (position.marked && position.marked.net !== 0 && position.startingCash !== null) {
-      add({
-        id: 'cash_flow_marked_happened_net',
-        label: 'Net of the upcoming items the user marked as already happened since that balance was reported',
-        value: position.marked.net,
-        unit: 'usd',
-        provenance: { kind: 'user_input', source: 'cashFlowForecast.position.marked.net' },
-      });
-      add({
-        id: 'cash_flow_cash_now_with_marked',
-        label: 'Cash across the user’s connected checking and savings accounts now, counting what they marked as already happened',
-        value: roundCents(position.startingCash + position.marked.net),
-        unit: 'usd',
-        provenance: {
-          kind: 'calculation',
-          source: 'cashFlowForecast.position',
-          formula: 'sum(inputs)',
-          inputFactIds: ['cash_flow_cash_now', 'cash_flow_marked_happened_net'],
-        },
-      });
     }
     for (const milestone of position.milestones) {
       const words = MILESTONE_WORDS[milestone.key] ?? milestone.key.replace(/_/g, ' ');
@@ -857,13 +827,12 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
               })),
               accountsNote: 'Each account on its own; the cash figures above are their sum. Card payments come out of the account that pays each card.',
             }),
-            // Payees are left out: the facts carry what the marks add, and
-            // this only keeps the dates listed above from being read as still to come.
+            // Payees are left out: this only keeps the skipped items from
+            // being read as still to come.
             ...(context.position.marked && {
               markedAsHappened: {
                 count: context.position.marked.count,
-                note: 'The user marked upcoming items as already happened since the balances were reported. Every cash projection counts them from the first forecast day, not on the dates the recurring items, card payments and planned events list, so do not describe them as still to come on those dates.'
-                  + (context.position.marked.net !== 0 ? ' Cash now counting them is cash_flow_cash_now_with_marked.' : ''),
+                note: 'The user marked upcoming items as already happened: they say the reported balances already have them. No cash projection counts them, on their own dates or any other, so do not describe them as still to come or add them to cash now.',
               },
             }),
             ...(context.position.cardsLeftOut.length > 0 && {

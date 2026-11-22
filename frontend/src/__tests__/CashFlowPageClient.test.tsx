@@ -1310,7 +1310,7 @@ describe('CashFlowPageClient', () => {
             body: marked
               ? checkingOnly({
                 upcoming: [{ ...rent, balanceAfter: 5700 }],
-                happened: [{ markId: 'mark-1', ref: paycheckRef, label: 'Gusto Payroll', kind: 'income', amount: 2500, counted: 2500, inBalance: false }],
+                happened: [{ markId: 'mark-1', ref: paycheckRef, label: 'Gusto Payroll', kind: 'income', amount: 2500 }],
               })
               : checkingOnly({ upcoming: [paycheck, rent] }),
           };
@@ -1323,7 +1323,8 @@ describe('CashFlowPageClient', () => {
         const unmarked = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
         expect(within(unmarked).getAllByText('Mark as already happened')).toHaveLength(2);
         expect(within(unmarked).queryByText('Already happened')).not.toBeInTheDocument();
-        expect(within(unmarked).getByText(/Already paid or received one, like a paycheck still pending at your bank\?/)).toBeInTheDocument();
+        expect(within(unmarked).getByText(/Already in your balance, like a paycheck your bank still shows as pending\? Mark it as already happened and\s+the forecast skips it, so it isn’t counted twice\./))
+          .toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Mark Gusto Payroll on Oct 16, 2026 as already happened' }));
         await waitFor(() => expect(marked).toBe(true));
@@ -1332,53 +1333,32 @@ describe('CashFlowPageClient', () => {
 
         const happened = await screen.findByRole('region', { name: 'Already happened' });
         expect(within(happened).getByText('Gusto Payroll')).toBeInTheDocument();
-        expect(within(happened).getByText('Expected Oct 16, 2026 · Regular income · counted today')).toBeInTheDocument();
+        expect(within(happened).getByText('Expected Oct 16, 2026 · Regular income · skipped')).toBeInTheDocument();
         expect(within(happened).getByText('+$2,500')).toBeInTheDocument();
-        expect(screen.getByText(/Starts from \$5,200 in Everyday Checking ••1234, plus \$2,500 you marked as already happened\./)).toBeInTheDocument();
+        expect(within(happened).getByText(/the forecast skips them and doesn’t count them again/)).toBeInTheDocument();
+        // Nothing is added to the start: the user says the balance already has it.
+        expect(screen.getByText(/Starts from \$5,200 in Everyday Checking ••1234\./)).toBeInTheDocument();
+        expect(screen.queryByText(/you marked as already happened/)).not.toBeInTheDocument();
         const list = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
         expect(within(list).getAllByText('Gusto Payroll')).toHaveLength(1);
       });
 
-      it('undoes a mark, and says when the bank’s data already has the item', async () => {
-        const inBalance = { markId: 'mark-1', ref: paycheckRef, label: 'Gusto Payroll', kind: 'income' as const, amount: 2500, counted: 0, inBalance: true };
+      it('undoes a mark', async () => {
+        const skipped = { markId: 'mark-1', ref: paycheckRef, label: 'Gusto Payroll', kind: 'income' as const, amount: 2500 };
         const calls = mockFetch((url, init) => {
           if (url.endsWith('/api/cash-flow/happened/mark-1') && init?.method === 'DELETE') return { status: 204 };
           if (!url.includes('/api/cash-flow?')) return undefined;
-          return { status: 200, body: checkingOnly({ upcoming: [rent], happened: [inBalance] }) };
+          return { status: 200, body: checkingOnly({ upcoming: [rent], happened: [skipped] }) };
         });
         render(<CashFlowPageClient />);
         await screen.findByRole('heading', { name: 'This month' });
         fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
 
         const happened = screen.getByRole('region', { name: 'Already happened' });
-        expect(within(happened).getByText('Expected Oct 16, 2026 · Regular income · already in your balance')).toBeInTheDocument();
-        // Nothing is added to the start: the reported balance already has it.
-        expect(screen.getByText(/Starts from \$5,200 in Everyday Checking ••1234\./)).toBeInTheDocument();
+        expect(within(happened).getByText('Expected Oct 16, 2026 · Regular income · skipped')).toBeInTheDocument();
 
         fireEvent.click(within(happened).getByRole('button', { name: 'Undo: Gusto Payroll already happened' }));
         await waitFor(() => expect(calls.some(call => call.url.endsWith('/api/cash-flow/happened/mark-1') && call.init?.method === 'DELETE')).toBe(true));
-      });
-
-      it('says how a card payment that has partly posted, or is paid from elsewhere, is counted', async () => {
-        const card = { source: 'card' as const, sourceId: 'card', date: '2026-10-20' };
-        mockFetch(url => (url.includes('/api/cash-flow?') ? {
-          status: 200,
-          body: checkingOnly({
-            upcoming: [rent],
-            happened: [
-              { markId: 'm1', ref: card, label: 'Rewards Card', kind: 'card_payment', amount: -2300, counted: -500, inBalance: false },
-              { markId: 'm2', ref: { ...card, sourceId: 'other-card' }, label: 'Store Card', kind: 'card_payment', amount: -90, counted: 0, inBalance: false, paidFromElsewhere: true },
-            ],
-          }),
-        } : undefined));
-        render(<CashFlowPageClient />);
-        await screen.findByRole('heading', { name: 'This month' });
-        fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
-        const happened = screen.getByRole('region', { name: 'Already happened' });
-        expect(within(happened).getByText('Expected Oct 20, 2026 · Card payment · $500 counted today, the rest already in your balance'))
-          .toBeInTheDocument();
-        expect(within(happened).getByText('Expected Oct 20, 2026 · Card payment · paid from another account')).toBeInTheDocument();
-        expect(screen.getByText(/Starts from \$5,200 in Everyday Checking ••1234, less \$500 you marked as already happened\./)).toBeInTheDocument();
       });
 
       it('says why a mark could not be saved', async () => {
@@ -1405,7 +1385,7 @@ describe('CashFlowPageClient', () => {
         const list = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
         expect(within(list).getByText('Gusto Payroll')).toBeInTheDocument();
         expect(within(list).queryByRole('button', { name: /as already happened/ })).not.toBeInTheDocument();
-        expect(within(list).queryByText(/Already paid or received one/)).not.toBeInTheDocument();
+        expect(within(list).queryByText(/Already in your balance, like a paycheck/)).not.toBeInTheDocument();
       });
     });
 

@@ -337,38 +337,37 @@ describe('credit cards and cash position in the pack', () => {
     expect(facts.get('cash_flow_cash_low_point_next_12_months')!.label).toMatch(/Lowest projected cash in the next 12 months, on \d{4}-\d{2}-\d{2}/);
   });
 
-  it('adds what the user marked as already happened to cash now, as a sum the model can quote', () => {
-    const marked = buildCashFlowForecastContext(buildCashFlowModel({
+  it('skips what the user marked as already happened, and says so without naming payees', () => {
+    const build = (happened: Parameters<typeof buildCashFlowModel>[0]['happened']) => buildCashFlowForecastContext(buildCashFlowModel({
       transactions: householdTransactions('2026-06-03', '2026-10-14'),
       accounts: ACCOUNTS,
       plannedEvents: [],
       dataThrough: '2026-10-14',
       today: '2026-10-15',
-      happened: [{
-        id: 'mark', label: 'Gusto', amount: 2500, markedOn: '2026-10-15', source: 'stream', sourceId: 'income:gusto-payroll-smith', date: '2026-10-23',
-      }],
+      happened,
     }));
-    expect(marked.position?.marked).toEqual({ count: 1, net: 2500 });
+    const plain = build([]);
+    const marked = build([{
+      id: 'mark', label: 'Gusto', amount: 2500, source: 'stream', sourceId: 'income:gusto-payroll-smith', date: '2026-10-23',
+    }]);
+    expect(marked.position?.marked).toEqual({ count: 1 });
+    expect(plain.position).not.toHaveProperty('marked');
     const facts = byId(cashFlowForecastFacts(marked));
-    // The reported balance is still what the bank last reported.
+    const plainFacts = byId(cashFlowForecastFacts(plain));
+    // The reported balance already has it, so cash now is unchanged and nothing is added to it.
     expect(facts.get('cash_flow_cash_now')!.value).toBe(5200);
-    expect(facts.get('cash_flow_marked_happened_net')).toMatchObject({ value: 2500, provenance: { kind: 'user_input' } });
-    expect(facts.get('cash_flow_cash_now_with_marked')).toMatchObject({
-      value: 7700,
-      provenance: { kind: 'calculation', formula: 'sum(inputs)', inputFactIds: ['cash_flow_cash_now', 'cash_flow_marked_happened_net'] },
-    });
+    expect(Array.from(facts.keys()).some(id => id.startsWith('cash_flow_marked') || id.endsWith('_with_marked'))).toBe(false);
+    // The Oct 23 paycheck is skipped, so the month ends that much lower.
+    expect((facts.get('cash_flow_cash_end_of_this_month')!.value as number) - (plainFacts.get('cash_flow_cash_end_of_this_month')!.value as number))
+      .toBeCloseTo(-2500, 2);
     expect(validateCanonicalFactPack({ version: 1, facts: Array.from(facts.values()) })).toEqual([]);
-    // The details say the marked items are already in the projections, without naming payees.
+    // The details say the marked items are skipped, without naming payees.
     const details = compactCashFlowForecastDetails(marked) as any;
     expect(details.cashPosition.markedAsHappened.count).toBe(1);
-    expect(details.cashPosition.markedAsHappened.note).toContain('do not describe them as still to come on those dates');
-    expect(details.cashPosition.markedAsHappened.note).toContain('cash_flow_cash_now_with_marked');
+    expect(details.cashPosition.markedAsHappened.note).toContain('No cash projection counts them');
+    expect(details.cashPosition.markedAsHappened.note).toContain('do not describe them as still to come or add them to cash now');
     expect(JSON.stringify(details.cashPosition.markedAsHappened)).not.toMatch(/gusto/i);
-
-    const unmarked = byId(cashFlowForecastFacts(context()));
-    expect((compactCashFlowForecastDetails(context()) as any).cashPosition).not.toHaveProperty('markedAsHappened');
-    expect(unmarked.has('cash_flow_marked_happened_net')).toBe(false);
-    expect(unmarked.has('cash_flow_cash_now_with_marked')).toBe(false);
+    expect((compactCashFlowForecastDetails(plain) as any).cashPosition).not.toHaveProperty('markedAsHappened');
   });
 
   it('describes the cards and the cash position by fact id', () => {
