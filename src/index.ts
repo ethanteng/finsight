@@ -1017,42 +1017,11 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     app.get('/admin/production-sessions', adminAuth, async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
+        const { loadProductionSessions } = await import('./services/admin-production-data');
         const prisma = getPrismaClient();
 
         console.log('Admin: Fetching production sessions...');
-
-        // Get all production users with conversation counts and stats
-        const users = await prisma.user.findMany({
-          include: {
-            conversations: {
-              orderBy: { createdAt: 'asc' }
-            },
-            _count: {
-              select: { conversations: true }
-            }
-          },
-          orderBy: { createdAt: 'desc' }
-        });
-
-        console.log('Admin: Found production users:', users.length);
-
-        const userStats = users.map((user: any) => {
-          const conversations = user.conversations;
-          const firstConversation = conversations[0];
-          const lastConversation = conversations[conversations.length - 1];
-
-          return {
-            userId: user.id,
-            email: user.email,
-            tier: user.tier,
-            conversationCount: user._count.conversations,
-            firstQuestion: firstConversation?.question || 'No questions yet',
-            lastActivity: lastConversation?.createdAt || user.createdAt,
-            createdAt: user.createdAt,
-            lastLoginAt: user.lastLoginAt
-          };
-        });
-
+        const userStats = await loadProductionSessions(prisma);
         console.log('Admin: Returning user stats:', userStats.length);
         res.json({ users: userStats });
       } catch (error) {
@@ -1076,24 +1045,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
         const { buildAnswerQualityReport } = await import('./services/answer-quality');
+        const { loadAnswerQualityConversations } = await import('./services/admin-production-data');
         const prisma = getPrismaClient();
 
         const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 2000);
         const recentLimit = Math.min(Math.max(Number(req.query.recent) || 50, 1), limit);
-        const conversations = await prisma.conversation.findMany({
-          where: { userId: { not: null } },
-          select: {
-            id: true,
-            question: true,
-            createdAt: true,
-            showTheMathData: true,
-            feedback: { select: { score: true, createdAt: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: limit,
-        });
+        const conversations = await loadAnswerQualityConversations(prisma, limit);
 
-        res.json(buildAnswerQualityReport(conversations as any, recentLimit));
+        res.json(buildAnswerQualityReport(conversations, recentLimit));
       } catch (error) {
         console.error('Error building answer quality report:', error);
         if (error instanceof Error) {
@@ -1160,29 +1119,11 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     app.get('/admin/production-conversations', adminAuth, async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
+        const { loadProductionConversations } = await import('./services/admin-production-data');
         const prisma = getPrismaClient();
 
         console.log('Admin: Fetching production conversations...');
-
-        // Get all production conversations with user info and feedback
-        // Filter out conversations without users to prevent data integrity issues
-        const conversations = await prisma.conversation.findMany({
-          where: {
-            userId: { not: null } // Only include conversations with valid user IDs
-          },
-          include: {
-            user: true,
-            feedback: {
-              select: {
-                id: true,
-                score: true,
-                createdAt: true
-              }
-            }
-          },
-          orderBy: { createdAt: 'desc' }
-        });
-
+        const conversations = await loadProductionConversations(prisma);
         console.log('Admin: Found conversations:', conversations.length);
 
         // Log any conversations that might still have issues
